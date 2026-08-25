@@ -18,7 +18,6 @@ export interface Preset {
   gradientFrom: string;
   gradientTo: string;
   gradientOpacity: number;
-  fontFamily: string;
 }
 
 export const PRESETS: Preset[] = [
@@ -36,7 +35,6 @@ export const PRESETS: Preset[] = [
     gradientFrom: "rgba(0,0,0,0)",
     gradientTo: "rgba(0,0,0,0.75)",
     gradientOpacity: 0.85,
-    fontFamily: "Impact, Arial Black, sans-serif",
   },
   {
     id: "clean-minimal",
@@ -52,7 +50,6 @@ export const PRESETS: Preset[] = [
     gradientFrom: "rgba(0,0,0,0)",
     gradientTo: "rgba(0,0,0,0.55)",
     gradientOpacity: 0.6,
-    fontFamily: "Helvetica, Arial, sans-serif",
   },
   {
     id: "neon-pop",
@@ -68,7 +65,6 @@ export const PRESETS: Preset[] = [
     gradientFrom: "rgba(120,0,255,0.05)",
     gradientTo: "rgba(20,0,60,0.8)",
     gradientOpacity: 0.75,
-    fontFamily: "Arial Black, sans-serif",
   },
   {
     id: "high-contrast-drama",
@@ -84,7 +80,6 @@ export const PRESETS: Preset[] = [
     gradientFrom: "rgba(0,0,0,0.1)",
     gradientTo: "rgba(0,0,0,0.9)",
     gradientOpacity: 0.9,
-    fontFamily: "Georgia, 'Times New Roman', serif",
   },
 ];
 

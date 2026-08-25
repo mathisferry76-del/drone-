@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp, { OverlayOptions } from "sharp";
+import fs from "fs";
+import path from "path";
 import { getPreset } from "@/lib/presets";
 
 export const runtime = "nodejs";
@@ -7,6 +9,15 @@ export const runtime = "nodejs";
 const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = 720;
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+
+// The text is drawn via an SVG rendered by sharp/librsvg. Production servers
+// (e.g. Vercel's serverless runtime) don't ship system fonts like Impact or
+// Arial Black, so librsvg falls back to whatever it can find — producing
+// broken/garbled text. Embedding the font as a data URI makes rendering
+// self-contained and identical everywhere.
+const FONT_PATH = path.join(process.cwd(), "lib/fonts/heading.woff2");
+const HEADING_FONT_BASE64 = fs.readFileSync(FONT_PATH).toString("base64");
+const HEADING_FONT_FAMILY = "ThumbAIHeading";
 
 function escapeXml(input: string): string {
   return input
@@ -49,7 +60,7 @@ function buildTextOverlaySvg(
   const tspans = lines
     .map((line, i) => {
       const y = startY + i * lineHeight;
-      return `<text x="64" y="${y}" font-family="${preset.fontFamily}" font-size="${fontSize}" font-weight="900" fill="${preset.textColor}" stroke="${preset.strokeColor}" stroke-width="${preset.strokeWidth}" paint-order="stroke fill" stroke-linejoin="round">${escapeXml(
+      return `<text x="64" y="${y}" font-family="${HEADING_FONT_FAMILY}" font-size="${fontSize}" font-weight="900" fill="${preset.textColor}" stroke="${preset.strokeColor}" stroke-width="${preset.strokeWidth}" paint-order="stroke fill" stroke-linejoin="round">${escapeXml(
         line
       )}</text>`;
     })
@@ -57,6 +68,12 @@ function buildTextOverlaySvg(
 
   return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
     <defs>
+      <style>
+        @font-face {
+          font-family: "${HEADING_FONT_FAMILY}";
+          src: url(data:font/woff2;base64,${HEADING_FONT_BASE64}) format("woff2");
+        }
+      </style>
       <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stop-color="${preset.gradientFrom}" />
         <stop offset="100%" stop-color="${preset.gradientTo}" />
@@ -71,9 +88,17 @@ function buildTextOverlaySvg(
 
 function buildWatermarkSvg(): string {
   return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <style>
+        @font-face {
+          font-family: "${HEADING_FONT_FAMILY}";
+          src: url(data:font/woff2;base64,${HEADING_FONT_BASE64}) format("woff2");
+        }
+      </style>
+    </defs>
     <text x="${CANVAS_WIDTH - 24}" y="${
     CANVAS_HEIGHT - 24
-  }" text-anchor="end" font-family="Arial, sans-serif" font-size="22" font-weight="700" fill="#ffffff" fill-opacity="0.55">ThumbAI — version gratuite</text>
+  }" text-anchor="end" font-family="${HEADING_FONT_FAMILY}" font-size="18" fill="#ffffff" fill-opacity="0.55">ThumbAI — version gratuite</text>
   </svg>`;
 }
 
