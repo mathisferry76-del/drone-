@@ -59,6 +59,15 @@ complet, pas une liste de features.
   explicitement au modèle de conserver au maximum les traits du sujet
   (visage en particulier) au lieu de le réinterpréter librement — ce
   paramètre est à `"low"` par défaut côté OpenAI.
+- **Zone "visage à préserver" verrouillée pixel par pixel** : en mode IA,
+  un marqueur ellipse apparaît sur l'aperçu (centré par défaut, déplaçable
+  et redimensionnable) que l'utilisateur positionne sur son visage. Côté
+  serveur, cette zone devient un vrai masque PNG (transparence = zone que
+  l'IA peut modifier, opaque = zone préservée telle quelle) envoyé à
+  `images.edit` — le visage revient donc identique pixel pour pixel,
+  garantie qu'aucune instruction de prompt seule ne peut donner. Combiné à
+  `input_fidelity: "high"` pour la zone de transition (cheveux, oreilles)
+  qui reste éditable.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 

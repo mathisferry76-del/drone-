@@ -6,6 +6,8 @@ import {
   PRESETS,
   FREE_GENERATIONS_PER_DEVICE,
   CREATOR_AI_MONTHLY_LIMIT,
+  FACE_ZONE_BASE_RX,
+  FACE_ZONE_BASE_RY,
   PresetId,
   getPreset,
 } from "@/lib/presets";
@@ -48,6 +50,42 @@ interface ReferenceImage {
   id: string;
   file: File;
   previewUrl: string;
+}
+
+interface FacePreserveState {
+  x: number;
+  y: number;
+  size: number;
+}
+
+const BOX_ASPECT = 16 / 9;
+
+// The preview box is a fixed 16:9 (aspect-video) rectangle, but the uploaded
+// photo can be any aspect ratio and is shown inside it with object-contain —
+// i.e. letterboxed. The face-zone marker must be positioned relative to the
+// actual photo pixels (that's what the server masks), not the 16:9 box, so
+// these two helpers convert between "fraction of the box" (what pointer
+// events give us) and "fraction of the real photo" (what we send the API).
+function letterboxFractions(imgAspect: number) {
+  if (imgAspect > BOX_ASPECT) {
+    const visH = BOX_ASPECT / imgAspect;
+    return { visW: 1, visH, offX: 0, offY: (1 - visH) / 2 };
+  }
+  const visW = imgAspect / BOX_ASPECT;
+  return { visW, visH: 1, offX: (1 - visW) / 2, offY: 0 };
+}
+
+function boxFractionToImageFraction(bx: number, by: number, imgAspect: number) {
+  const { visW, visH, offX, offY } = letterboxFractions(imgAspect);
+  return {
+    x: Math.min(1, Math.max(0, (bx - offX) / visW)),
+    y: Math.min(1, Math.max(0, (by - offY) / visH)),
+  };
+}
+
+function imageFractionToBoxFraction(ix: number, iy: number, imgAspect: number) {
+  const { visW, visH, offX, offY } = letterboxFractions(imgAspect);
+  return { bx: offX + ix * visW, by: offY + iy * visH };
 }
 
 const BACKGROUND_STYLE_OPTIONS: { id: BackgroundStyle; label: string }[] = [
@@ -112,11 +150,13 @@ export default function GeneratePage() {
   const [aiDescription, setAiDescription] = useState("");
   const [aiUsesThisMonth, setAiUsesThisMonth] = useState(0);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
+  const [facePreserve, setFacePreserve] = useState<FacePreserveState | null>(null);
+  const [naturalImgSize, setNaturalImgSize] = useState<{ w: number; h: number } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ kind: "text" | "shape"; id: string } | null>(null);
+  const dragRef = useRef<{ kind: "text" | "shape" | "face"; id: string } | null>(null);
 
   const isPaid = plan !== "free";
   const aiPlanEligible = plan === "creator" || plan === "pro";
@@ -160,6 +200,17 @@ export default function GeneratePage() {
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // As soon as AI mode is on and a photo is loaded, drop a sensible default
+  // face zone so the mask protects something even if the user never touches
+  // it — they can then drag/resize it for a perfect fit on off-center photos.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (canUseAi && aiEnhance && naturalImgSize && !facePreserve) {
+      setFacePreserve({ x: 0.5, y: 0.38, size: 1 });
+    }
+  }, [canUseAi, aiEnhance, naturalImgSize, facePreserve]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -167,6 +218,8 @@ export default function GeneratePage() {
     setResultUrl(null);
     setError(null);
     setPreviewUrl(URL.createObjectURL(f));
+    setNaturalImgSize(null);
+    setFacePreserve(null);
   }
 
   function handleReferenceChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -263,9 +316,28 @@ export default function GeneratePage() {
     };
   }
 
+  function startFaceDrag(e: React.PointerEvent<HTMLDivElement>) {
+    dragRef.current = { kind: "face", id: "face" };
+    (e.target as Element).setPointerCapture(e.pointerId);
+    e.stopPropagation();
+  }
+
   function handlePreviewPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     const active = dragRef.current;
     if (!active) return;
+
+    if (active.kind === "face") {
+      const box = previewBoxRef.current;
+      if (!box || !naturalImgSize) return;
+      const rect = box.getBoundingClientRect();
+      const bx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      const by = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+      const imgAspect = naturalImgSize.w / naturalImgSize.h;
+      const pos = boxFractionToImageFraction(bx, by, imgAspect);
+      setFacePreserve((prev) => (prev ? { ...prev, ...pos } : prev));
+      return;
+    }
+
     const pos = positionFromPointer(e.clientX, e.clientY);
     if (!pos) return;
     if (active.kind === "text") {
@@ -323,6 +395,9 @@ export default function GeneratePage() {
       if (willUseAi) {
         for (const ref of referenceImages) {
           formData.append("referenceImages", ref.file);
+        }
+        if (facePreserve) {
+          formData.append("facePreserve", JSON.stringify(facePreserve));
         }
       }
 
@@ -385,8 +460,41 @@ export default function GeneratePage() {
                   <img
                     src={previewUrl}
                     alt="Aperçu"
+                    onLoad={(e) =>
+                      setNaturalImgSize({
+                        w: e.currentTarget.naturalWidth,
+                        h: e.currentTarget.naturalHeight,
+                      })
+                    }
                     className="pointer-events-none h-full w-full object-contain"
                   />
+                  {canUseAi && aiEnhance && facePreserve && naturalImgSize && (() => {
+                    const imgAspect = naturalImgSize.w / naturalImgSize.h;
+                    const { bx, by } = imageFractionToBoxFraction(
+                      facePreserve.x,
+                      facePreserve.y,
+                      imgAspect
+                    );
+                    const { visW, visH } = letterboxFractions(imgAspect);
+                    const widthPct = 2 * FACE_ZONE_BASE_RX * facePreserve.size * visW * 100;
+                    const heightPct = 2 * FACE_ZONE_BASE_RY * facePreserve.size * visH * 100;
+                    return (
+                      <div
+                        onPointerDown={startFaceDrag}
+                        className="absolute flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center justify-center rounded-[50%] border-2 border-dashed border-emerald-400 bg-emerald-400/10"
+                        style={{
+                          left: `${bx * 100}%`,
+                          top: `${by * 100}%`,
+                          width: `${widthPct}%`,
+                          height: `${heightPct}%`,
+                        }}
+                      >
+                        <span className="absolute top-full mt-1 whitespace-nowrap rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-bold text-black shadow-lg">
+                          ✥ Visage à préserver
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {textLayers.map((layer, i) => (
                     <div
                       key={layer.id}
@@ -839,10 +947,47 @@ export default function GeneratePage() {
                     Le style {PRESETS.find((p) => p.id === presetId)?.name} donne déjà une
                     ambiance de base — plus tu décris précisément la scène (décor,
                     objets, action, lumière), plus le résultat se rapproche d&apos;une
-                    vraie miniature mise en scène plutôt qu&apos;un simple filtre. Le
-                    visage reste protégé, non modifié.
+                    vraie miniature mise en scène plutôt qu&apos;un simple filtre.
                   </p>
                 </div>
+
+                {facePreserve && (
+                  <div>
+                    <div className="mb-1 flex items-center justify-between">
+                      <label className="block text-xs font-semibold text-zinc-300">
+                        🔒 Zone visage à préserver
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setFacePreserve({ x: 0.5, y: 0.38, size: 1 })}
+                        className="text-xs font-semibold text-zinc-500 hover:text-white"
+                      >
+                        Recentrer
+                      </button>
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      Glisse le cercle vert sur l&apos;aperçu pour qu&apos;il recouvre
+                      exactement ton visage. Cette zone est verrouillée pixel par
+                      pixel — l&apos;IA ne peut littéralement pas la modifier, même
+                      si elle change tout le reste de la photo. Prends le temps de
+                      bien la positionner : c&apos;est ce qui garantit que tu restes
+                      reconnaissable.
+                    </p>
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={2}
+                      step={0.05}
+                      value={facePreserve.size}
+                      onChange={(e) =>
+                        setFacePreserve((prev) =>
+                          prev ? { ...prev, size: Number(e.target.value) } : prev
+                        )
+                      }
+                      className="mt-2 w-full accent-emerald-400"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <div className="mb-1 flex items-center justify-between">

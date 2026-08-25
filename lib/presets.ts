@@ -36,6 +36,14 @@ export interface Preset {
 export const AI_QUALITY_DIRECTIVE =
   "Render this as premium commercial editorial photography: shot on a high-end camera, tack-sharp focus on the subject, professional studio or location lighting, the production value of a top-tier YouTube thumbnail. Seamlessly integrate the subject into the scene — match the lighting direction, color temperature, contact shadows and reflections between the subject and the background so the whole image reads as one real photograph, never as a visible cutout or collage. Preserve the subject's exact facial features, likeness, skin texture and expression with high fidelity — do not beautify, smooth, or alter their face.";
 
+// Base radii (as a fraction of the photo's width/height) of the "face zone"
+// ellipse the user positions on their photo before an AI generation. Shared
+// between the editor (to draw the marker in the right place/size) and the
+// API route (to build the actual pixel mask handed to OpenAI), so the
+// preview the user drags always matches the area that really gets locked.
+export const FACE_ZONE_BASE_RX = 0.15;
+export const FACE_ZONE_BASE_RY = 0.24;
+
 export const PRESETS: Preset[] = [
   {
     id: "bold-impact",

@@ -5,7 +5,13 @@ import path from "path";
 import * as opentype from "opentype.js";
 import * as wawoff2 from "wawoff2";
 import OpenAI, { toFile } from "openai";
-import { getPreset, Preset, AI_QUALITY_DIRECTIVE } from "@/lib/presets";
+import {
+  getPreset,
+  Preset,
+  AI_QUALITY_DIRECTIVE,
+  FACE_ZONE_BASE_RX,
+  FACE_ZONE_BASE_RY,
+} from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 
 export const runtime = "nodejs";
@@ -72,6 +78,56 @@ function isValidHexColor(value: unknown): value is string {
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const n = Number(value);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
+
+interface FacePreserve {
+  x: number;
+  y: number;
+  size: number;
+}
+
+// The "face zone" ellipse is defined client-side, in normalized coordinates
+// of the *original* uploaded photo. Parsed defensively since it comes from
+// an untrusted client-supplied JSON string.
+function parseFacePreserve(raw: unknown): FacePreserve | null {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      x: clampNumber((parsed as Record<string, unknown>).x, 0, 1, 0.5),
+      y: clampNumber((parsed as Record<string, unknown>).y, 0, 1, 0.38),
+      size: clampNumber((parsed as Record<string, unknown>).size, 0.4, 2.5, 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Builds a PNG mask for OpenAI's images.edit: fully transparent pixels mark
+// the area the model is allowed to regenerate, fully opaque pixels are
+// preserved untouched. We render a feathered opaque ellipse over the face
+// zone the user marked, so the face comes back pixel-for-pixel identical —
+// no amount of prompting can guarantee that the way a real pixel mask does.
+async function buildFaceMask(
+  width: number,
+  height: number,
+  face: FacePreserve
+): Promise<Buffer> {
+  const cx = face.x * width;
+  const cy = face.y * height;
+  const rx = FACE_ZONE_BASE_RX * face.size * width;
+  const ry = FACE_ZONE_BASE_RY * face.size * height;
+  const blur = Math.max(rx, ry) * 0.2;
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="feather" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="${blur.toFixed(1)}" />
+      </filter>
+    </defs>
+    <ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="#000" filter="url(#feather)" />
+  </svg>`;
+  return sharp(Buffer.from(svg)).png().toBuffer();
 }
 
 function wrapTextByWidth(
@@ -392,7 +448,8 @@ async function applyAiEnhancement(
   mimeType: string,
   preset: Preset,
   userDescription: string,
-  references: { buffer: Buffer; mimeType: string }[]
+  references: { buffer: Buffer; mimeType: string }[],
+  facePreserve: FacePreserve | null
 ): Promise<Buffer> {
   const openai = getOpenAI();
   if (!openai) {
@@ -416,21 +473,40 @@ async function applyAiEnhancement(
       ` ${references.length} additional reference image(s) are also provided — use them only for the specific elements the user describes below (e.g. a logo, an object, a color palette), and blend them naturally into the main photo. Do not otherwise let a reference image replace the main subject.`;
   }
 
+  // Hard pixel-level guarantee on top of the prompt instructions: the mask's
+  // opaque ellipse over the face is preserved byte-for-byte by OpenAI, it
+  // cannot be regenerated no matter what the rest of the prompt asks for.
+  let maskUploadable: Awaited<ReturnType<typeof toFile>> | undefined;
+  if (facePreserve) {
+    const meta = await sharp(inputBuffer).metadata();
+    const width = meta.width ?? 0;
+    const height = meta.height ?? 0;
+    if (width > 0 && height > 0) {
+      const maskBuffer = await buildFaceMask(width, height, facePreserve);
+      maskUploadable = await toFile(maskBuffer, "face-mask.png", { type: "image/png" });
+    }
+  }
+
+  const faceLockNote = maskUploadable
+    ? " The subject's face is protected by an edit mask and cannot be altered at all by you — put all of your creative effort into the background, lighting, decor and atmosphere around them instead."
+    : "";
+
   const basePrompt = `${preset.aiPrompt} ${AI_QUALITY_DIRECTIVE}`;
   const prompt = userDescription.trim()
-    ? `${basePrompt}${referenceNote} Also incorporate these specific instructions from the user: ${userDescription.trim()}`
-    : `${basePrompt}${referenceNote}`;
+    ? `${basePrompt}${faceLockNote}${referenceNote} Also incorporate these specific instructions from the user: ${userDescription.trim()}`
+    : `${basePrompt}${faceLockNote}${referenceNote}`;
 
   const result = await openai.images.edit({
     model: "gpt-image-1",
     image: images.length > 1 ? images : images[0],
+    ...(maskUploadable ? { mask: maskUploadable } : {}),
     prompt,
     size: "1536x1024",
     quality: "high",
-    // Defaults to "low", which is almost certainly why the subject's face
-    // stopped being recognizable after a few edits — this tells the model
-    // to spend real effort matching the input's facial features instead
-    // of loosely reinterpreting them.
+    // Defaults to "low" — tells the model to spend real effort matching the
+    // input's facial features instead of loosely reinterpreting them. Kept
+    // even with a mask: it also governs fidelity right at the mask's edge
+    // (hair, ears) where the model still has creative freedom.
     input_fidelity: "high",
   });
 
@@ -543,6 +619,7 @@ export async function POST(req: NextRequest) {
     const preset = getPreset(presetId);
     const textLayers = parseTextLayers(String(formData.get("textLayers") ?? "[]"), preset);
     const shapes = parseShapes(String(formData.get("shapes") ?? "[]"));
+    const facePreserve = parseFacePreserve(formData.get("facePreserve"));
 
     const referenceFiles = formData
       .getAll("referenceImages")
@@ -592,7 +669,8 @@ export async function POST(req: NextRequest) {
           file.type,
           preset,
           aiDescription,
-          references
+          references,
+          facePreserve
         );
       } catch (err) {
         if (err instanceof AiNotConfiguredError) {
