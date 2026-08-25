@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { PRESETS } from "@/lib/presets";
 
@@ -51,16 +52,21 @@ export default function Home() {
           {PRESETS.map((preset) => (
             <div
               key={preset.id}
-              className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6"
+              className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50"
             >
-              <div
-                className="mb-4 h-24 w-full rounded-lg"
-                style={{
-                  background: `linear-gradient(135deg, ${preset.strokeColor}, ${preset.textColor})`,
-                }}
-              />
-              <h3 className="font-bold">{preset.name}</h3>
-              <p className="mt-1 text-sm text-zinc-400">{preset.description}</p>
+              <div className="relative aspect-video w-full">
+                <Image
+                  src={`/examples/${preset.id}.webp`}
+                  alt={`Exemple de miniature générée avec le style ${preset.name}`}
+                  fill
+                  sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                  className="object-cover"
+                />
+              </div>
+              <div className="p-6">
+                <h3 className="font-bold">{preset.name}</h3>
+                <p className="mt-1 text-sm text-zinc-400">{preset.description}</p>
+              </div>
             </div>
           ))}
         </div>
