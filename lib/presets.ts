@@ -28,6 +28,14 @@ export interface Preset {
   aiPrompt: string;
 }
 
+// Appended to every preset's aiPrompt. Pushes gpt-image-1 toward the
+// polished, seamlessly-composited look of top-tier YouTube thumbnails
+// (matched lighting/color between subject and background, not a visible
+// cutout) instead of a generic "nice photo" edit, and explicitly protects
+// the subject's likeness, which generative edits otherwise tend to drift.
+export const AI_QUALITY_DIRECTIVE =
+  "Render this as premium commercial editorial photography: shot on a high-end camera, tack-sharp focus on the subject, professional studio or location lighting, the production value of a top-tier YouTube thumbnail. Seamlessly integrate the subject into the scene — match the lighting direction, color temperature, contact shadows and reflections between the subject and the background so the whole image reads as one real photograph, never as a visible cutout or collage. Preserve the subject's exact facial features, likeness, skin texture and expression with high fidelity — do not beautify, smooth, or alter their face.";
+
 export const PRESETS: Preset[] = [
   {
     id: "bold-impact",

@@ -480,14 +480,15 @@ export default function GeneratePage() {
                     onChange={(e) => setAiDescription(e.target.value)}
                     maxLength={AI_DESCRIPTION_MAX}
                     rows={5}
-                    placeholder="Ex : fond de studio avec néons bleus, ambiance coucher de soleil, décor futuriste, plus de contraste, garde mon visage bien visible..."
+                    placeholder="Ex : je suis assis dans la cabine d'un jet privé, verre de champagne à la main, hublot avec un ciel bleu, lumière chaude et cinématographique, ambiance luxe premium — sois précis sur le décor, les objets et la mise en scène."
                     className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
                   />
                   <p className="mt-1 text-xs text-zinc-500">
                     Le style {PRESETS.find((p) => p.id === presetId)?.name} donne déjà une
-                    ambiance de base — précise ici ce que tu veux changer ou ajouter
-                    (décor, lumière, couleurs, objets). Le sujet de ta photo reste
-                    toujours reconnaissable.
+                    ambiance de base — plus tu décris précisément la scène (décor,
+                    objets, action, lumière), plus le résultat se rapproche d&apos;une
+                    vraie miniature mise en scène plutôt qu&apos;un simple filtre. Le
+                    visage reste protégé, non modifié.
                   </p>
                 </div>
 

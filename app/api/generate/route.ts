@@ -5,7 +5,7 @@ import path from "path";
 import * as opentype from "opentype.js";
 import * as wawoff2 from "wawoff2";
 import OpenAI, { toFile } from "openai";
-import { getPreset, Preset } from "@/lib/presets";
+import { getPreset, Preset, AI_QUALITY_DIRECTIVE } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 
 export const runtime = "nodejs";
@@ -278,15 +278,17 @@ async function applyAiEnhancement(
       " A second reference image is also provided — use it only for the specific element the user describes below (e.g. a logo, an object, a color palette), and blend it naturally into the main photo. Do not otherwise let the reference image replace the main subject.";
   }
 
+  const basePrompt = `${preset.aiPrompt} ${AI_QUALITY_DIRECTIVE}`;
   const prompt = userDescription.trim()
-    ? `${preset.aiPrompt}${referenceNote} Also incorporate these specific instructions from the user: ${userDescription.trim()}`
-    : `${preset.aiPrompt}${referenceNote}`;
+    ? `${basePrompt}${referenceNote} Also incorporate these specific instructions from the user: ${userDescription.trim()}`
+    : `${basePrompt}${referenceNote}`;
 
   const result = await openai.images.edit({
     model: "gpt-image-1",
     image: images.length > 1 ? images : images[0],
     prompt,
     size: "1536x1024",
+    quality: "high",
   });
 
   const b64 = result.data?.[0]?.b64_json;
