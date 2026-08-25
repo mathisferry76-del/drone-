@@ -24,7 +24,7 @@ export default function PricingPage() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId }),
+        body: JSON.stringify({ priceId, tier: tierId }),
       });
       const data = await res.json();
       if (!res.ok || !data.url) {
@@ -70,12 +70,13 @@ export default function PricingPage() {
               </span>
             )}
             <h2 className="text-xl font-bold">{tier.name}</h2>
-            <p className="mt-1 text-sm text-zinc-400">{tier.description}</p>
+            <p className="mt-1 text-sm font-medium text-zinc-300">{tier.tagline}</p>
+            <p className="mt-2 text-sm text-zinc-400">{tier.description}</p>
             <div className="mt-4 flex items-baseline gap-1">
               <span className="text-4xl font-extrabold">{tier.price}</span>
               <span className="text-zinc-400">{tier.period}</span>
             </div>
-            <ul className="mt-6 flex-1 space-y-2 text-sm text-zinc-300">
+            <ul className="mt-6 space-y-2 text-sm text-zinc-300">
               {tier.features.map((f) => (
                 <li key={f} className="flex items-start gap-2">
                   <span className="mt-0.5 text-yellow-400">✓</span>
@@ -83,6 +84,17 @@ export default function PricingPage() {
                 </li>
               ))}
             </ul>
+            {tier.notIncluded.length > 0 && (
+              <ul className="mt-3 space-y-2 border-t border-zinc-800 pt-3 text-sm text-zinc-500">
+                {tier.notIncluded.map((f) => (
+                  <li key={f} className="flex items-start gap-2">
+                    <span className="mt-0.5">✕</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex-1" />
             {tier.id === "free" ? (
               <Link
                 href="/generate"
@@ -105,6 +117,37 @@ export default function PricingPage() {
             )}
           </div>
         ))}
+      </div>
+
+      <div className="mx-auto mt-16 max-w-3xl space-y-6">
+        <h2 className="text-center text-xl font-bold">
+          Quelle différence entre les offres ?
+        </h2>
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6">
+          <h3 className="font-bold text-zinc-100">
+            Free vs Creator — le volume, pas la qualité
+          </h3>
+          <p className="mt-2 text-sm text-zinc-400">
+            Les deux utilisent les mêmes 4 styles filtres (couleur, contraste,
+            texte). La différence, c&apos;est la limite : 3 miniatures avec
+            filigrane en Free, illimité et sans filigrane en Creator. Le rendu
+            visuel de base est identique.
+          </p>
+        </div>
+        <div className="rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-6">
+          <h3 className="font-bold text-zinc-100">
+            Pourquoi Pro coûte plus cher : une vraie IA générative
+          </h3>
+          <p className="mt-2 text-sm text-zinc-400">
+            Les styles filtres ajustent les couleurs de ta photo existante.
+            L&apos;amélioration IA du plan Pro va plus loin : elle envoie ta
+            photo à un modèle d&apos;IA générative qui retravaille réellement
+            l&apos;éclairage, l&apos;ambiance et le décor de l&apos;image,
+            tout en gardant ton sujet reconnaissable — un rendu que Photoshop
+            ou un simple filtre ne peuvent pas produire. C&apos;est ce qui
+            justifie l&apos;écart de prix avec Creator.
+          </p>
+        </div>
       </div>
     </div>
   );

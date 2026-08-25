@@ -17,10 +17,17 @@ complet, pas une liste de features.
   avec contour (rendu SVG), dégradé de lisibilité, filigrane conditionnel.
   Testé avec de vraies requêtes, voir capture ci-dessous.
 - **`/pricing`** : 3 paliers (Free / Creator 19€ / Pro 39€) avec CTA
-  connectés à Stripe Checkout.
+  connectés à Stripe Checkout, et une section qui explique concrètement la
+  différence entre les offres (volume vs IA générative).
 - **`/api/checkout`** : crée une session Stripe Checkout en mode
   abonnement. Sans clé Stripe configurée, renvoie un message clair au lieu
   de planter.
+- **Amélioration IA générative (Pro)** : un toggle dans `/generate` envoie
+  la photo à l'API OpenAI (`gpt-image-1`, `images.edit`) qui retravaille
+  réellement l'éclairage/l'ambiance/le décor, au lieu d'un filtre de
+  couleur déterministe. Réservé aux comptes Pro côté UI ; côté serveur,
+  sans `OPENAI_API_KEY` configurée, l'appel renvoie une erreur 501 claire
+  au lieu de planter.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
@@ -35,12 +42,10 @@ sont **pas** implémentées et devront l'être avant un vrai lancement payant :
   utilisateurs (Supabase/Postgres), un webhook Stripe qui écrit le statut
   d'abonnement en base, et une vérification serveur du quota/statut à
   chaque génération.
-- **Pas d'amélioration IA du fond d'image** (le plan Pro la mentionne en
-  "beta") — le pipeline actuel est 100% déterministe (`sharp`), rapide et
-  gratuit à faire tourner. Une vraie génération/édition IA (ex. API
-  OpenAI Images) peut être ajoutée dans `app/api/generate/route.ts` mais
-  ajoute coût et latence par génération, donc à ne faire qu'après
-  validation de la demande.
+- **L'amélioration IA générative facture réellement OpenAI** à chaque
+  génération (le modèle `gpt-image-1` n'est pas gratuit) — contrairement
+  aux styles filtres qui ne coûtent rien à faire tourner. Le prix du plan
+  Pro doit couvrir ce coût variable ; à surveiller une fois en usage réel.
 - **Pas de tests automatisés.**
 
 ## Lancer le projet en local
@@ -50,20 +55,22 @@ npm install
 npm run dev
 ```
 
-Ouvre [http://localhost:3000](http://localhost:3000). Aucune variable
-d'environnement n'est nécessaire pour utiliser le générateur — il
-fonctionne "out of the box".
+Ouvre [http://localhost:3000](http://localhost:3000). Les styles filtres
+fonctionnent "out of the box", sans aucune variable d'environnement.
+L'amélioration IA (Pro) nécessite `OPENAI_API_KEY` (voir plus bas).
 
-## Variables d'environnement (optionnelles, pour activer Stripe)
+## Variables d'environnement (optionnelles)
 
-Copie `.env.example` en `.env.local` et renseigne :
+Copie `.env.example` en `.env.local` et renseigne ce dont tu as besoin :
 
 ```
 STRIPE_SECRET_KEY=sk_test_...
 NEXT_PUBLIC_STRIPE_PRICE_CREATOR=price_...
 NEXT_PUBLIC_STRIPE_PRICE_PRO=price_...
+OPENAI_API_KEY=sk-...
 ```
 
+**Stripe** (pour activer le paiement) :
 1. Crée un compte Stripe (mode test), crée deux produits récurrents
    (Creator 19€/mois, Pro 39€/mois), récupère leurs `price_id`.
 2. Colle `STRIPE_SECRET_KEY` (clé secrète du dashboard Stripe test) et les
@@ -73,6 +80,22 @@ NEXT_PUBLIC_STRIPE_PRICE_PRO=price_...
 
 Sans ces variables, `/pricing` reste utilisable mais affiche un message
 "non configuré" au clic sur un plan payant, au lieu de planter.
+
+**OpenAI** (pour activer l'amélioration IA générative, plan Pro) :
+1. Crée une clé API sur [platform.openai.com](https://platform.openai.com/api-keys)
+   et assure-toi que le compte a accès au modèle `gpt-image-1`.
+2. Colle-la dans `OPENAI_API_KEY`.
+3. Redémarre `npm run dev` — le toggle "Amélioration IA" dans `/generate`
+   (visible seulement en simulant un compte Pro, voir ci-dessous) appelle
+   alors vraiment l'API.
+
+Sans cette clé, l'appel renvoie une erreur claire (501) au lieu de
+planter — le reste du produit (styles filtres) continue de fonctionner
+normalement.
+
+**Tester le plan Pro sans Stripe configuré** : dans la console du
+navigateur sur `/generate`, exécute
+`localStorage.setItem('thumbai_plan', 'pro')` puis recharge la page.
 
 ## Déploiement
 

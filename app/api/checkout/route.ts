@@ -14,17 +14,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { priceId } = (await req.json()) as { priceId?: string };
+    const { priceId, tier } = (await req.json()) as {
+      priceId?: string;
+      tier?: string;
+    };
     if (!priceId) {
       return NextResponse.json({ error: "priceId manquant." }, { status: 400 });
     }
 
     const origin = req.headers.get("origin") ?? "http://localhost:3000";
+    const safeTier = tier === "pro" ? "pro" : "creator";
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/generate?success=true`,
+      success_url: `${origin}/generate?success=true&tier=${safeTier}`,
       cancel_url: `${origin}/pricing?canceled=true`,
       allow_promotion_codes: true,
     });

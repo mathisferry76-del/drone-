@@ -94,6 +94,73 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="mx-auto w-full max-w-5xl px-6 py-16">
+        <h2 className="text-center text-2xl font-bold sm:text-3xl">
+          Filtre ou IA générative : deux façons de traiter ta photo
+        </h2>
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <h3 className="font-bold">🎨 Styles filtres (Free &amp; Creator)</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Recadrage automatique, ajustement des couleurs et du contraste,
+              texte impactant avec fond lisible. Rapide, gratuit à générer,
+              disponible dès l&apos;offre gratuite.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-yellow-800/40 bg-yellow-400/5 p-6">
+            <h3 className="font-bold">✨ IA générative (Pro)</h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Ta photo est envoyée à un modèle d&apos;IA générative qui
+              retravaille réellement l&apos;éclairage, l&apos;ambiance et le
+              décor — un rendu qu&apos;un simple filtre de couleur ne peut
+              pas produire, tout en gardant ton sujet reconnaissable.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-3xl px-6 py-16">
+        <h2 className="text-center text-2xl font-bold sm:text-3xl">
+          Questions fréquentes
+        </h2>
+        <div className="mt-10 space-y-6">
+          <div>
+            <h3 className="font-bold">Est-ce que ça marche avec n&apos;importe quelle photo ?</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              Oui — portrait, capture d&apos;écran, photo de setup. L&apos;outil
+              recadre automatiquement en 1280x720 (le format standard
+              YouTube/miniature).
+            </p>
+          </div>
+          <div>
+            <h3 className="font-bold">
+              Quelle différence avec Canva ou Photoshop ?
+            </h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              Pas de mise en page à faire à la main : tu choisis un style,
+              tu tapes ton titre, c&apos;est généré en quelques secondes. Le
+              plan Pro va plus loin avec une IA générative qui retravaille
+              l&apos;image elle-même, pas seulement le texte par-dessus.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-bold">Combien de temps prend une génération ?</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              Quelques secondes pour un style filtre. Avec l&apos;amélioration
+              IA (Pro), compte 10 à 20 secondes, le temps que le modèle
+              génératif retravaille l&apos;image.
+            </p>
+          </div>
+          <div>
+            <h3 className="font-bold">Je peux annuler à tout moment ?</h3>
+            <p className="mt-1 text-sm text-zinc-400">
+              Oui, les abonnements Creator et Pro sont sans engagement,
+              résiliables à tout moment depuis Stripe.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section className="mx-auto w-full max-w-4xl px-6 py-20 text-center">
         <h2 className="text-2xl font-bold sm:text-3xl">
           Prêt à arrêter de perdre 30 minutes par miniature ?

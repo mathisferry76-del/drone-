@@ -18,6 +18,8 @@ export interface Preset {
   gradientFrom: string;
   gradientTo: string;
   gradientOpacity: number;
+  /** Instruction given to the AI generative enhancement (Pro plan only). */
+  aiPrompt: string;
 }
 
 export const PRESETS: Preset[] = [
@@ -35,6 +37,8 @@ export const PRESETS: Preset[] = [
     gradientFrom: "rgba(0,0,0,0)",
     gradientTo: "rgba(0,0,0,0.75)",
     gradientOpacity: 0.85,
+    aiPrompt:
+      "Transform the background into a vibrant, high-energy scene with dynamic lighting and bold saturated colors, like a viral MrBeast-style YouTube thumbnail. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
   },
   {
     id: "clean-minimal",
@@ -50,6 +54,8 @@ export const PRESETS: Preset[] = [
     gradientFrom: "rgba(0,0,0,0)",
     gradientTo: "rgba(0,0,0,0.55)",
     gradientOpacity: 0.6,
+    aiPrompt:
+      "Transform the background into a clean, softly lit professional studio scene with a subtle depth-of-field blur, polished and minimal. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
   },
   {
     id: "neon-pop",
@@ -65,6 +71,8 @@ export const PRESETS: Preset[] = [
     gradientFrom: "rgba(120,0,255,0.05)",
     gradientTo: "rgba(20,0,60,0.8)",
     gradientOpacity: 0.75,
+    aiPrompt:
+      "Transform the background into a futuristic scene with glowing neon purple and cyan lighting, cinematic tech atmosphere. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
   },
   {
     id: "high-contrast-drama",
@@ -80,6 +88,8 @@ export const PRESETS: Preset[] = [
     gradientFrom: "rgba(0,0,0,0.1)",
     gradientTo: "rgba(0,0,0,0.9)",
     gradientOpacity: 0.9,
+    aiPrompt:
+      "Transform the background into a dramatic, cinematic scene with deep shadows and moody documentary-style lighting. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
   },
 ];
 
@@ -89,33 +99,53 @@ export function getPreset(id: string): Preset {
 
 export const FREE_GENERATIONS_PER_DEVICE = 3;
 
-export const PRICING_TIERS = [
+export interface PricingTier {
+  id: "free" | "creator" | "pro";
+  name: string;
+  price: string;
+  period: string;
+  tagline: string;
+  description: string;
+  features: string[];
+  notIncluded: string[];
+  cta: string;
+  priceId: string | null;
+  highlighted?: boolean;
+}
+
+export const PRICING_TIERS: PricingTier[] = [
   {
     id: "free",
     name: "Free",
     price: "0€",
     period: "",
-    description: "Pour tester le produit",
+    tagline: "Pour tester l'outil",
+    description:
+      "Génère quelques miniatures avec les styles filtres, sans engagement, pour voir si l'outil te convient.",
     features: [
       `${FREE_GENERATIONS_PER_DEVICE} miniatures avec filigrane`,
-      "Tous les styles",
+      "4 styles filtres (couleurs, contraste, texte)",
       "Export HD 1280x720",
     ],
+    notIncluded: ["Pas d'IA générative", "Filigrane sur chaque export"],
     cta: "Essayer gratuitement",
-    priceId: null as string | null,
+    priceId: null,
   },
   {
     id: "creator",
     name: "Creator",
     price: "19€",
     period: "/mois",
-    description: "Pour un créateur solo actif",
+    tagline: "Pour publier régulièrement",
+    description:
+      "Le plan pour un créateur solo actif : génère autant de miniatures que tu veux avec les styles filtres, sans filigrane.",
     features: [
       "Miniatures illimitées",
       "Sans filigrane",
-      "Tous les styles + nouveaux styles",
+      "4 styles filtres + nouveaux styles à venir",
       "Export HD 1280x720",
     ],
+    notIncluded: ["Pas d'IA générative (le fond reste ta photo filtrée)"],
     cta: "Choisir Creator",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREATOR ?? null,
     highlighted: true,
@@ -125,13 +155,16 @@ export const PRICING_TIERS = [
     name: "Pro",
     price: "39€",
     period: "/mois",
-    description: "Pour plusieurs chaînes ou une petite équipe",
+    tagline: "Pour un rendu qui se démarque vraiment",
+    description:
+      "Tout Creator, plus une vraie IA générative qui retravaille l'image (lumière, ambiance, décor) au lieu d'un simple filtre de couleur.",
     features: [
       "Tout Creator",
+      "IA générative d'image : transforme réellement la photo (éclairage, ambiance, décor), pas juste un filtre",
       "Jusqu'à 3 chaînes",
-      "Amélioration IA du fond (beta)",
       "Support prioritaire",
     ],
+    notIncluded: [],
     cta: "Choisir Pro",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO ?? null,
   },

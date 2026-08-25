@@ -5,7 +5,8 @@ import Link from "next/link";
 import { PRESETS, FREE_GENERATIONS_PER_DEVICE, PresetId } from "@/lib/presets";
 
 const USAGE_KEY = "thumbai_free_generations_used";
-const PRO_KEY = "thumbai_is_pro";
+const PLAN_KEY = "thumbai_plan";
+type Plan = "free" | "creator" | "pro";
 
 export default function GeneratePage() {
   const [file, setFile] = useState<File | null>(null);
@@ -16,8 +17,12 @@ export default function GeneratePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usedCount, setUsedCount] = useState(0);
-  const [isPro, setIsPro] = useState(false);
+  const [plan, setPlan] = useState<Plan>("free");
+  const [aiEnhance, setAiEnhance] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const isPaid = plan !== "free";
+  const hasAiAccess = plan === "pro";
 
   // localStorage/window only exist client-side, so this state can't be read
   // during the server render — it has to be hydrated in an effect.
@@ -26,13 +31,21 @@ export default function GeneratePage() {
     const used = Number(window.localStorage.getItem(USAGE_KEY) ?? "0");
     const params = new URLSearchParams(window.location.search);
     const justUpgraded = params.get("success") === "true";
+    const upgradedTier = params.get("tier") === "pro" ? "pro" : "creator";
 
     if (justUpgraded) {
-      window.localStorage.setItem(PRO_KEY, "true");
+      window.localStorage.setItem(PLAN_KEY, upgradedTier);
     }
 
+    const storedPlan = window.localStorage.getItem(PLAN_KEY);
+    const resolvedPlan: Plan = justUpgraded
+      ? upgradedTier
+      : storedPlan === "pro" || storedPlan === "creator"
+        ? storedPlan
+        : "free";
+
     setUsedCount(used);
-    setIsPro(justUpgraded || window.localStorage.getItem(PRO_KEY) === "true");
+    setPlan(resolvedPlan);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -46,7 +59,7 @@ export default function GeneratePage() {
     setPreviewUrl(url);
   }
 
-  const quotaReached = !isPro && usedCount >= FREE_GENERATIONS_PER_DEVICE;
+  const quotaReached = !isPaid && usedCount >= FREE_GENERATIONS_PER_DEVICE;
 
   async function handleGenerate() {
     setError(null);
@@ -70,7 +83,8 @@ export default function GeneratePage() {
       formData.append("image", file);
       formData.append("presetId", presetId);
       formData.append("title", title);
-      formData.append("watermark", isPro ? "false" : "true");
+      formData.append("watermark", isPaid ? "false" : "true");
+      formData.append("aiEnhance", hasAiAccess && aiEnhance ? "true" : "false");
 
       const res = await fetch("/api/generate", { method: "POST", body: formData });
       const data = await res.json();
@@ -81,7 +95,7 @@ export default function GeneratePage() {
       }
 
       setResultUrl(data.image);
-      if (!isPro) {
+      if (!isPaid) {
         const next = usedCount + 1;
         setUsedCount(next);
         window.localStorage.setItem(USAGE_KEY, String(next));
@@ -97,8 +111,8 @@ export default function GeneratePage() {
     <div className="mx-auto w-full max-w-5xl px-6 py-16">
       <h1 className="text-3xl font-extrabold">Créer une miniature</h1>
       <p className="mt-2 text-zinc-400">
-        {isPro
-          ? "Plan payant actif — miniatures illimitées, sans filigrane."
+        {isPaid
+          ? `Plan ${plan === "pro" ? "Pro" : "Creator"} actif — miniatures illimitées, sans filigrane.`
           : `${Math.max(
               FREE_GENERATIONS_PER_DEVICE - usedCount,
               0
@@ -181,6 +195,47 @@ export default function GeneratePage() {
             />
           </div>
 
+          <div
+            className={`rounded-xl border p-4 ${
+              hasAiAccess
+                ? "border-yellow-800/40 bg-yellow-400/5"
+                : "border-zinc-800 bg-zinc-900/40"
+            }`}
+          >
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={hasAiAccess && aiEnhance}
+                disabled={!hasAiAccess}
+                onChange={(e) => setAiEnhance(e.target.checked)}
+                className="mt-1 h-4 w-4 accent-yellow-400 disabled:opacity-40"
+              />
+              <span>
+                <span className="block text-sm font-bold">
+                  ✨ Amélioration IA générative{" "}
+                  {!hasAiAccess && (
+                    <span className="ml-1 rounded-full bg-zinc-700 px-2 py-0.5 text-xs font-semibold text-zinc-300">
+                      Pro
+                    </span>
+                  )}
+                </span>
+                <span className="mt-1 block text-xs text-zinc-400">
+                  {hasAiAccess
+                    ? "Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative (au lieu d'un simple filtre de couleur)."
+                    : "Réservé au plan Pro : une vraie IA régénère l'éclairage et l'ambiance de la photo, pas juste un filtre."}
+                </span>
+                {!hasAiAccess && (
+                  <Link
+                    href="/pricing"
+                    className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
+                  >
+                    Voir le plan Pro →
+                  </Link>
+                )}
+              </span>
+            </label>
+          </div>
+
           {error && (
             <p className="rounded-lg border border-red-800 bg-red-950/50 p-3 text-sm text-red-300">
               {error}
@@ -200,7 +255,11 @@ export default function GeneratePage() {
               disabled={loading}
               className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
             >
-              {loading ? "Génération..." : "Générer la miniature"}
+              {loading
+                ? hasAiAccess && aiEnhance
+                  ? "Génération IA en cours (10-20s)..."
+                  : "Génération..."
+                : "Générer la miniature"}
             </button>
           )}
         </div>

@@ -4,7 +4,9 @@ import fs from "fs/promises";
 import path from "path";
 import * as opentype from "opentype.js";
 import * as wawoff2 from "wawoff2";
+import { toFile } from "openai";
 import { getPreset, Preset } from "@/lib/presets";
+import { getOpenAI } from "@/lib/openai";
 
 export const runtime = "nodejs";
 
@@ -132,6 +134,46 @@ function buildWatermarkSvg(
   </svg>`;
 }
 
+// Calls OpenAI's image editing model to actually regenerate the photo's
+// lighting/atmosphere/background per the preset's prompt — a real
+// generative transformation, not a deterministic color filter. Reserved
+// for the Pro plan; requires OPENAI_API_KEY to be configured.
+async function applyAiEnhancement(
+  inputBuffer: Buffer,
+  mimeType: string,
+  preset: Preset
+): Promise<Buffer> {
+  const openai = getOpenAI();
+  if (!openai) {
+    throw new AiNotConfiguredError();
+  }
+
+  const uploadable = await toFile(inputBuffer, "photo.png", {
+    type: mimeType || "image/png",
+  });
+
+  const result = await openai.images.edit({
+    model: "gpt-image-1",
+    image: uploadable,
+    prompt: preset.aiPrompt,
+    size: "1536x1024",
+  });
+
+  const b64 = result.data?.[0]?.b64_json;
+  if (!b64) {
+    throw new Error("OpenAI n'a renvoyé aucune image.");
+  }
+  return Buffer.from(b64, "base64");
+}
+
+class AiNotConfiguredError extends Error {
+  constructor() {
+    super(
+      "L'amélioration IA n'est pas configurée sur ce déploiement (OPENAI_API_KEY manquante)."
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -139,6 +181,7 @@ export async function POST(req: NextRequest) {
     const presetId = String(formData.get("presetId") ?? "bold-impact");
     const title = String(formData.get("title") ?? "").slice(0, 120);
     const watermark = String(formData.get("watermark") ?? "true") === "true";
+    const aiEnhance = String(formData.get("aiEnhance") ?? "false") === "true";
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
@@ -161,12 +204,40 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const inputBuffer = Buffer.from(arrayBuffer);
 
-    const base = sharp(inputBuffer)
-      .rotate()
-      .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
-      .modulate({ brightness: preset.brightness, saturation: preset.saturation })
-      .linear(preset.contrastA, preset.contrastB)
-      .sharpen();
+    let base: ReturnType<typeof sharp>;
+
+    if (aiEnhance) {
+      let aiBuffer: Buffer;
+      try {
+        aiBuffer = await applyAiEnhancement(
+          inputBuffer,
+          file.type,
+          preset
+        );
+      } catch (err) {
+        if (err instanceof AiNotConfiguredError) {
+          return NextResponse.json({ error: err.message }, { status: 501 });
+        }
+        console.error("openai enhancement error", err);
+        return NextResponse.json(
+          {
+            error:
+              "L'amélioration IA a échoué (photo refusée ou service indisponible). Réessaie ou décoche l'option.",
+          },
+          { status: 502 }
+        );
+      }
+      base = sharp(aiBuffer)
+        .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
+        .sharpen();
+    } else {
+      base = sharp(inputBuffer)
+        .rotate()
+        .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
+        .modulate({ brightness: preset.brightness, saturation: preset.saturation })
+        .linear(preset.contrastA, preset.contrastB)
+        .sharpen();
+    }
 
     const overlays: OverlayOptions[] = [
       {
