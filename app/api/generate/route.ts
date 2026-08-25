@@ -83,7 +83,8 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
 interface FacePreserve {
   x: number;
   y: number;
-  size: number;
+  sizeX: number;
+  sizeY: number;
 }
 
 // The "face zone" ellipse is defined client-side, in normalized coordinates
@@ -92,12 +93,13 @@ interface FacePreserve {
 function parseFacePreserve(raw: unknown): FacePreserve | null {
   if (typeof raw !== "string" || !raw) return null;
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (!parsed || typeof parsed !== "object") return null;
     return {
-      x: clampNumber((parsed as Record<string, unknown>).x, 0, 1, 0.5),
-      y: clampNumber((parsed as Record<string, unknown>).y, 0, 1, 0.38),
-      size: clampNumber((parsed as Record<string, unknown>).size, 0.4, 2.5, 1),
+      x: clampNumber(parsed.x, 0, 1, 0.5),
+      y: clampNumber(parsed.y, 0, 1, 0.38),
+      sizeX: clampNumber(parsed.sizeX, 0.4, 2.5, 1),
+      sizeY: clampNumber(parsed.sizeY, 0.4, 2.5, 1),
     };
   } catch {
     return null;
@@ -116,8 +118,8 @@ async function buildFaceMask(
 ): Promise<Buffer> {
   const cx = face.x * width;
   const cy = face.y * height;
-  const rx = FACE_ZONE_BASE_RX * face.size * width;
-  const ry = FACE_ZONE_BASE_RY * face.size * height;
+  const rx = FACE_ZONE_BASE_RX * face.sizeX * width;
+  const ry = FACE_ZONE_BASE_RY * face.sizeY * height;
   const blur = Math.max(rx, ry) * 0.2;
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -128,6 +130,24 @@ async function buildFaceMask(
     <ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="#000" filter="url(#feather)" />
   </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+// A pure contrast/brightness/saturation touch-up pivoted around neutral gray
+// (128), independent of any preset — used to let the user correct an AI
+// generation's colors (or reuse a cached AI base for a free re-composite)
+// without re-grading it like a filter preset would.
+function fineOnlyAdjustments(
+  fineBrightness: number,
+  fineContrast: number,
+  fineSaturation: number
+) {
+  const contrastA = 1 + fineContrast / 100;
+  return {
+    brightness: 1 + fineBrightness / 100,
+    saturation: 1 + fineSaturation / 100,
+    contrastA,
+    contrastB: 128 * (1 - contrastA),
+  };
 }
 
 function wrapTextByWidth(
@@ -655,35 +675,50 @@ export async function POST(req: NextRequest) {
     const inputBuffer = Buffer.from(arrayBuffer);
 
     let base: ReturnType<typeof sharp>;
+    let aiBaseForResponse: Buffer | null = null;
 
     if (aiEnhance) {
-      const references: { buffer: Buffer; mimeType: string }[] = [];
-      for (const ref of referenceFiles) {
-        references.push({ buffer: Buffer.from(await ref.arrayBuffer()), mimeType: ref.type });
-      }
+      // If the client already has the AI-generated base from a previous
+      // call for these exact AI inputs (same photo/preset/description/
+      // references/face zone), it sends it back here instead of the raw
+      // photo — lets the user retouch text, colors, shapes etc. for free
+      // and instantly, without paying for a new OpenAI generation.
+      const cachedBase = formData.get("aiBaseImage");
 
       let aiBuffer: Buffer;
-      try {
-        aiBuffer = await applyAiEnhancement(
-          inputBuffer,
-          file.type,
-          preset,
-          aiDescription,
-          references,
-          facePreserve
-        );
-      } catch (err) {
-        if (err instanceof AiNotConfiguredError) {
-          return NextResponse.json({ error: err.message }, { status: 501 });
+      if (cachedBase instanceof File) {
+        aiBuffer = Buffer.from(await cachedBase.arrayBuffer());
+      } else {
+        const references: { buffer: Buffer; mimeType: string }[] = [];
+        for (const ref of referenceFiles) {
+          references.push({ buffer: Buffer.from(await ref.arrayBuffer()), mimeType: ref.type });
         }
-        console.error("openai enhancement error", err);
-        return NextResponse.json(
-          { error: describeAiError(err) },
-          { status: 502 }
-        );
+        try {
+          aiBuffer = await applyAiEnhancement(
+            inputBuffer,
+            file.type,
+            preset,
+            aiDescription,
+            references,
+            facePreserve
+          );
+        } catch (err) {
+          if (err instanceof AiNotConfiguredError) {
+            return NextResponse.json({ error: err.message }, { status: 501 });
+          }
+          console.error("openai enhancement error", err);
+          return NextResponse.json(
+            { error: describeAiError(err) },
+            { status: 502 }
+          );
+        }
       }
+      aiBaseForResponse = aiBuffer;
+      const fine = fineOnlyAdjustments(fineBrightness, fineContrast, fineSaturation);
       base = sharp(aiBuffer)
         .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
+        .modulate({ brightness: fine.brightness, saturation: fine.saturation })
+        .linear(fine.contrastA, fine.contrastB)
         .sharpen();
     } else {
       const scaled = scalePresetIntensity(
@@ -726,6 +761,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       image: `data:image/png;base64,${base64}`,
+      // Sent back so the client can cache it and, next time only text/
+      // colors/shapes change, resend it as `aiBaseImage` instead of
+      // triggering a brand new (paid) OpenAI generation.
+      aiBase: aiBaseForResponse
+        ? `data:image/png;base64,${aiBaseForResponse.toString("base64")}`
+        : undefined,
     });
   } catch (err) {
     console.error("generate error", err);

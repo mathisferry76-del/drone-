@@ -55,8 +55,11 @@ interface ReferenceImage {
 interface FacePreserveState {
   x: number;
   y: number;
-  size: number;
+  sizeX: number;
+  sizeY: number;
 }
+
+const DEFAULT_FACE_PRESERVE: FacePreserveState = { x: 0.5, y: 0.38, sizeX: 1, sizeY: 1 };
 
 const BOX_ASPECT = 16 / 9;
 
@@ -86,6 +89,15 @@ function boxFractionToImageFraction(bx: number, by: number, imgAspect: number) {
 function imageFractionToBoxFraction(ix: number, iy: number, imgAspect: number) {
   const { visW, visH, offX, offY } = letterboxFractions(imgAspect);
   return { bx: offX + ix * visW, by: offY + iy * visH };
+}
+
+function fileFingerprint(f: File): string {
+  return `${f.name}:${f.size}:${f.lastModified}`;
+}
+
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  const res = await fetch(dataUrl);
+  return res.blob();
 }
 
 const BACKGROUND_STYLE_OPTIONS: { id: BackgroundStyle; label: string }[] = [
@@ -152,6 +164,7 @@ export default function GeneratePage() {
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const [facePreserve, setFacePreserve] = useState<FacePreserveState | null>(null);
   const [naturalImgSize, setNaturalImgSize] = useState<{ w: number; h: number } | null>(null);
+  const [aiBaseCache, setAiBaseCache] = useState<{ key: string; dataUrl: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
@@ -206,7 +219,7 @@ export default function GeneratePage() {
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (canUseAi && aiEnhance && naturalImgSize && !facePreserve) {
-      setFacePreserve({ x: 0.5, y: 0.38, size: 1 });
+      setFacePreserve(DEFAULT_FACE_PRESERVE);
     }
   }, [canUseAi, aiEnhance, naturalImgSize, facePreserve]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -220,6 +233,7 @@ export default function GeneratePage() {
     setPreviewUrl(URL.createObjectURL(f));
     setNaturalImgSize(null);
     setFacePreserve(null);
+    setAiBaseCache(null);
   }
 
   function handleReferenceChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -354,6 +368,27 @@ export default function GeneratePage() {
   const quotaReached = !isPaid && usedCount >= FREE_GENERATIONS_PER_DEVICE;
   const hasAnyText = textLayers.some((l) => l.text.trim());
 
+  // Identifies the inputs that actually change what OpenAI would generate.
+  // As long as these stay the same, we can reuse the cached AI base and only
+  // re-run the (free, instant) local compositing — new text, colors, shapes,
+  // vignette, border. Change any of these and a fresh paid call is needed.
+  function computeAiCacheKey(): string | null {
+    if (!file) return null;
+    return [
+      fileFingerprint(file),
+      presetId,
+      aiDescription,
+      referenceImages.map((r) => fileFingerprint(r.file)).join(","),
+      JSON.stringify(facePreserve),
+    ].join("|");
+  }
+
+  const willUseAi = canUseAi && aiEnhance;
+  const currentAiCacheKey = willUseAi ? computeAiCacheKey() : null;
+  const willReuseAiBase = Boolean(
+    willUseAi && aiBaseCache && currentAiCacheKey && aiBaseCache.key === currentAiCacheKey
+  );
+
   async function handleGenerate() {
     setError(null);
 
@@ -370,7 +405,10 @@ export default function GeneratePage() {
       return;
     }
 
-    const willUseAi = canUseAi && aiEnhance;
+    const cacheKey = willUseAi ? computeAiCacheKey() : null;
+    const reuseCache = Boolean(
+      willUseAi && aiBaseCache && cacheKey && aiBaseCache.key === cacheKey
+    );
 
     setLoading(true);
     try {
@@ -393,8 +431,16 @@ export default function GeneratePage() {
       );
       formData.append("shapes", JSON.stringify(shapes));
       if (willUseAi) {
-        for (const ref of referenceImages) {
-          formData.append("referenceImages", ref.file);
+        if (reuseCache && aiBaseCache) {
+          formData.append(
+            "aiBaseImage",
+            await dataUrlToBlob(aiBaseCache.dataUrl),
+            "ai-base.png"
+          );
+        } else {
+          for (const ref of referenceImages) {
+            formData.append("referenceImages", ref.file);
+          }
         }
         if (facePreserve) {
           formData.append("facePreserve", JSON.stringify(facePreserve));
@@ -410,12 +456,18 @@ export default function GeneratePage() {
       }
 
       setResultUrl(data.image);
+      if (typeof data.aiBase === "string" && cacheKey) {
+        setAiBaseCache({ key: cacheKey, dataUrl: data.aiBase });
+      }
       if (!isPaid) {
         const next = usedCount + 1;
         setUsedCount(next);
         window.localStorage.setItem(USAGE_KEY, String(next));
       }
-      if (willUseAi && plan === "creator") {
+      // Reusing the cached AI base is a free local re-composite, not a new
+      // OpenAI call — it must not count against the Creator plan's 2/month
+      // AI quota, only genuine new generations do.
+      if (willUseAi && !reuseCache && plan === "creator") {
         const next = aiUsesThisMonth + 1;
         setAiUsesThisMonth(next);
         window.localStorage.setItem(
@@ -476,8 +528,8 @@ export default function GeneratePage() {
                       imgAspect
                     );
                     const { visW, visH } = letterboxFractions(imgAspect);
-                    const widthPct = 2 * FACE_ZONE_BASE_RX * facePreserve.size * visW * 100;
-                    const heightPct = 2 * FACE_ZONE_BASE_RY * facePreserve.size * visH * 100;
+                    const widthPct = 2 * FACE_ZONE_BASE_RX * facePreserve.sizeX * visW * 100;
+                    const heightPct = 2 * FACE_ZONE_BASE_RY * facePreserve.sizeY * visH * 100;
                     return (
                       <div
                         onPointerDown={startFaceDrag}
@@ -599,11 +651,14 @@ export default function GeneratePage() {
             </button>
 
             {showAdvanced && (
-              <div
-                className={`mt-3 space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4 ${
-                  canUseAi && aiEnhance ? "opacity-40" : ""
-                }`}
-              >
+              <div className="mt-3 space-y-4 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+                {canUseAi && aiEnhance && (
+                  <p className="text-xs text-zinc-500">
+                    En mode IA, ces réglages s&apos;appliquent après coup sur le
+                    résultat — utile pour calmer une IA qui est repartie sur des
+                    couleurs trop criardes, sans relancer une génération.
+                  </p>
+                )}
                 {[
                   { label: "Luminosité", value: fineBrightness, set: setFineBrightness },
                   { label: "Contraste", value: fineContrast, set: setFineContrast },
@@ -619,7 +674,6 @@ export default function GeneratePage() {
                       min={-50}
                       max={50}
                       value={ctrl.value}
-                      disabled={canUseAi && aiEnhance}
                       onChange={(e) => ctrl.set(Number(e.target.value))}
                       className="w-full accent-yellow-400 disabled:cursor-not-allowed"
                     />
@@ -959,7 +1013,7 @@ export default function GeneratePage() {
                       </label>
                       <button
                         type="button"
-                        onClick={() => setFacePreserve({ x: 0.5, y: 0.38, size: 1 })}
+                        onClick={() => setFacePreserve(DEFAULT_FACE_PRESERVE)}
                         className="text-xs font-semibold text-zinc-500 hover:text-white"
                       >
                         Recentrer
@@ -970,22 +1024,54 @@ export default function GeneratePage() {
                       exactement ton visage. Cette zone est verrouillée pixel par
                       pixel — l&apos;IA ne peut littéralement pas la modifier, même
                       si elle change tout le reste de la photo. Prends le temps de
-                      bien la positionner : c&apos;est ce qui garantit que tu restes
+                      bien la positionner et de bien l&apos;ajuster en largeur et en
+                      hauteur : c&apos;est ce qui garantit que tu restes
                       reconnaissable.
                     </p>
-                    <input
-                      type="range"
-                      min={0.5}
-                      max={2}
-                      step={0.05}
-                      value={facePreserve.size}
-                      onChange={(e) =>
-                        setFacePreserve((prev) =>
-                          prev ? { ...prev, size: Number(e.target.value) } : prev
-                        )
-                      }
-                      className="mt-2 w-full accent-emerald-400"
-                    />
+                    <div className="mt-2 grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <label className="text-xs text-zinc-400">Largeur</label>
+                          <span className="text-xs text-zinc-500">
+                            {Math.round(facePreserve.sizeX * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0.5}
+                          max={2}
+                          step={0.05}
+                          value={facePreserve.sizeX}
+                          onChange={(e) =>
+                            setFacePreserve((prev) =>
+                              prev ? { ...prev, sizeX: Number(e.target.value) } : prev
+                            )
+                          }
+                          className="w-full accent-emerald-400"
+                        />
+                      </div>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between">
+                          <label className="text-xs text-zinc-400">Hauteur</label>
+                          <span className="text-xs text-zinc-500">
+                            {Math.round(facePreserve.sizeY * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={0.5}
+                          max={2}
+                          step={0.05}
+                          value={facePreserve.sizeY}
+                          onChange={(e) =>
+                            setFacePreserve((prev) =>
+                              prev ? { ...prev, sizeY: Number(e.target.value) } : prev
+                            )
+                          }
+                          className="w-full accent-emerald-400"
+                        />
+                      </div>
+                    </div>
                   </div>
                 )}
 
@@ -1047,6 +1133,14 @@ export default function GeneratePage() {
             </p>
           )}
 
+          {willUseAi && (
+            <p className="text-xs text-zinc-500">
+              {willReuseAiBase
+                ? "🔁 Seuls le texte, les couleurs et les formes ont changé depuis la dernière génération IA — retouche instantanée, sans nouvel appel IA (et sans consommer ton quota)."
+                : "✨ Le prochain clic lance une nouvelle génération IA (10-20s) — la photo, le style, la description, les références ou la zone visage ont changé."}
+            </p>
+          )}
+
           {quotaReached ? (
             <Link
               href="/pricing"
@@ -1061,7 +1155,7 @@ export default function GeneratePage() {
               className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
             >
               {loading
-                ? canUseAi && aiEnhance
+                ? willUseAi && !willReuseAiBase
                   ? "Génération IA en cours (10-20s)..."
                   : "Génération..."
                 : "Générer la miniature"}

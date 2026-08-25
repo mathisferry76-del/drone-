@@ -60,14 +60,27 @@ complet, pas une liste de features.
   (visage en particulier) au lieu de le réinterpréter librement — ce
   paramètre est à `"low"` par défaut côté OpenAI.
 - **Zone "visage à préserver" verrouillée pixel par pixel** : en mode IA,
-  un marqueur ellipse apparaît sur l'aperçu (centré par défaut, déplaçable
-  et redimensionnable) que l'utilisateur positionne sur son visage. Côté
-  serveur, cette zone devient un vrai masque PNG (transparence = zone que
-  l'IA peut modifier, opaque = zone préservée telle quelle) envoyé à
-  `images.edit` — le visage revient donc identique pixel pour pixel,
-  garantie qu'aucune instruction de prompt seule ne peut donner. Combiné à
-  `input_fidelity: "high"` pour la zone de transition (cheveux, oreilles)
-  qui reste éditable.
+  un marqueur ellipse apparaît sur l'aperçu (centré par défaut, déplaçable,
+  et redimensionnable **indépendamment en largeur et en hauteur**) que
+  l'utilisateur positionne sur son visage. Côté serveur, cette zone devient
+  un vrai masque PNG (transparence = zone que l'IA peut modifier, opaque =
+  zone préservée telle quelle) envoyé à `images.edit` — le visage revient
+  donc identique pixel pour pixel, garantie qu'aucune instruction de
+  prompt seule ne peut donner. Combiné à `input_fidelity: "high"` pour la
+  zone de transition (cheveux, oreilles) qui reste éditable.
+- **Retouche gratuite et instantanée après une génération IA** : le
+  serveur renvoie l'image brute générée par OpenAI (avant texte/formes) en
+  plus du rendu final. Le client la garde en cache tant que la photo, le
+  style, la description IA, les images de référence et la zone visage ne
+  changent pas — un nouveau clic sur "Générer" ne fait alors que
+  recomposer localement le texte/les formes/les couleurs par-dessus, sans
+  ré-appeler OpenAI (donc gratuit, instantané, et ça ne consomme pas le
+  quota IA du plan Creator). Dès qu'un de ces éléments change, une vraie
+  nouvelle génération IA (payante) repart.
+- **Réglages de couleur (luminosité/contraste/saturation) utilisables même
+  en mode IA** : appliqués en post-traitement sur le résultat généré, pour
+  corriger une IA repartie sur des couleurs trop saturées sans avoir à
+  relancer une génération.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
