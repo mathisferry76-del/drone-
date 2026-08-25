@@ -141,7 +141,8 @@ function buildWatermarkSvg(
 async function applyAiEnhancement(
   inputBuffer: Buffer,
   mimeType: string,
-  preset: Preset
+  preset: Preset,
+  userDescription: string
 ): Promise<Buffer> {
   const openai = getOpenAI();
   if (!openai) {
@@ -152,10 +153,14 @@ async function applyAiEnhancement(
     type: mimeType || "image/png",
   });
 
+  const prompt = userDescription.trim()
+    ? `${preset.aiPrompt} Also incorporate these specific instructions from the user: ${userDescription.trim()}`
+    : preset.aiPrompt;
+
   const result = await openai.images.edit({
     model: "gpt-image-1",
     image: uploadable,
-    prompt: preset.aiPrompt,
+    prompt,
     size: "1536x1024",
   });
 
@@ -205,6 +210,7 @@ export async function POST(req: NextRequest) {
     const title = String(formData.get("title") ?? "").slice(0, 120);
     const watermark = String(formData.get("watermark") ?? "true") === "true";
     const aiEnhance = String(formData.get("aiEnhance") ?? "false") === "true";
+    const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 300);
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
@@ -235,7 +241,8 @@ export async function POST(req: NextRequest) {
         aiBuffer = await applyAiEnhancement(
           inputBuffer,
           file.type,
-          preset
+          preset,
+          aiDescription
         );
       } catch (err) {
         if (err instanceof AiNotConfiguredError) {

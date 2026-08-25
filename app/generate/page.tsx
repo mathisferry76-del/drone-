@@ -19,6 +19,7 @@ export default function GeneratePage() {
   const [usedCount, setUsedCount] = useState(0);
   const [plan, setPlan] = useState<Plan>("free");
   const [aiEnhance, setAiEnhance] = useState(false);
+  const [aiDescription, setAiDescription] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isPaid = plan !== "free";
@@ -85,6 +86,7 @@ export default function GeneratePage() {
       formData.append("title", title);
       formData.append("watermark", isPaid ? "false" : "true");
       formData.append("aiEnhance", hasAiAccess && aiEnhance ? "true" : "false");
+      formData.append("aiDescription", aiDescription);
 
       const res = await fetch("/api/generate", { method: "POST", body: formData });
       const data = await res.json();
@@ -234,6 +236,28 @@ export default function GeneratePage() {
                 )}
               </span>
             </label>
+
+            {hasAiAccess && aiEnhance && (
+              <div className="mt-3 border-t border-yellow-800/30 pt-3">
+                <label className="mb-1 block text-xs font-semibold text-zinc-300">
+                  Décris ce que tu veux voir (optionnel)
+                </label>
+                <textarea
+                  value={aiDescription}
+                  onChange={(e) => setAiDescription(e.target.value)}
+                  maxLength={300}
+                  rows={2}
+                  placeholder="Ex : fond de studio avec néons bleus, ambiance coucher de soleil, décor futuriste, plus de contraste..."
+                  className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-zinc-500">
+                  Le style {PRESETS.find((p) => p.id === presetId)?.name} donne déjà une
+                  ambiance de base — précise ici ce que tu veux changer ou ajouter
+                  (décor, lumière, couleurs). Le sujet de ta photo reste toujours
+                  reconnaissable.
+                </p>
+              </div>
+            )}
           </div>
 
           {error && (
