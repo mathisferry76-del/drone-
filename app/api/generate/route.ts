@@ -4,7 +4,7 @@ import fs from "fs/promises";
 import path from "path";
 import * as opentype from "opentype.js";
 import * as wawoff2 from "wawoff2";
-import { toFile } from "openai";
+import OpenAI, { toFile } from "openai";
 import { getPreset, Preset } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 
@@ -174,6 +174,29 @@ class AiNotConfiguredError extends Error {
   }
 }
 
+// Turns an OpenAI SDK error into a specific, actionable French message
+// instead of a generic "ça n'a pas marché" — the difference between a
+// wrong API key, an unverified org, an empty wallet, and a genuinely
+// refused image all need different fixes from the user.
+function describeAiError(err: unknown): string {
+  if (err instanceof OpenAI.APIError) {
+    switch (err.status) {
+      case 401:
+        return "Clé OpenAI invalide ou expirée. Vérifie OPENAI_API_KEY sur Vercel.";
+      case 403:
+        return "Accès refusé par OpenAI : ton organisation doit être vérifiée pour utiliser gpt-image-1 (platform.openai.com → Settings → Organization → Verification).";
+      case 429:
+        return "Quota OpenAI atteint ou compte sans crédit. Vérifie Billing sur platform.openai.com.";
+      case 400:
+        return `Photo refusée par OpenAI (${err.message || "requête invalide"}). Essaie une autre photo.`;
+      default:
+        return `Erreur OpenAI (${err.status ?? "inconnue"}) : ${err.message}`;
+    }
+  }
+  if (err instanceof Error) return err.message;
+  return "Erreur inconnue pendant l'amélioration IA.";
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -220,10 +243,7 @@ export async function POST(req: NextRequest) {
         }
         console.error("openai enhancement error", err);
         return NextResponse.json(
-          {
-            error:
-              "L'amélioration IA a échoué (photo refusée ou service indisponible). Réessaie ou décoche l'option.",
-          },
+          { error: describeAiError(err) },
           { status: 502 }
         );
       }
