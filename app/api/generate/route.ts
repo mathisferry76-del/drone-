@@ -427,6 +427,11 @@ async function applyAiEnhancement(
     prompt,
     size: "1536x1024",
     quality: "high",
+    // Defaults to "low", which is almost certainly why the subject's face
+    // stopped being recognizable after a few edits — this tells the model
+    // to spend real effort matching the input's facial features instead
+    // of loosely reinterpreting them.
+    input_fidelity: "high",
   });
 
   const b64 = result.data?.[0]?.b64_json;
