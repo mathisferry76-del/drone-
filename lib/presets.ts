@@ -6,7 +6,8 @@ export type PresetId =
   | "retro-vintage"
   | "pastel-soft"
   | "cyberpunk"
-  | "nature-vive";
+  | "nature-vive"
+  | "golden-vacation";
 
 export interface Preset {
   id: PresetId;
@@ -163,6 +164,23 @@ export const PRESETS: Preset[] = [
     aiPrompt:
       "Transform the background into a vibrant, lush outdoor nature scene with saturated greens and natural sunlight, like an adventure or travel vlog. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
   },
+  {
+    id: "golden-vacation",
+    name: "Vacances Dorées",
+    description: "Tons chauds et saturés, ambiance ensoleillée — vlogs voyage, été, lifestyle extérieur.",
+    brightness: 1.1,
+    saturation: 1.5,
+    contrastA: 1.1,
+    contrastB: 5,
+    textColor: "#FFD166",
+    strokeColor: "#0B4F4A",
+    strokeWidth: 8,
+    gradientFrom: "rgba(255,140,60,0.05)",
+    gradientTo: "rgba(120,50,10,0.65)",
+    gradientOpacity: 0.65,
+    aiPrompt:
+      "Transform the background into a warm, vibrant summer vacation scene with golden sunlight, tropical or sunset colors, bright saturated warm tones. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
+  },
 ];
 
 export function getPreset(id: string): Preset {
@@ -197,7 +215,7 @@ export const PRICING_TIERS: PricingTier[] = [
       "Génère quelques miniatures avec les styles filtres, sans engagement, pour voir si l'outil te convient.",
     features: [
       `${FREE_GENERATIONS_PER_DEVICE} miniatures avec filigrane`,
-      "8 styles filtres (couleurs, contraste, texte)",
+      "9 styles filtres (couleurs, contraste, texte)",
       "Export HD 1280x720",
     ],
     notIncluded: ["Pas d'IA générative", "Filigrane sur chaque export"],
@@ -215,7 +233,7 @@ export const PRICING_TIERS: PricingTier[] = [
     features: [
       "Miniatures illimitées",
       "Sans filigrane",
-      "8 styles filtres + nouveaux styles à venir",
+      "9 styles filtres + nouveaux styles à venir",
       `IA générative : ${CREATOR_AI_MONTHLY_LIMIT} générations par mois`,
       "Export HD 1280x720",
     ],

@@ -24,6 +24,7 @@ export default function GeneratePage() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [presetId, setPresetId] = useState<PresetId>("bold-impact");
+  const [intensity, setIntensity] = useState(100);
   const [title, setTitle] = useState("");
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -116,6 +117,7 @@ export default function GeneratePage() {
       formData.append("watermark", isPaid ? "false" : "true");
       formData.append("aiEnhance", willUseAi ? "true" : "false");
       formData.append("aiDescription", aiDescription);
+      formData.append("intensity", String(intensity));
 
       const res = await fetch("/api/generate", { method: "POST", body: formData });
       const data = await res.json();
@@ -217,6 +219,29 @@ export default function GeneratePage() {
                   <div className="text-sm font-bold">{preset.name}</div>
                 </button>
               ))}
+            </div>
+
+            <div className={`mt-4 ${canUseAi && aiEnhance ? "opacity-40" : ""}`}>
+              <div className="mb-1 flex items-center justify-between">
+                <label className="text-xs font-semibold text-zinc-300">
+                  Intensité du filtre
+                </label>
+                <span className="text-xs text-zinc-500">{intensity}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={intensity}
+                disabled={canUseAi && aiEnhance}
+                onChange={(e) => setIntensity(Number(e.target.value))}
+                className="w-full accent-yellow-400 disabled:cursor-not-allowed"
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                {canUseAi && aiEnhance
+                  ? "Ne s'applique pas en mode IA générative."
+                  : "0% = photo d'origine, 100% = effet du style en entier."}
+              </p>
             </div>
           </div>
 

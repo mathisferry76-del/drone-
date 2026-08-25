@@ -119,6 +119,18 @@ function buildTextOverlaySvg(
   </svg>`;
 }
 
+// Blends a preset's filter strength between neutral (0, photo untouched)
+// and the preset's full effect (1), so the intensity slider in the UI can
+// dial a style up or down instead of it being all-or-nothing.
+function scalePresetIntensity(preset: Preset, t: number) {
+  return {
+    brightness: 1 + (preset.brightness - 1) * t,
+    saturation: 1 + (preset.saturation - 1) * t,
+    contrastA: 1 + (preset.contrastA - 1) * t,
+    contrastB: preset.contrastB * t,
+  };
+}
+
 function buildWatermarkSvg(
   font: opentype.Font,
   text: string
@@ -211,6 +223,10 @@ export async function POST(req: NextRequest) {
     const watermark = String(formData.get("watermark") ?? "true") === "true";
     const aiEnhance = String(formData.get("aiEnhance") ?? "false") === "true";
     const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 600);
+    const intensityRaw = Number(formData.get("intensity") ?? "100");
+    const intensity = Number.isFinite(intensityRaw)
+      ? Math.min(100, Math.max(0, intensityRaw))
+      : 100;
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
@@ -258,11 +274,12 @@ export async function POST(req: NextRequest) {
         .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
         .sharpen();
     } else {
+      const scaled = scalePresetIntensity(preset, intensity / 100);
       base = sharp(inputBuffer)
         .rotate()
         .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
-        .modulate({ brightness: preset.brightness, saturation: preset.saturation })
-        .linear(preset.contrastA, preset.contrastB)
+        .modulate({ brightness: scaled.brightness, saturation: scaled.saturation })
+        .linear(scaled.contrastA, scaled.contrastB)
         .sharpen();
     }
 
