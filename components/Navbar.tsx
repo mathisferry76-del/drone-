@@ -1,20 +1,37 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
 
+const LINKS = [
+  { href: "/#styles", label: "Styles" },
+  { href: "/#resultats", label: "Nos résultats" },
+  { href: "/pricing", label: "Tarifs" },
+  { href: "/#faq", label: "FAQ" },
+  { href: "/#contact", label: "Contact" },
+];
+
 export default function Navbar() {
+  const [open, setOpen] = useState(false);
+
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800 bg-black/80 backdrop-blur">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white">
+        <Link
+          href="/"
+          className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white"
+          onClick={() => setOpen(false)}
+        >
           <span className="rounded bg-yellow-400 px-1.5 py-0.5 text-black">Thumb</span>
           AI
         </Link>
-        <div className="flex items-center gap-6 text-sm font-medium text-zinc-300">
-          <Link href="/#styles" className="hidden hover:text-white sm:block">
-            Styles
-          </Link>
-          <Link href="/pricing" className="hidden hover:text-white sm:block">
-            Tarifs
-          </Link>
+
+        <div className="hidden items-center gap-6 text-sm font-medium text-zinc-300 sm:flex">
+          {LINKS.map((link) => (
+            <Link key={link.href} href={link.href} className="transition hover:text-white">
+              {link.label}
+            </Link>
+          ))}
           <Link
             href="/generate"
             className="rounded-full bg-yellow-400 px-4 py-2 font-bold text-black transition hover:bg-yellow-300"
@@ -22,7 +39,48 @@ export default function Navbar() {
             Essayer gratuitement
           </Link>
         </div>
+
+        <div className="flex items-center gap-3 sm:hidden">
+          <Link
+            href="/generate"
+            className="rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-300"
+          >
+            Essayer
+          </Link>
+          <button
+            type="button"
+            aria-label={open ? "Fermer le menu" : "Ouvrir le menu"}
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+            className="flex h-10 w-10 flex-col items-center justify-center gap-1.5 rounded-lg border border-zinc-700 transition hover:border-zinc-500"
+          >
+            <span
+              className={`h-0.5 w-5 bg-white transition ${open ? "translate-y-2 rotate-45" : ""}`}
+            />
+            <span className={`h-0.5 w-5 bg-white transition ${open ? "opacity-0" : ""}`} />
+            <span
+              className={`h-0.5 w-5 bg-white transition ${open ? "-translate-y-2 -rotate-45" : ""}`}
+            />
+          </button>
+        </div>
       </nav>
+
+      {open && (
+        <div className="border-t border-zinc-800 bg-black px-6 py-4 sm:hidden">
+          <div className="flex flex-col gap-1 text-sm font-medium text-zinc-300">
+            {LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-2 py-2.5 transition hover:bg-zinc-900 hover:text-white"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

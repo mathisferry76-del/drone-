@@ -8,7 +8,10 @@ complet, pas une liste de features.
 
 ## Ce qui fonctionne réellement (testé)
 
-- **Landing page** (`/`) : proposition de valeur, 10 styles, CTA.
+- **Landing page** (`/`) : proposition de valeur, 10 styles, une section
+  "Nos résultats" (galerie d'exemples de miniatures générées), une FAQ de
+  8 questions, un menu (desktop + menu hamburger mobile) avec Styles,
+  Résultats, Tarifs, FAQ et Contact, et un footer avec adresse de contact.
 - **`/generate`** : un vrai petit éditeur multi-calques, pas juste "une
   photo + un titre" :
   - **Jusqu'à 5 calques de texte** indépendants (titre, sous-titre, badge
@@ -52,6 +55,10 @@ complet, pas une liste de features.
   ajouter jusqu'à 3 photos (logo, objet...) qu'OpenAI reçoit en plus de la
   photo principale, guidées par le champ description ("ajoute le logo de
   la première image en haut à droite").
+- **`input_fidelity: "high"`** sur l'appel `images.edit` d'OpenAI : demande
+  explicitement au modèle de conserver au maximum les traits du sujet
+  (visage en particulier) au lieu de le réinterpréter librement — ce
+  paramètre est à `"low"` par défaut côté OpenAI.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
