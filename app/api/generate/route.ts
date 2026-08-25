@@ -14,8 +14,32 @@ const CANVAS_WIDTH = 1280;
 const CANVAS_HEIGHT = 720;
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_CURVE_ANGLE = 0.8; // radians of total arc sweep at curve = ±100
+const MAX_TEXT_LAYERS = 5;
+const MAX_SHAPES = 8;
+const MAX_REFERENCE_IMAGES = 3;
 
 type BackgroundStyle = "panel" | "shadow" | "none";
+type ShapeType = "arrow" | "circle" | "rectangle";
+
+interface TextLayerInput {
+  text: string;
+  color: string;
+  strokeColor: string;
+  backgroundStyle: BackgroundStyle;
+  x: number;
+  y: number;
+  curve: number;
+  fontSize: number;
+}
+
+interface ShapeInput {
+  type: ShapeType;
+  color: string;
+  x: number;
+  y: number;
+  size: number;
+  rotation: number;
+}
 
 // Text is drawn as vector paths (glyph outlines), not <text> elements, so
 // rendering never depends on fonts installed on the host. Production
@@ -39,6 +63,15 @@ async function loadFont(): Promise<opentype.Font> {
     })();
   }
   return fontPromise;
+}
+
+function isValidHexColor(value: unknown): value is string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value);
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }
 
 function wrapTextByWidth(
@@ -154,31 +187,29 @@ function layoutLine(
   return parts.join("");
 }
 
-function buildTextOverlaySvg(
+// Renders one text layer (its own color/outline/background/curve/size) as
+// a self-contained fragment: optional <defs> (for a per-layer drop-shadow
+// filter, uniquely named so multiple layers don't clash) plus the visible
+// markup. Several of these are combined into one overlay SVG.
+function buildTextLayerFragment(
   font: opentype.Font,
-  text: string,
-  textColor: string,
-  strokeColor: string,
-  strokeWidth: number,
-  backgroundStyle: BackgroundStyle,
-  anchorX: number,
-  anchorY: number,
-  curveAmount: number
-): string {
-  const fontSize = 88;
+  layer: TextLayerInput,
+  layerIndex: number
+): { defs: string; markup: string } {
+  const fontSize = layer.fontSize;
   const lineHeight = fontSize * 1.08;
-  // The text is centered on anchorX, so how much width fits before running
-  // off-canvas depends on how close that anchor is to an edge — wrap
-  // against that instead of a fixed width, or a title near the edge would
-  // render partly outside the frame.
+  // The text is centered on x, so how much width fits before running off
+  // canvas depends on how close that anchor is to an edge — wrap against
+  // that instead of a fixed width, or a title near the edge would render
+  // partly outside the frame.
   const edgeMargin = 40;
-  const safeHalfWidth = Math.min(anchorX, 1 - anchorX) * CANVAS_WIDTH - edgeMargin;
-  const maxWidth = Math.max(220, Math.min(CANVAS_WIDTH * 0.86, safeHalfWidth * 2));
-  const lines = wrapTextByWidth(font, text, fontSize, maxWidth, 3);
+  const safeHalfWidth = Math.min(layer.x, 1 - layer.x) * CANVAS_WIDTH - edgeMargin;
+  const maxWidth = Math.max(160, Math.min(CANVAS_WIDTH * 0.86, safeHalfWidth * 2));
+  const lines = wrapTextByWidth(font, layer.text, fontSize, maxWidth, 3);
   const totalHeight = lines.length * lineHeight;
 
-  const centerX = anchorX * CANVAS_WIDTH;
-  const rawBlockTop = anchorY * CANVAS_HEIGHT - totalHeight / 2;
+  const centerX = layer.x * CANVAS_WIDTH;
+  const rawBlockTop = layer.y * CANVAS_HEIGHT - totalHeight / 2;
   const blockTop = Math.max(
     edgeMargin,
     Math.min(CANVAS_HEIGHT - edgeMargin - totalHeight, rawBlockTop)
@@ -188,36 +219,122 @@ function buildTextOverlaySvg(
   const glyphGroups = lines
     .map((line, i) => {
       const baselineY = blockTop + i * lineHeight + fontSize * 0.78;
-      return layoutLine(font, line, fontSize, centerX, baselineY, curveAmount, bbox);
+      return layoutLine(font, line, fontSize, centerX, baselineY, layer.curve, bbox);
     })
     .join("");
 
   const hasBox = Number.isFinite(bbox.minX);
   const panelPadding = 24;
+  const strokeWidth = Math.max(1, Math.round(fontSize * 0.09));
 
   let defs = "";
   let backdrop = "";
   let filterAttr = "";
+  const filterId = `textShadow${layerIndex}`;
 
-  if (backgroundStyle === "panel" && hasBox) {
+  if (layer.backgroundStyle === "panel" && hasBox) {
     backdrop = `<rect x="${bbox.minX - panelPadding}" y="${
       bbox.minY - panelPadding * 0.6
     }" width="${bbox.maxX - bbox.minX + panelPadding * 2}" height="${
       bbox.maxY - bbox.minY + panelPadding * 1.2
     }" rx="14" fill="#000000" opacity="0.32" />`;
-  } else if (backgroundStyle === "shadow") {
-    defs = `<filter id="textShadow" x="-30%" y="-30%" width="160%" height="160%">
+  } else if (layer.backgroundStyle === "shadow") {
+    defs = `<filter id="${filterId}" x="-30%" y="-30%" width="160%" height="160%">
       <feDropShadow dx="4" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.65" />
     </filter>`;
-    filterAttr = ` filter="url(#textShadow)"`;
+    filterAttr = ` filter="url(#${filterId})"`;
   }
+
+  const markup = `${backdrop}<g${filterAttr} fill="${layer.color}" stroke="${layer.strokeColor}" stroke-width="${strokeWidth}" stroke-linejoin="round" paint-order="stroke fill">${glyphGroups}</g>`;
+
+  return { defs, markup };
+}
+
+// Renders one annotation shape (arrow / highlight ring / highlight box) as
+// an SVG fragment centered at its own point and rotated in place — the
+// kind of "point at this" or "circle this" markup real thumbnail
+// designers add on top of the photo.
+function buildShapeFragment(shape: ShapeInput): string {
+  const cx = shape.x * CANVAS_WIDTH;
+  const cy = shape.y * CANVAS_HEIGHT;
+  const size = shape.size * CANVAS_WIDTH;
+  const transform = `translate(${cx.toFixed(2)},${cy.toFixed(2)}) rotate(${shape.rotation.toFixed(2)})`;
+
+  if (shape.type === "arrow") {
+    const headLen = size * 0.35;
+    const headWidth = size * 0.32;
+    const shaftWidth = size * 0.1;
+    const d = `M ${-size / 2} ${-shaftWidth / 2} L ${size / 2 - headLen} ${-shaftWidth / 2} L ${
+      size / 2 - headLen
+    } ${-headWidth / 2} L ${size / 2} 0 L ${size / 2 - headLen} ${headWidth / 2} L ${
+      size / 2 - headLen
+    } ${shaftWidth / 2} L ${-size / 2} ${shaftWidth / 2} Z`;
+    return `<g transform="${transform}"><path d="${d}" fill="${shape.color}" stroke="#000000" stroke-width="${Math.max(
+      2,
+      size * 0.02
+    )}" stroke-linejoin="round" /></g>`;
+  }
+
+  if (shape.type === "circle") {
+    const strokeWidth = Math.max(6, size * 0.06);
+    return `<g transform="${transform}"><circle cx="0" cy="0" r="${(
+      size / 2
+    ).toFixed(2)}" fill="none" stroke="${shape.color}" stroke-width="${strokeWidth.toFixed(
+      2
+    )}" /></g>`;
+  }
+
+  const height = size * 0.6;
+  const strokeWidth = Math.max(6, size * 0.05);
+  return `<g transform="${transform}"><rect x="${(-size / 2).toFixed(2)}" y="${(
+    -height / 2
+  ).toFixed(2)}" width="${size.toFixed(2)}" height="${height.toFixed(2)}" rx="${(
+    size * 0.08
+  ).toFixed(2)}" fill="none" stroke="${shape.color}" stroke-width="${strokeWidth.toFixed(
+    2
+  )}" /></g>`;
+}
+
+function buildVignetteFragment(): string {
+  return `<defs>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="75%">
+      <stop offset="55%" stop-color="#000000" stop-opacity="0" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.55" />
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="url(#vignette)" />`;
+}
+
+function buildBorderFragment(color: string): string {
+  const width = 14;
+  return `<rect x="${width / 2}" y="${width / 2}" width="${CANVAS_WIDTH - width}" height="${
+    CANVAS_HEIGHT - width
+  }" fill="none" stroke="${color}" stroke-width="${width}" />`;
+}
+
+// Combines the vignette, every shape and every text layer into one overlay
+// SVG (shapes under text, vignette under everything) so they composite
+// onto the photo in a single pass.
+function buildContentSvg(
+  font: opentype.Font,
+  textLayers: TextLayerInput[],
+  shapes: ShapeInput[],
+  vignette: boolean
+): string {
+  const shapeMarkup = shapes.map(buildShapeFragment).join("");
+  let defs = "";
+  let textMarkup = "";
+  textLayers.forEach((layer, i) => {
+    const { defs: layerDefs, markup } = buildTextLayerFragment(font, layer, i);
+    defs += layerDefs;
+    textMarkup += markup;
+  });
 
   return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
     <defs>${defs}</defs>
-    ${backdrop}
-    <g${filterAttr} fill="${textColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}" stroke-linejoin="round" paint-order="stroke fill">
-      ${glyphGroups}
-    </g>
+    ${vignette ? buildVignetteFragment() : ""}
+    ${shapeMarkup}
+    ${textMarkup}
   </svg>`;
 }
 
@@ -233,30 +350,49 @@ function buildWatermarkSvg(font: opentype.Font, text: string): string {
   </svg>`;
 }
 
+function buildBorderSvg(color: string): string {
+  return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">${buildBorderFragment(
+    color
+  )}</svg>`;
+}
+
 // Blends a preset's filter strength between neutral (0, photo untouched)
 // and the preset's full effect (1), so the intensity slider in the UI can
-// dial a style up or down instead of it being all-or-nothing.
-function scalePresetIntensity(preset: Preset, t: number) {
-  return {
+// dial a style up or down instead of it being all-or-nothing. Fine
+// brightness/contrast/saturation nudges (each -50..50, from the "advanced
+// adjustments" sliders) are then layered on top for manual color grading.
+function scalePresetIntensity(
+  preset: Preset,
+  t: number,
+  fineBrightness: number,
+  fineContrast: number,
+  fineSaturation: number
+) {
+  const base = {
     brightness: 1 + (preset.brightness - 1) * t,
     saturation: 1 + (preset.saturation - 1) * t,
     contrastA: 1 + (preset.contrastA - 1) * t,
     contrastB: preset.contrastB * t,
   };
+  return {
+    brightness: base.brightness * (1 + fineBrightness / 100),
+    saturation: base.saturation * (1 + fineSaturation / 100),
+    contrastA: base.contrastA * (1 + fineContrast / 100),
+    contrastB: base.contrastB,
+  };
 }
 
 // Calls OpenAI's image editing model to actually regenerate the photo's
 // lighting/atmosphere/background per the preset's prompt — a real
-// generative transformation, not a deterministic color filter. An optional
-// second reference image can be supplied so the user can ask for a
-// specific element from it (e.g. "add the logo from this image").
+// generative transformation, not a deterministic color filter. Optional
+// reference images can be supplied so the user can ask for specific
+// elements from them (e.g. "add the logo from this image").
 async function applyAiEnhancement(
   inputBuffer: Buffer,
   mimeType: string,
   preset: Preset,
   userDescription: string,
-  referenceBuffer: Buffer | null,
-  referenceMimeType: string
+  references: { buffer: Buffer; mimeType: string }[]
 ): Promise<Buffer> {
   const openai = getOpenAI();
   if (!openai) {
@@ -269,13 +405,15 @@ async function applyAiEnhancement(
 
   const images = [uploadable];
   let referenceNote = "";
-  if (referenceBuffer) {
-    const referenceUploadable = await toFile(referenceBuffer, "reference.png", {
-      type: referenceMimeType || "image/png",
-    });
-    images.push(referenceUploadable);
+  if (references.length > 0) {
+    for (let i = 0; i < references.length; i++) {
+      const ref = references[i];
+      images.push(
+        await toFile(ref.buffer, `reference-${i}.png`, { type: ref.mimeType || "image/png" })
+      );
+    }
     referenceNote =
-      " A second reference image is also provided — use it only for the specific element the user describes below (e.g. a logo, an object, a color palette), and blend it naturally into the main photo. Do not otherwise let the reference image replace the main subject.";
+      ` ${references.length} additional reference image(s) are also provided — use them only for the specific elements the user describes below (e.g. a logo, an object, a color palette), and blend them naturally into the main photo. Do not otherwise let a reference image replace the main subject.`;
   }
 
   const basePrompt = `${preset.aiPrompt} ${AI_QUALITY_DIRECTIVE}`;
@@ -329,8 +467,55 @@ function describeAiError(err: unknown): string {
   return "Erreur inconnue pendant l'amélioration IA.";
 }
 
-function isValidHexColor(value: string): boolean {
-  return /^#[0-9a-fA-F]{3,8}$/.test(value);
+// Parses and validates the JSON-encoded text layer / shape arrays sent
+// from the client — never trust their contents blindly, every field is
+// clamped or falls back to a safe default.
+function parseTextLayers(raw: string, preset: Preset): TextLayerInput[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.slice(0, MAX_TEXT_LAYERS).map((item) => {
+    const obj = (item ?? {}) as Record<string, unknown>;
+    const bg = String(obj.backgroundStyle ?? "panel");
+    return {
+      text: String(obj.text ?? "").slice(0, 120),
+      color: isValidHexColor(obj.color) ? obj.color : preset.textColor,
+      strokeColor: isValidHexColor(obj.strokeColor) ? obj.strokeColor : preset.strokeColor,
+      backgroundStyle: (["panel", "shadow", "none"].includes(bg) ? bg : "panel") as BackgroundStyle,
+      x: clampNumber(obj.x, 0.05, 0.95, 0.5),
+      y: clampNumber(obj.y, 0.08, 0.95, 0.85),
+      curve: clampNumber(obj.curve, -100, 100, 0),
+      fontSize: clampNumber(obj.fontSize, 28, 160, 88),
+    };
+  });
+}
+
+function parseShapes(raw: string): ShapeInput[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  return parsed.slice(0, MAX_SHAPES).map((item) => {
+    const obj = (item ?? {}) as Record<string, unknown>;
+    const type = String(obj.type ?? "arrow");
+    return {
+      type: (["arrow", "circle", "rectangle"].includes(type) ? type : "arrow") as ShapeType,
+      color: isValidHexColor(obj.color) ? obj.color : "#FFE000",
+      x: clampNumber(obj.x, 0.05, 0.95, 0.5),
+      y: clampNumber(obj.y, 0.05, 0.95, 0.5),
+      size: clampNumber(obj.size, 0.05, 0.6, 0.2),
+      rotation: clampNumber(obj.rotation, -180, 180, 0),
+    };
+  });
 }
 
 export async function POST(req: NextRequest) {
@@ -338,31 +523,26 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("image");
     const presetId = String(formData.get("presetId") ?? "bold-impact");
-    const title = String(formData.get("title") ?? "").slice(0, 120);
     const watermark = String(formData.get("watermark") ?? "true") === "true";
     const aiEnhance = String(formData.get("aiEnhance") ?? "false") === "true";
     const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 1200);
-    const intensityRaw = Number(formData.get("intensity") ?? "100");
-    const intensity = Number.isFinite(intensityRaw)
-      ? Math.min(100, Math.max(0, intensityRaw))
-      : 100;
+    const intensity = clampNumber(formData.get("intensity"), 0, 100, 100);
+    const fineBrightness = clampNumber(formData.get("fineBrightness"), -50, 50, 0);
+    const fineContrast = clampNumber(formData.get("fineContrast"), -50, 50, 0);
+    const fineSaturation = clampNumber(formData.get("fineSaturation"), -50, 50, 0);
+    const vignette = String(formData.get("vignette") ?? "false") === "true";
+    const borderEnabled = String(formData.get("border") ?? "false") === "true";
+    const borderColorRaw = formData.get("borderColor");
+    const borderColor = isValidHexColor(borderColorRaw) ? borderColorRaw : "#FFE000";
 
-    const textColorRaw = String(formData.get("textColor") ?? "");
-    const strokeColorRaw = String(formData.get("strokeColor") ?? "");
-    const backgroundStyleRaw = String(formData.get("backgroundStyle") ?? "panel");
-    const backgroundStyle: BackgroundStyle = ["panel", "shadow", "none"].includes(
-      backgroundStyleRaw
-    )
-      ? (backgroundStyleRaw as BackgroundStyle)
-      : "panel";
-    const anchorXRaw = Number(formData.get("textX") ?? "0.5");
-    const anchorYRaw = Number(formData.get("textY") ?? "0.85");
-    const anchorX = Number.isFinite(anchorXRaw) ? Math.min(0.95, Math.max(0.05, anchorXRaw)) : 0.5;
-    const anchorY = Number.isFinite(anchorYRaw) ? Math.min(0.95, Math.max(0.1, anchorYRaw)) : 0.85;
-    const curveRaw = Number(formData.get("curve") ?? "0");
-    const curve = Number.isFinite(curveRaw) ? Math.min(100, Math.max(-100, curveRaw)) : 0;
+    const preset = getPreset(presetId);
+    const textLayers = parseTextLayers(String(formData.get("textLayers") ?? "[]"), preset);
+    const shapes = parseShapes(String(formData.get("shapes") ?? "[]"));
 
-    const referenceImage = formData.get("referenceImage");
+    const referenceFiles = formData
+      .getAll("referenceImages")
+      .filter((f): f is File => f instanceof File)
+      .slice(0, MAX_REFERENCE_IMAGES);
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
@@ -373,35 +553,31 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    if (referenceImage instanceof File && referenceImage.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json(
-        { error: "Image de référence trop lourde (12 Mo max)." },
-        { status: 400 }
-      );
+    for (const ref of referenceFiles) {
+      if (ref.size > MAX_UPLOAD_BYTES) {
+        return NextResponse.json(
+          { error: "Une image de référence est trop lourde (12 Mo max)." },
+          { status: 400 }
+        );
+      }
     }
-    if (!title.trim()) {
+    if (textLayers.length === 0 || !textLayers.some((l) => l.text.trim())) {
       return NextResponse.json(
-        { error: "Ajoute un titre pour ta miniature." },
+        { error: "Ajoute au moins un texte pour ta miniature." },
         { status: 400 }
       );
     }
 
-    const preset = getPreset(presetId);
     const font = await loadFont();
     const arrayBuffer = await file.arrayBuffer();
     const inputBuffer = Buffer.from(arrayBuffer);
 
-    const textColor = isValidHexColor(textColorRaw) ? textColorRaw : preset.textColor;
-    const strokeColor = isValidHexColor(strokeColorRaw) ? strokeColorRaw : preset.strokeColor;
-
     let base: ReturnType<typeof sharp>;
 
     if (aiEnhance) {
-      let referenceBuffer: Buffer | null = null;
-      let referenceMimeType = "";
-      if (referenceImage instanceof File) {
-        referenceBuffer = Buffer.from(await referenceImage.arrayBuffer());
-        referenceMimeType = referenceImage.type;
+      const references: { buffer: Buffer; mimeType: string }[] = [];
+      for (const ref of referenceFiles) {
+        references.push({ buffer: Buffer.from(await ref.arrayBuffer()), mimeType: ref.type });
       }
 
       let aiBuffer: Buffer;
@@ -411,8 +587,7 @@ export async function POST(req: NextRequest) {
           file.type,
           preset,
           aiDescription,
-          referenceBuffer,
-          referenceMimeType
+          references
         );
       } catch (err) {
         if (err instanceof AiNotConfiguredError) {
@@ -428,7 +603,13 @@ export async function POST(req: NextRequest) {
         .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
         .sharpen();
     } else {
-      const scaled = scalePresetIntensity(preset, intensity / 100);
+      const scaled = scalePresetIntensity(
+        preset,
+        intensity / 100,
+        fineBrightness,
+        fineContrast,
+        fineSaturation
+      );
       base = sharp(inputBuffer)
         .rotate()
         .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
@@ -439,23 +620,15 @@ export async function POST(req: NextRequest) {
 
     const overlays: OverlayOptions[] = [
       {
-        input: Buffer.from(
-          buildTextOverlaySvg(
-            font,
-            title,
-            textColor,
-            strokeColor,
-            preset.strokeWidth,
-            backgroundStyle,
-            anchorX,
-            anchorY,
-            curve
-          )
-        ),
+        input: Buffer.from(buildContentSvg(font, textLayers, shapes, vignette)),
         top: 0,
         left: 0,
       },
     ];
+
+    if (borderEnabled) {
+      overlays.push({ input: Buffer.from(buildBorderSvg(borderColor)), top: 0, left: 0 });
+    }
 
     if (watermark) {
       overlays.push({

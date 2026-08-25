@@ -9,18 +9,27 @@ complet, pas une liste de features.
 ## Ce qui fonctionne réellement (testé)
 
 - **Landing page** (`/`) : proposition de valeur, 10 styles, CTA.
-- **`/generate`** : upload d'une photo (glisser le marqueur directement sur
-  l'aperçu pour positionner le titre où on veut), choix d'un style, curseur
-  d'intensité du filtre (0-100%), titre entièrement personnalisable —
-  couleur du texte, couleur du contour, fond derrière le titre
-  (panneau/ombre portée/aucun), courbure — génération et téléchargement en
-  HD (1280x720), avec un quota de 3 générations gratuites par appareil
-  (filigrane sur le plan gratuit).
+- **`/generate`** : un vrai petit éditeur multi-calques, pas juste "une
+  photo + un titre" :
+  - **Jusqu'à 5 calques de texte** indépendants (titre, sous-titre, badge
+    promo...), chacun avec sa propre couleur, couleur de contour, fond
+    (panneau/ombre portée/aucun), taille, courbure — et une position
+    définie en glissant directement son marqueur sur l'aperçu photo.
+  - **Jusqu'à 8 formes/annotations** (flèche, cercle de mise en avant,
+    rectangle) avec couleur/taille/rotation, positionnées de la même
+    façon par glisser-déposer.
+  - **Réglages avancés** : luminosité/contraste/saturation ajustables
+    finement en plus du curseur d'intensité du style, vignette
+    (assombrissement des bords), cadre bordure avec couleur au choix.
+  - Génération et téléchargement en HD (1280x720), quota de 3 générations
+    gratuites par appareil (filigrane sur le plan gratuit).
 - **`/api/generate`** : pipeline d'image réel avec `sharp` pour le fond
   (recadrage 16:9, ajustement couleur/contraste par style) et un moteur de
-  texte maison au-dessus (`opentype.js`, glyphe par glyphe, y compris le
-  rendu courbé le long d'un arc) — testé avec de vraies requêtes pour
-  chaque combinaison (position, couleurs, fond, courbure), voir captures.
+  rendu maison au-dessus pour le texte (`opentype.js`, glyphe par glyphe,
+  y compris le rendu courbé le long d'un arc, plusieurs calques
+  indépendants) et les formes (SVG généré à la volée) — testé avec de
+  vraies requêtes combinant plusieurs calques de texte, formes, vignette
+  et cadre en une seule génération, voir captures.
 - **`/pricing`** : 3 paliers (Free / Creator 19€ / Pro 39€) avec CTA
   connectés à Stripe Checkout, et une section qui explique concrètement la
   différence entre les offres (volume vs IA générative).
@@ -39,10 +48,10 @@ complet, pas une liste de features.
 - **Style "Réaliste (sans filtre)"** : aucun grading couleur (photo
   inchangée) ; son prompt IA vise le photoréalisme maximal plutôt qu'un
   style artistique.
-- **Image de référence pour l'IA** : en mode IA, on peut ajouter une 2e
-  photo (logo, objet...) qu'OpenAI reçoit en plus de la photo principale,
-  guidée par le champ description ("ajoute le logo de cette image en haut
-  à droite").
+- **Jusqu'à 3 images de référence pour l'IA** : en mode IA, on peut
+  ajouter jusqu'à 3 photos (logo, objet...) qu'OpenAI reçoit en plus de la
+  photo principale, guidées par le champ description ("ajoute le logo de
+  la première image en haut à droite").
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
