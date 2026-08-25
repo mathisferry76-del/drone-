@@ -167,14 +167,14 @@ export default function GeneratePage() {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="flex h-44 w-full flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-700 text-zinc-400 transition hover:border-zinc-500"
+              className="flex aspect-video w-full flex-col items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950 text-zinc-400 transition hover:border-zinc-500"
             >
               {previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={previewUrl}
                   alt="Aperçu"
-                  className="h-full w-full rounded-xl object-cover"
+                  className="h-full w-full object-contain"
                 />
               ) : (
                 <>
