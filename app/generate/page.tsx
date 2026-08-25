@@ -154,6 +154,7 @@ export default function GeneratePage() {
   const [shapes, setShapes] = useState<ShapeState[]>([]);
 
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [usedCount, setUsedCount] = useState(0);
@@ -456,6 +457,7 @@ export default function GeneratePage() {
       }
 
       setResultUrl(data.image);
+      setShowOriginal(false);
       if (typeof data.aiBase === "string" && cacheKey) {
         setAiBaseCache({ key: cacheKey, dataUrl: data.aiBase });
       }
@@ -1164,13 +1166,41 @@ export default function GeneratePage() {
         </div>
 
         <div className="lg:sticky lg:top-6 lg:self-start">
-          <label className="mb-2 block text-sm font-semibold text-zinc-300">
-            Résultat
-          </label>
+          <div className="mb-2 flex items-center justify-between">
+            <label className="block text-sm font-semibold text-zinc-300">
+              Résultat
+            </label>
+            {resultUrl && previewUrl && (
+              <div className="flex overflow-hidden rounded-full border border-zinc-700 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setShowOriginal(false)}
+                  className={`px-3 py-1 transition ${
+                    !showOriginal ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  Après
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowOriginal(true)}
+                  className={`px-3 py-1 transition ${
+                    showOriginal ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  Avant
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
             {resultUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={resultUrl} alt="Miniature générée" className="h-full w-full object-cover" />
+              <img
+                src={showOriginal && previewUrl ? previewUrl : resultUrl}
+                alt={showOriginal ? "Photo originale" : "Miniature générée"}
+                className="h-full w-full object-cover"
+              />
             ) : (
               <span className="text-sm text-zinc-600">
                 Ta miniature apparaîtra ici
@@ -1178,13 +1208,20 @@ export default function GeneratePage() {
             )}
           </div>
           {resultUrl && (
-            <a
-              href={resultUrl}
-              download="thumbnail.png"
-              className="mt-4 block w-full rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold transition hover:border-zinc-400"
-            >
-              Télécharger en HD
-            </a>
+            <>
+              <p className="mt-2 text-center text-xs text-zinc-500">
+                {showOriginal
+                  ? "Ta photo de départ, avant ThumbAI."
+                  : "Bascule sur \"Avant\" pour voir le chemin parcouru."}
+              </p>
+              <a
+                href={resultUrl}
+                download="thumbnail.png"
+                className="mt-2 block w-full rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold transition hover:border-zinc-400"
+              >
+                Télécharger en HD
+              </a>
+            </>
           )}
         </div>
       </div>

@@ -70,14 +70,15 @@ export default function Home() {
           <p className="mt-6 max-w-xl text-lg text-zinc-400">
             Upload une photo, choisis un style, ajoute ton titre. ThumbAI
             génère une miniature optimisée pour le CTR, dans ton propre
-            style — sans designer, sans Photoshop.
+            style — sans designer, sans Photoshop, sans passer 30 minutes
+            sur Canva.
           </p>
           <div className="mt-8 flex flex-col gap-4 sm:flex-row">
             <Link
               href="/generate"
               className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:bg-yellow-300"
             >
-              Créer ma première miniature
+              Créer ma première miniature — gratuit
             </Link>
             <Link
               href="/pricing"
@@ -86,11 +87,20 @@ export default function Home() {
               Voir les tarifs
             </Link>
           </div>
-          <p className="mt-4 text-xs text-zinc-500">
-            3 miniatures gratuites, sans carte bancaire.
-          </p>
 
-          <div className="mt-14 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
+            <span className="flex items-center gap-1.5">
+              <span className="text-emerald-400">✓</span> Sans carte bancaire
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-emerald-400">✓</span> Sans engagement
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="text-emerald-400">✓</span> Paiement sécurisé (Stripe)
+            </span>
+          </div>
+
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
             <span><span className="font-bold text-white">10</span> styles prêts à l&apos;emploi</span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
             <span><span className="font-bold text-white">5</span> calques de texte + formes</span>
@@ -129,6 +139,42 @@ export default function Home() {
               </div>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-5xl px-6 py-16">
+        <h2 className="text-center text-2xl font-bold sm:text-3xl">
+          De la photo brute à la miniature qui capte le clic
+        </h2>
+        <p className="mx-auto mt-3 max-w-xl text-center text-zinc-400">
+          Pas besoin d&apos;être designer : ThumbAI fait le travail de
+          retouche, de mise en page et de texte à ta place, en quelques
+          secondes.
+        </p>
+        <div className="mt-10 grid grid-cols-1 items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
+          <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+            <div className="mx-auto flex aspect-video w-full items-center justify-center rounded-xl bg-zinc-800/60">
+              <span className="text-4xl">📷</span>
+            </div>
+            <p className="mt-4 text-sm font-semibold text-zinc-500">
+              Ta photo, telle quelle
+            </p>
+          </div>
+          <div className="text-2xl font-bold text-yellow-400 sm:rotate-0">→</div>
+          <div className="overflow-hidden rounded-2xl border border-yellow-400/40 bg-yellow-400/5">
+            <div className="relative aspect-video w-full">
+              <Image
+                src="/examples/bold-impact.webp"
+                alt="Exemple de miniature générée avec ThumbAI"
+                fill
+                sizes="(min-width: 640px) 40vw, 100vw"
+                className="object-cover"
+              />
+            </div>
+            <p className="py-3 text-center text-sm font-bold text-yellow-400">
+              Miniature prête en ~10 secondes
+            </p>
+          </div>
         </div>
       </section>
 

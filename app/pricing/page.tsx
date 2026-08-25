@@ -46,6 +46,17 @@ export default function PricingPage() {
         <p className="mt-3 text-zinc-400">
           Annule quand tu veux. Pas de carte bancaire pour l&apos;offre gratuite.
         </p>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
+          <span className="flex items-center gap-1.5">
+            <span className="text-emerald-400">✓</span> Résiliable en 1 clic
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-emerald-400">✓</span> Paiement sécurisé par Stripe
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="text-emerald-400">✓</span> Aucun engagement de durée
+          </span>
+        </div>
       </div>
 
       {error && (
