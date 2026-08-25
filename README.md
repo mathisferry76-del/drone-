@@ -8,14 +8,19 @@ complet, pas une liste de features.
 
 ## Ce qui fonctionne réellement (testé)
 
-- **Landing page** (`/`) : proposition de valeur, 8 styles, CTA.
-- **`/generate`** : upload d'une photo, choix d'un style, saisie d'un titre,
-  génération et téléchargement en HD (1280x720), avec un quota de 3
-  générations gratuites par appareil (filigrane sur le plan gratuit).
-- **`/api/generate`** : pipeline d'image réel avec `sharp` — recadrage
-  16:9, ajustement couleur/contraste par style, overlay de texte en gras
-  avec contour (rendu SVG), dégradé de lisibilité, filigrane conditionnel.
-  Testé avec de vraies requêtes, voir capture ci-dessous.
+- **Landing page** (`/`) : proposition de valeur, 10 styles, CTA.
+- **`/generate`** : upload d'une photo (glisser le marqueur directement sur
+  l'aperçu pour positionner le titre où on veut), choix d'un style, curseur
+  d'intensité du filtre (0-100%), titre entièrement personnalisable —
+  couleur du texte, couleur du contour, fond derrière le titre
+  (panneau/ombre portée/aucun), courbure — génération et téléchargement en
+  HD (1280x720), avec un quota de 3 générations gratuites par appareil
+  (filigrane sur le plan gratuit).
+- **`/api/generate`** : pipeline d'image réel avec `sharp` pour le fond
+  (recadrage 16:9, ajustement couleur/contraste par style) et un moteur de
+  texte maison au-dessus (`opentype.js`, glyphe par glyphe, y compris le
+  rendu courbé le long d'un arc) — testé avec de vraies requêtes pour
+  chaque combinaison (position, couleurs, fond, courbure), voir captures.
 - **`/pricing`** : 3 paliers (Free / Creator 19€ / Pro 39€) avec CTA
   connectés à Stripe Checkout, et une section qui explique concrètement la
   différence entre les offres (volume vs IA générative).
@@ -31,6 +36,13 @@ complet, pas une liste de features.
   `OPENAI_API_KEY` configurée, l'appel renvoie une erreur 501 claire (et
   les erreurs OpenAI réelles — clé invalide, org non vérifiée, quota —
   remontent avec un message actionnable) au lieu de planter.
+- **Style "Réaliste (sans filtre)"** : aucun grading couleur (photo
+  inchangée) ; son prompt IA vise le photoréalisme maximal plutôt qu'un
+  style artistique.
+- **Image de référence pour l'IA** : en mode IA, on peut ajouter une 2e
+  photo (logo, objet...) qu'OpenAI reçoit en plus de la photo principale,
+  guidée par le champ description ("ajoute le logo de cette image en haut
+  à droite").
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
@@ -54,6 +66,13 @@ sont **pas** implémentées et devront l'être avant un vrai lancement payant :
   le compteur vit dans `localStorage`, donc contournable en vidant le
   cache. Se corrige avec la même vraie base de données que le statut
   d'abonnement.
+- **Pas de ré-édition après export.** Le positionnement/couleurs/courbure
+  se règlent avant de cliquer "Générer" (sur la photo, pas sur le résultat
+  déjà aplati en PNG) — on ne peut pas rouvrir une miniature téléchargée
+  pour déplacer un élément après coup. Le faire proprement demanderait de
+  garder chaque génération comme calque éditable plutôt qu'une image
+  aplatie, une architecture différente (un vrai éditeur canvas) — à
+  envisager plus tard si la demande le justifie, pas dans ce MVP.
 - **Pas de tests automatisés.**
 
 ## Lancer le projet en local

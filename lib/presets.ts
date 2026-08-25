@@ -7,7 +7,8 @@ export type PresetId =
   | "pastel-soft"
   | "cyberpunk"
   | "nature-vive"
-  | "golden-vacation";
+  | "golden-vacation"
+  | "realiste";
 
 export interface Preset {
   id: PresetId;
@@ -181,6 +182,23 @@ export const PRESETS: Preset[] = [
     aiPrompt:
       "Transform the background into a warm, vibrant summer vacation scene with golden sunlight, tropical or sunset colors, bright saturated warm tones. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
   },
+  {
+    id: "realiste",
+    name: "Réaliste (sans filtre)",
+    description: "Aucun grading couleur — juste ta photo, nette et naturelle, avec le titre par-dessus.",
+    brightness: 1,
+    saturation: 1,
+    contrastA: 1,
+    contrastB: 0,
+    textColor: "#FFFFFF",
+    strokeColor: "#000000",
+    strokeWidth: 6,
+    gradientFrom: "rgba(0,0,0,0)",
+    gradientTo: "rgba(0,0,0,0)",
+    gradientOpacity: 0,
+    aiPrompt:
+      "Enhance this photo to look like an extremely realistic, high-quality DSLR photograph: natural accurate colors, crisp sharp detail, correct exposure and white balance, authentic skin/material textures. Do not apply any stylized color grading, artistic filter, or unnatural lighting — the goal is maximum photorealism, as close to an untouched professional photo as possible. Keep the main subject clearly recognizable. Do not add any text, letters or numbers to the image.",
+  },
 ];
 
 export function getPreset(id: string): Preset {
@@ -215,7 +233,7 @@ export const PRICING_TIERS: PricingTier[] = [
       "Génère quelques miniatures avec les styles filtres, sans engagement, pour voir si l'outil te convient.",
     features: [
       `${FREE_GENERATIONS_PER_DEVICE} miniatures avec filigrane`,
-      "9 styles filtres (couleurs, contraste, texte)",
+      "10 styles filtres (couleurs, contraste, texte)",
       "Export HD 1280x720",
     ],
     notIncluded: ["Pas d'IA générative", "Filigrane sur chaque export"],
@@ -233,7 +251,7 @@ export const PRICING_TIERS: PricingTier[] = [
     features: [
       "Miniatures illimitées",
       "Sans filigrane",
-      "9 styles filtres + nouveaux styles à venir",
+      "10 styles filtres + nouveaux styles à venir",
       `IA générative : ${CREATOR_AI_MONTHLY_LIMIT} générations par mois`,
       "Export HD 1280x720",
     ],

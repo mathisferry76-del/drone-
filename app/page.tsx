@@ -42,7 +42,7 @@ export default function Home() {
 
       <section id="styles" className="mx-auto w-full max-w-6xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
-          9 styles prêts à l&apos;emploi
+          10 styles prêts à l&apos;emploi
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-zinc-400">
           Chaque style ajuste automatiquement les couleurs, le contraste et la
@@ -86,7 +86,7 @@ export default function Home() {
             <div className="text-3xl font-extrabold text-yellow-400">2</div>
             <h3 className="mt-2 font-bold">Choisis un style + un titre</h3>
             <p className="mt-1 text-sm text-zinc-400">
-              9 styles calibrés pour le CTR, tu ajoutes juste ton texte
+              10 styles calibrés pour le CTR, tu ajoutes juste ton texte
               d&apos;accroche.
             </p>
           </div>

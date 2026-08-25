@@ -128,7 +128,7 @@ export default function PricingPage() {
             Free vs Creator — le volume, pas la qualité de base
           </h3>
           <p className="mt-2 text-sm text-zinc-400">
-            Les deux utilisent les mêmes 9 styles filtres (couleur, contraste,
+            Les deux utilisent les mêmes 10 styles filtres (couleur, contraste,
             texte). La différence, c&apos;est la limite : 3 miniatures avec
             filigrane en Free, illimité et sans filigrane en Creator. Le rendu
             filtre de base est identique.
