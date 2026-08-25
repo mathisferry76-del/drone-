@@ -15,7 +15,7 @@ import {
 const USAGE_KEY = "thumbai_free_generations_used";
 const PLAN_KEY = "thumbai_plan";
 const AI_USAGE_KEY = "thumbai_ai_usage";
-const AI_DESCRIPTION_MAX = 1200;
+const AI_DESCRIPTION_MAX = 3000;
 const MAX_TEXT_LAYERS = 5;
 const MAX_SHAPES = 8;
 const MAX_REFERENCE_IMAGES = 3;

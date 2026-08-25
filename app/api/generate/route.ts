@@ -626,7 +626,7 @@ export async function POST(req: NextRequest) {
     const presetId = String(formData.get("presetId") ?? "bold-impact");
     const watermark = String(formData.get("watermark") ?? "true") === "true";
     const aiEnhance = String(formData.get("aiEnhance") ?? "false") === "true";
-    const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 1200);
+    const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 3000);
     const intensity = clampNumber(formData.get("intensity"), 0, 100, 100);
     const fineBrightness = clampNumber(formData.get("fineBrightness"), -50, 50, 0);
     const fineContrast = clampNumber(formData.get("fineContrast"), -50, 50, 0);
