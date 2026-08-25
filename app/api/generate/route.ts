@@ -210,7 +210,7 @@ export async function POST(req: NextRequest) {
     const title = String(formData.get("title") ?? "").slice(0, 120);
     const watermark = String(formData.get("watermark") ?? "true") === "true";
     const aiEnhance = String(formData.get("aiEnhance") ?? "false") === "true";
-    const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 300);
+    const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 600);
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });

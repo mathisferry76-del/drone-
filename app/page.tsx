@@ -42,7 +42,7 @@ export default function Home() {
 
       <section id="styles" className="mx-auto w-full max-w-6xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
-          4 styles prêts à l&apos;emploi
+          8 styles prêts à l&apos;emploi
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-zinc-400">
           Chaque style ajuste automatiquement les couleurs, le contraste et la
@@ -86,7 +86,7 @@ export default function Home() {
             <div className="text-3xl font-extrabold text-yellow-400">2</div>
             <h3 className="mt-2 font-bold">Choisis un style + un titre</h3>
             <p className="mt-1 text-sm text-zinc-400">
-              4 styles calibrés pour le CTR, tu ajoutes juste ton texte
+              8 styles calibrés pour le CTR, tu ajoutes juste ton texte
               d&apos;accroche.
             </p>
           </div>
@@ -106,20 +106,21 @@ export default function Home() {
         </h2>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-            <h3 className="font-bold">🎨 Styles filtres (Free &amp; Creator)</h3>
+            <h3 className="font-bold">🎨 Styles filtres (tous les plans)</h3>
             <p className="mt-2 text-sm text-zinc-400">
               Recadrage automatique, ajustement des couleurs et du contraste,
               texte impactant avec fond lisible. Rapide, gratuit à générer,
-              disponible dès l&apos;offre gratuite.
+              disponible dès l&apos;offre gratuite, en illimité dès Creator.
             </p>
           </div>
           <div className="rounded-2xl border border-yellow-800/40 bg-yellow-400/5 p-6">
-            <h3 className="font-bold">✨ IA générative (Pro)</h3>
+            <h3 className="font-bold">✨ IA générative (Creator &amp; Pro)</h3>
             <p className="mt-2 text-sm text-zinc-400">
               Ta photo est envoyée à un modèle d&apos;IA générative qui
               retravaille réellement l&apos;éclairage, l&apos;ambiance et le
               décor — un rendu qu&apos;un simple filtre de couleur ne peut
-              pas produire, tout en gardant ton sujet reconnaissable.
+              pas produire, tout en gardant ton sujet reconnaissable. Incluse
+              à raison de 2 générations/mois en Creator, illimitée en Pro.
             </p>
           </div>
         </div>
@@ -144,17 +145,18 @@ export default function Home() {
             </h3>
             <p className="mt-1 text-sm text-zinc-400">
               Pas de mise en page à faire à la main : tu choisis un style,
-              tu tapes ton titre, c&apos;est généré en quelques secondes. Le
-              plan Pro va plus loin avec une IA générative qui retravaille
-              l&apos;image elle-même, pas seulement le texte par-dessus.
+              tu tapes ton titre, c&apos;est généré en quelques secondes. Les
+              plans Creator et Pro vont plus loin avec une IA générative qui
+              retravaille l&apos;image elle-même, pas seulement le texte
+              par-dessus.
             </p>
           </div>
           <div>
             <h3 className="font-bold">Combien de temps prend une génération ?</h3>
             <p className="mt-1 text-sm text-zinc-400">
               Quelques secondes pour un style filtre. Avec l&apos;amélioration
-              IA (Pro), compte 10 à 20 secondes, le temps que le modèle
-              génératif retravaille l&apos;image.
+              IA (Creator/Pro), compte 10 à 20 secondes, le temps que le
+              modèle génératif retravaille l&apos;image.
             </p>
           </div>
           <div>

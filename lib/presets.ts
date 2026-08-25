@@ -2,7 +2,11 @@ export type PresetId =
   | "bold-impact"
   | "clean-minimal"
   | "neon-pop"
-  | "high-contrast-drama";
+  | "high-contrast-drama"
+  | "retro-vintage"
+  | "pastel-soft"
+  | "cyberpunk"
+  | "nature-vive";
 
 export interface Preset {
   id: PresetId;
@@ -18,14 +22,14 @@ export interface Preset {
   gradientFrom: string;
   gradientTo: string;
   gradientOpacity: number;
-  /** Instruction given to the AI generative enhancement (Pro plan only). */
+  /** Instruction given to the AI generative enhancement (Creator & Pro). */
   aiPrompt: string;
 }
 
 export const PRESETS: Preset[] = [
   {
     id: "bold-impact",
-    name: "Bold Impact",
+    name: "Impact Maximal",
     description: "Couleurs saturées, texte jaune épais avec contour noir — style MrBeast.",
     brightness: 1.05,
     saturation: 1.55,
@@ -42,7 +46,7 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "clean-minimal",
-    name: "Clean Minimal",
+    name: "Épuré",
     description: "Look épuré, texte blanc fin, dégradé discret — pour un contenu pro/lifestyle.",
     brightness: 1.02,
     saturation: 0.95,
@@ -59,7 +63,7 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "neon-pop",
-    name: "Neon Pop",
+    name: "Néon Vibrant",
     description: "Overlay violet/cyan, texte néon — pour du gaming, tech, musique.",
     brightness: 1.0,
     saturation: 1.35,
@@ -76,7 +80,7 @@ export const PRESETS: Preset[] = [
   },
   {
     id: "high-contrast-drama",
-    name: "High Contrast Drama",
+    name: "Dramatique",
     description: "Vignette sombre, contraste fort, texte blanc dramatique — storytime, docu, actu.",
     brightness: 0.95,
     saturation: 1.1,
@@ -91,6 +95,74 @@ export const PRESETS: Preset[] = [
     aiPrompt:
       "Transform the background into a dramatic, cinematic scene with deep shadows and moody documentary-style lighting. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
   },
+  {
+    id: "retro-vintage",
+    name: "Rétro Vintage",
+    description: "Tons chauds désaturés, grain rétro, texte orange façon pellicule — vlogs, storytime, nostalgie.",
+    brightness: 1.0,
+    saturation: 0.75,
+    contrastA: 1.08,
+    contrastB: -8,
+    textColor: "#F4A340",
+    strokeColor: "#3A1F0A",
+    strokeWidth: 6,
+    gradientFrom: "rgba(60,30,10,0.05)",
+    gradientTo: "rgba(40,20,10,0.75)",
+    gradientOpacity: 0.7,
+    aiPrompt:
+      "Transform the background into a warm, desaturated vintage film scene with retro grain and nostalgic sepia-orange tones, like an old photograph. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
+  },
+  {
+    id: "pastel-soft",
+    name: "Pastel Doux",
+    description: "Couleurs pastel douces, contraste léger, texte rose — lifestyle, beauté, bien-être.",
+    brightness: 1.08,
+    saturation: 0.85,
+    contrastA: 0.95,
+    contrastB: 8,
+    textColor: "#FF8FC7",
+    strokeColor: "#FFFFFF",
+    strokeWidth: 4,
+    gradientFrom: "rgba(255,255,255,0)",
+    gradientTo: "rgba(120,90,140,0.55)",
+    gradientOpacity: 0.55,
+    aiPrompt:
+      "Transform the background into a soft, dreamy pastel scene with gentle light and airy tones, like a lifestyle or beauty photoshoot. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
+  },
+  {
+    id: "cyberpunk",
+    name: "Cyberpunk",
+    description: "Duotone bleu/violet sombre, contraste fort, texte cyan/magenta — gaming, tech, sci-fi.",
+    brightness: 0.92,
+    saturation: 1.2,
+    contrastA: 1.3,
+    contrastB: -25,
+    textColor: "#00FFC8",
+    strokeColor: "#B400FF",
+    strokeWidth: 7,
+    gradientFrom: "rgba(10,0,40,0.1)",
+    gradientTo: "rgba(5,0,30,0.9)",
+    gradientOpacity: 0.85,
+    aiPrompt:
+      "Transform the background into a dark, moody cyberpunk cityscape with deep blue and purple tones, rain-slicked reflections and futuristic neon accents. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
+  },
+  {
+    id: "nature-vive",
+    name: "Nature Vive",
+    description: "Verts saturés, lumière naturelle, texte blanc — vlogs outdoor, voyage, sport.",
+    brightness: 1.05,
+    saturation: 1.4,
+    contrastA: 1.12,
+    contrastB: -10,
+    textColor: "#FFFFFF",
+    strokeColor: "#0B3D1E",
+    strokeWidth: 8,
+    gradientFrom: "rgba(0,0,0,0)",
+    gradientTo: "rgba(6,40,15,0.75)",
+    gradientOpacity: 0.7,
+    aiPrompt:
+      "Transform the background into a vibrant, lush outdoor nature scene with saturated greens and natural sunlight, like an adventure or travel vlog. Keep the main subject clearly recognizable and photorealistic. Do not add any text, letters or numbers to the image.",
+  },
 ];
 
 export function getPreset(id: string): Preset {
@@ -98,6 +170,7 @@ export function getPreset(id: string): Preset {
 }
 
 export const FREE_GENERATIONS_PER_DEVICE = 3;
+export const CREATOR_AI_MONTHLY_LIMIT = 2;
 
 export interface PricingTier {
   id: "free" | "creator" | "pro";
@@ -124,7 +197,7 @@ export const PRICING_TIERS: PricingTier[] = [
       "Génère quelques miniatures avec les styles filtres, sans engagement, pour voir si l'outil te convient.",
     features: [
       `${FREE_GENERATIONS_PER_DEVICE} miniatures avec filigrane`,
-      "4 styles filtres (couleurs, contraste, texte)",
+      "8 styles filtres (couleurs, contraste, texte)",
       "Export HD 1280x720",
     ],
     notIncluded: ["Pas d'IA générative", "Filigrane sur chaque export"],
@@ -138,14 +211,15 @@ export const PRICING_TIERS: PricingTier[] = [
     period: "/mois",
     tagline: "Pour publier régulièrement",
     description:
-      "Le plan pour un créateur solo actif : génère autant de miniatures que tu veux avec les styles filtres, sans filigrane.",
+      "Le plan pour un créateur solo actif : miniatures illimitées avec les styles filtres, sans filigrane, plus un peu d'IA générative chaque mois.",
     features: [
       "Miniatures illimitées",
       "Sans filigrane",
-      "4 styles filtres + nouveaux styles à venir",
+      "8 styles filtres + nouveaux styles à venir",
+      `IA générative : ${CREATOR_AI_MONTHLY_LIMIT} générations par mois`,
       "Export HD 1280x720",
     ],
-    notIncluded: ["Pas d'IA générative (le fond reste ta photo filtrée)"],
+    notIncluded: [`IA générative limitée à ${CREATOR_AI_MONTHLY_LIMIT}/mois (illimitée en Pro)`],
     cta: "Choisir Creator",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREATOR ?? null,
     highlighted: true,
@@ -157,10 +231,10 @@ export const PRICING_TIERS: PricingTier[] = [
     period: "/mois",
     tagline: "Pour un rendu qui se démarque vraiment",
     description:
-      "Tout Creator, plus une vraie IA générative qui retravaille l'image (lumière, ambiance, décor) au lieu d'un simple filtre de couleur.",
+      "Tout Creator, avec l'IA générative en illimité pour retravailler l'image (lumière, ambiance, décor) autant de fois que tu veux.",
     features: [
       "Tout Creator",
-      "IA générative d'image : transforme réellement la photo (éclairage, ambiance, décor), pas juste un filtre",
+      "IA générative d'image illimitée : transforme réellement la photo (éclairage, ambiance, décor), pas juste un filtre",
       "Jusqu'à 3 chaînes",
       "Support prioritaire",
     ],

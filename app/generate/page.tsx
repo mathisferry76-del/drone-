@@ -2,11 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { PRESETS, FREE_GENERATIONS_PER_DEVICE, PresetId } from "@/lib/presets";
+import {
+  PRESETS,
+  FREE_GENERATIONS_PER_DEVICE,
+  CREATOR_AI_MONTHLY_LIMIT,
+  PresetId,
+} from "@/lib/presets";
 
 const USAGE_KEY = "thumbai_free_generations_used";
 const PLAN_KEY = "thumbai_plan";
+const AI_USAGE_KEY = "thumbai_ai_usage";
+const AI_DESCRIPTION_MAX = 600;
 type Plan = "free" | "creator" | "pro";
+
+function currentMonthId(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export default function GeneratePage() {
   const [file, setFile] = useState<File | null>(null);
@@ -20,10 +32,14 @@ export default function GeneratePage() {
   const [plan, setPlan] = useState<Plan>("free");
   const [aiEnhance, setAiEnhance] = useState(false);
   const [aiDescription, setAiDescription] = useState("");
+  const [aiUsesThisMonth, setAiUsesThisMonth] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const isPaid = plan !== "free";
-  const hasAiAccess = plan === "pro";
+  const aiPlanEligible = plan === "creator" || plan === "pro";
+  const aiLimitReached = plan === "creator" && aiUsesThisMonth >= CREATOR_AI_MONTHLY_LIMIT;
+  const canUseAi = aiPlanEligible && !aiLimitReached;
+  const aiRemaining = Math.max(CREATOR_AI_MONTHLY_LIMIT - aiUsesThisMonth, 0);
 
   // localStorage/window only exist client-side, so this state can't be read
   // during the server render — it has to be hydrated in an effect.
@@ -45,8 +61,19 @@ export default function GeneratePage() {
         ? storedPlan
         : "free";
 
+    const month = currentMonthId();
+    let aiUsage = { month, count: 0 };
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(AI_USAGE_KEY) ?? "null");
+      if (stored && stored.month === month) aiUsage = stored;
+    } catch {
+      // ignore malformed stored value, fall back to a fresh counter
+    }
+    window.localStorage.setItem(AI_USAGE_KEY, JSON.stringify(aiUsage));
+
     setUsedCount(used);
     setPlan(resolvedPlan);
+    setAiUsesThisMonth(aiUsage.count);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -78,6 +105,8 @@ export default function GeneratePage() {
       return;
     }
 
+    const willUseAi = canUseAi && aiEnhance;
+
     setLoading(true);
     try {
       const formData = new FormData();
@@ -85,7 +114,7 @@ export default function GeneratePage() {
       formData.append("presetId", presetId);
       formData.append("title", title);
       formData.append("watermark", isPaid ? "false" : "true");
-      formData.append("aiEnhance", hasAiAccess && aiEnhance ? "true" : "false");
+      formData.append("aiEnhance", willUseAi ? "true" : "false");
       formData.append("aiDescription", aiDescription);
 
       const res = await fetch("/api/generate", { method: "POST", body: formData });
@@ -101,6 +130,14 @@ export default function GeneratePage() {
         const next = usedCount + 1;
         setUsedCount(next);
         window.localStorage.setItem(USAGE_KEY, String(next));
+      }
+      if (willUseAi && plan === "creator") {
+        const next = aiUsesThisMonth + 1;
+        setAiUsesThisMonth(next);
+        window.localStorage.setItem(
+          AI_USAGE_KEY,
+          JSON.stringify({ month: currentMonthId(), count: next })
+        );
       }
     } catch {
       setError("Impossible de contacter le serveur. Réessaie.");
@@ -199,7 +236,7 @@ export default function GeneratePage() {
 
           <div
             className={`rounded-xl border p-4 ${
-              hasAiAccess
+              canUseAi
                 ? "border-yellow-800/40 bg-yellow-400/5"
                 : "border-zinc-800 bg-zinc-900/40"
             }`}
@@ -207,54 +244,72 @@ export default function GeneratePage() {
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
-                checked={hasAiAccess && aiEnhance}
-                disabled={!hasAiAccess}
+                checked={canUseAi && aiEnhance}
+                disabled={!canUseAi}
                 onChange={(e) => setAiEnhance(e.target.checked)}
                 className="mt-1 h-4 w-4 accent-yellow-400 disabled:opacity-40"
               />
               <span>
                 <span className="block text-sm font-bold">
                   ✨ Amélioration IA générative{" "}
-                  {!hasAiAccess && (
+                  {!aiPlanEligible && (
                     <span className="ml-1 rounded-full bg-zinc-700 px-2 py-0.5 text-xs font-semibold text-zinc-300">
-                      Pro
+                      Creator / Pro
                     </span>
                   )}
                 </span>
                 <span className="mt-1 block text-xs text-zinc-400">
-                  {hasAiAccess
-                    ? "Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative (au lieu d'un simple filtre de couleur)."
-                    : "Réservé au plan Pro : une vraie IA régénère l'éclairage et l'ambiance de la photo, pas juste un filtre."}
+                  {plan === "pro" &&
+                    "Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative, en illimité."}
+                  {plan === "creator" && !aiLimitReached &&
+                    `Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative. Il te reste ${aiRemaining}/${CREATOR_AI_MONTHLY_LIMIT} génération(s) IA ce mois-ci.`}
+                  {plan === "creator" && aiLimitReached &&
+                    `Tu as utilisé tes ${CREATOR_AI_MONTHLY_LIMIT} générations IA incluses ce mois-ci. Reviens le mois prochain, ou passe en Pro pour un accès illimité.`}
+                  {!aiPlanEligible &&
+                    "Réservé aux plans Creator (2/mois) et Pro (illimité) : une vraie IA régénère l'éclairage et l'ambiance de la photo, pas juste un filtre."}
                 </span>
-                {!hasAiAccess && (
+                {!aiPlanEligible && (
                   <Link
                     href="/pricing"
                     className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
                   >
-                    Voir le plan Pro →
+                    Voir les plans →
+                  </Link>
+                )}
+                {aiLimitReached && (
+                  <Link
+                    href="/pricing"
+                    className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
+                  >
+                    Passer en Pro pour un accès illimité →
                   </Link>
                 )}
               </span>
             </label>
 
-            {hasAiAccess && aiEnhance && (
+            {canUseAi && aiEnhance && (
               <div className="mt-3 border-t border-yellow-800/30 pt-3">
-                <label className="mb-1 block text-xs font-semibold text-zinc-300">
-                  Décris ce que tu veux voir (optionnel)
-                </label>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-zinc-300">
+                    Décris ce que tu veux voir (optionnel)
+                  </label>
+                  <span className="text-xs text-zinc-600">
+                    {aiDescription.length}/{AI_DESCRIPTION_MAX}
+                  </span>
+                </div>
                 <textarea
                   value={aiDescription}
                   onChange={(e) => setAiDescription(e.target.value)}
-                  maxLength={300}
-                  rows={2}
-                  placeholder="Ex : fond de studio avec néons bleus, ambiance coucher de soleil, décor futuriste, plus de contraste..."
+                  maxLength={AI_DESCRIPTION_MAX}
+                  rows={4}
+                  placeholder="Ex : fond de studio avec néons bleus, ambiance coucher de soleil, décor futuriste, plus de contraste, garde mon visage bien visible..."
                   className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
                 />
                 <p className="mt-1 text-xs text-zinc-500">
                   Le style {PRESETS.find((p) => p.id === presetId)?.name} donne déjà une
                   ambiance de base — précise ici ce que tu veux changer ou ajouter
-                  (décor, lumière, couleurs). Le sujet de ta photo reste toujours
-                  reconnaissable.
+                  (décor, lumière, couleurs, objets). Le sujet de ta photo reste
+                  toujours reconnaissable.
                 </p>
               </div>
             )}
@@ -280,7 +335,7 @@ export default function GeneratePage() {
               className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
             >
               {loading
-                ? hasAiAccess && aiEnhance
+                ? canUseAi && aiEnhance
                   ? "Génération IA en cours (10-20s)..."
                   : "Génération..."
                 : "Générer la miniature"}

@@ -8,7 +8,7 @@ complet, pas une liste de features.
 
 ## Ce qui fonctionne réellement (testé)
 
-- **Landing page** (`/`) : proposition de valeur, 4 styles, CTA.
+- **Landing page** (`/`) : proposition de valeur, 8 styles, CTA.
 - **`/generate`** : upload d'une photo, choix d'un style, saisie d'un titre,
   génération et téléchargement en HD (1280x720), avec un quota de 3
   générations gratuites par appareil (filigrane sur le plan gratuit).
@@ -22,12 +22,15 @@ complet, pas une liste de features.
 - **`/api/checkout`** : crée une session Stripe Checkout en mode
   abonnement. Sans clé Stripe configurée, renvoie un message clair au lieu
   de planter.
-- **Amélioration IA générative (Pro)** : un toggle dans `/generate` envoie
-  la photo à l'API OpenAI (`gpt-image-1`, `images.edit`) qui retravaille
-  réellement l'éclairage/l'ambiance/le décor, au lieu d'un filtre de
-  couleur déterministe. Réservé aux comptes Pro côté UI ; côté serveur,
-  sans `OPENAI_API_KEY` configurée, l'appel renvoie une erreur 501 claire
-  au lieu de planter.
+- **Amélioration IA générative (Creator & Pro)** : un toggle dans
+  `/generate` envoie la photo à l'API OpenAI (`gpt-image-1`,
+  `images.edit`) qui retravaille réellement l'éclairage/l'ambiance/le
+  décor, au lieu d'un filtre de couleur déterministe — avec un champ de
+  description libre pour préciser ce qu'on veut voir. Creator a droit à
+  2 générations IA par mois, Pro est illimité. Côté serveur, sans
+  `OPENAI_API_KEY` configurée, l'appel renvoie une erreur 501 claire (et
+  les erreurs OpenAI réelles — clé invalide, org non vérifiée, quota —
+  remontent avec un message actionnable) au lieu de planter.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
@@ -46,6 +49,11 @@ sont **pas** implémentées et devront l'être avant un vrai lancement payant :
   génération (le modèle `gpt-image-1` n'est pas gratuit) — contrairement
   aux styles filtres qui ne coûtent rien à faire tourner. Le prix du plan
   Pro doit couvrir ce coût variable ; à surveiller une fois en usage réel.
+- **Le quota de 2 générations IA/mois pour Creator n'est pas non plus
+  vérifié côté serveur** — même limitation que le statut payant ci-dessus :
+  le compteur vit dans `localStorage`, donc contournable en vidant le
+  cache. Se corrige avec la même vraie base de données que le statut
+  d'abonnement.
 - **Pas de tests automatisés.**
 
 ## Lancer le projet en local

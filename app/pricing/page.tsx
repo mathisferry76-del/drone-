@@ -125,27 +125,30 @@ export default function PricingPage() {
         </h2>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6">
           <h3 className="font-bold text-zinc-100">
-            Free vs Creator — le volume, pas la qualité
+            Free vs Creator — le volume, pas la qualité de base
           </h3>
           <p className="mt-2 text-sm text-zinc-400">
-            Les deux utilisent les mêmes 4 styles filtres (couleur, contraste,
+            Les deux utilisent les mêmes 8 styles filtres (couleur, contraste,
             texte). La différence, c&apos;est la limite : 3 miniatures avec
             filigrane en Free, illimité et sans filigrane en Creator. Le rendu
-            visuel de base est identique.
+            filtre de base est identique.
           </p>
         </div>
         <div className="rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-6">
           <h3 className="font-bold text-zinc-100">
-            Pourquoi Pro coûte plus cher : une vraie IA générative
+            L&apos;IA générative : incluse en Creator, illimitée en Pro
           </h3>
           <p className="mt-2 text-sm text-zinc-400">
             Les styles filtres ajustent les couleurs de ta photo existante.
-            L&apos;amélioration IA du plan Pro va plus loin : elle envoie ta
-            photo à un modèle d&apos;IA générative qui retravaille réellement
+            L&apos;amélioration IA va plus loin : elle envoie ta photo à un
+            modèle d&apos;IA générative qui retravaille réellement
             l&apos;éclairage, l&apos;ambiance et le décor de l&apos;image,
             tout en gardant ton sujet reconnaissable — un rendu que Photoshop
-            ou un simple filtre ne peuvent pas produire. C&apos;est ce qui
-            justifie l&apos;écart de prix avec Creator.
+            ou un simple filtre ne peuvent pas produire. Le plan Creator
+            inclut 2 générations IA par mois, de quoi tester et
+            l&apos;utiliser sur tes vidéos les plus importantes. Le plan Pro
+            la rend illimitée — c&apos;est ce qui justifie l&apos;écart de
+            prix entre les deux.
           </p>
         </div>
       </div>
