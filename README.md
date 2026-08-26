@@ -89,29 +89,35 @@ complet, pas une liste de features.
   requête `images.edit` ciblée à OpenAI, en protégeant toujours le visage
   même si la zone le chevauche. C'est un vrai appel IA (facturé, décompté
   du quota Creator), distinct de la retouche texte/couleur gratuite.
+- **Comptes utilisateurs, statut payant et quota vérifiés côté serveur
+  (Supabase)** : connexion par lien magique (email, sans mot de passe).
+  Une fois connecté, le plan (free/creator/pro) et les compteurs de quota
+  vivent dans une vraie base Postgres, mis à jour par un webhook Stripe —
+  ce n'est plus le `localStorage` du navigateur qui décide. L'IA générative
+  nécessite maintenant un compte connecté (elle ne peut plus être débloquée
+  en trafiquant le `localStorage`, l'exploit initial du MVP est corrigé).
+  Les visiteurs non connectés gardent l'accès libre aux styles filtres
+  (3 gratuites par appareil, comme avant) — aucun compte requis pour
+  essayer le produit.
+- **Historique des miniatures (`/historique`)** : chaque génération faite
+  en étant connecté est sauvegardée (Supabase Storage) et réapparaît sur
+  n'importe quel appareil — téléchargement et suppression depuis la page.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
 Pour rester dans l'esprit "workflow complet minimal", certaines choses ne
 sont **pas** implémentées et devront l'être avant un vrai lancement payant :
 
-- **Pas de compte utilisateur ni de base de données.** Le statut "payant"
-  est simulé côté client (`localStorage`) après un retour Stripe réussi —
-  ça suffit pour démontrer le produit, mais ce n'est pas sécurisé pour de
-  vrais abonnements (n'importe qui peut se mettre `isPro=true` dans la
-  console du navigateur). Avant de vendre, il faut : une table
-  utilisateurs (Supabase/Postgres), un webhook Stripe qui écrit le statut
-  d'abonnement en base, et une vérification serveur du quota/statut à
-  chaque génération.
+- **Le statut payant et le quota ne sont vérifiés côté serveur que pour les
+  utilisateurs connectés.** Un visiteur anonyme reste sur l'ancienne
+  simulation `localStorage`, mais elle ne donne accès qu'aux styles
+  filtres gratuits — l'IA générative (la fonctionnalité coûteuse) est
+  bloquée sans compte réel, donc l'exploit "je me mets `isPro=true` dans
+  la console" ne fonctionne plus pour ce qui coûte de l'argent.
 - **L'amélioration IA générative facture réellement OpenAI** à chaque
   génération (le modèle `gpt-image-1` n'est pas gratuit) — contrairement
   aux styles filtres qui ne coûtent rien à faire tourner. Le prix du plan
   Pro doit couvrir ce coût variable ; à surveiller une fois en usage réel.
-- **Le quota de 2 générations IA/mois pour Creator n'est pas non plus
-  vérifié côté serveur** — même limitation que le statut payant ci-dessus :
-  le compteur vit dans `localStorage`, donc contournable en vidant le
-  cache. Se corrige avec la même vraie base de données que le statut
-  d'abonnement.
 - **Pas de ré-édition après export.** Le positionnement/couleurs/courbure
   se règlent avant de cliquer "Générer" (sur la photo, pas sur le résultat
   déjà aplati en PNG) — on ne peut pas rouvrir une miniature téléchargée
@@ -138,18 +144,54 @@ Copie `.env.example` en `.env.local` et renseigne ce dont tu as besoin :
 
 ```
 STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 NEXT_PUBLIC_STRIPE_PRICE_CREATOR=price_...
 NEXT_PUBLIC_STRIPE_PRICE_PRO=price_...
 OPENAI_API_KEY=sk-...
+NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
 ```
+
+**Supabase** (comptes, statut payant/quota côté serveur, historique) :
+1. Crée un compte gratuit sur [supabase.com](https://supabase.com) → "New
+   Project".
+2. Une fois le projet créé, va dans **SQL Editor** → colle le contenu de
+   [`supabase/schema.sql`](./supabase/schema.sql) → **Run**. Ça crée les
+   tables `profiles`/`generations`, les policies de sécurité (RLS), le
+   trigger qui crée un profil à l'inscription, et le bucket de stockage
+   `thumbnails`.
+3. Dans **Project Settings → API**, récupère `Project URL`, `anon public
+   key` et `service_role key` → colle-les dans `NEXT_PUBLIC_SUPABASE_URL`,
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
+   ⚠️ La clé `service_role` contourne toute sécurité : jamais dans du code
+   client, jamais commitée.
+4. Dans **Authentication → Providers**, l'email (lien magique) est activé
+   par défaut — rien à faire de plus pour tester. Pour de l'envoi réel en
+   production, configure un fournisseur SMTP (Authentication → Email) : le
+   service email intégré de Supabase est limité et pensé pour le test.
+5. Redémarre `npm run dev` — le lien "Connexion" du menu devient
+   fonctionnel, `/historique` se remplit après une génération connectée.
+
+Sans ces variables, tout continue de fonctionner comme avant : styles
+filtres en libre accès, mais connexion, historique et IA générative
+indisponibles (avec des messages clairs, pas de plantage).
 
 **Stripe** (pour activer le paiement) :
 1. Crée un compte Stripe (mode test), crée deux produits récurrents
    (Creator 19€/mois, Pro 39€/mois), récupère leurs `price_id`.
 2. Colle `STRIPE_SECRET_KEY` (clé secrète du dashboard Stripe test) et les
    deux `price_id` ci-dessus.
-3. Redémarre `npm run dev` — les boutons de la page `/pricing` redirigent
-   alors vers un vrai Stripe Checkout en mode test.
+3. **Webhook** (nécessaire pour que payer active vraiment le plan) : dans
+   le dashboard Stripe → Developers → Webhooks → "Add endpoint" → URL
+   `https://<ton-domaine>/api/stripe/webhook` → sélectionne les événements
+   `checkout.session.completed`, `customer.subscription.updated`,
+   `customer.subscription.deleted` → copie le "Signing secret" dans
+   `STRIPE_WEBHOOK_SECRET`.
+4. Redémarre `npm run dev` — les boutons de la page `/pricing` redirigent
+   alors vers un vrai Stripe Checkout en mode test (connexion requise :
+   l'abonnement doit être lié à un compte pour que le webhook sache qui
+   mettre à jour).
 
 Sans ces variables, `/pricing` reste utilisable mais affiche un message
 "non configuré" au clic sur un plan payant, au lieu de planter.
@@ -188,12 +230,9 @@ plus, dans l'ordre :
 
 1. **Valider avant de pousser plus loin.** Utilise ce MVP sur tes propres
    contenus, montre le résultat à ton audience, et propose-le en DM à
-   10-15 créateurs. Objectif : 5-10 personnes prêtes à payer, avant
-   d'investir dans la base de données/auth/facturation réelle.
-2. **Si validé, sécuriser la facturation** : ajouter une vraie base
-   utilisateurs + webhook Stripe (`checkout.session.completed`,
-   `customer.subscription.deleted`) pour que le statut payant soit vérifié
-   côté serveur, pas simulé côté client.
+   10-15 créateurs. Objectif : 5-10 personnes prêtes à payer.
+2. ~~Sécuriser la facturation~~ **Fait** : comptes Supabase + webhook
+   Stripe, statut payant et quota vérifiés côté serveur.
 3. **Premiers clients payants** via ta distribution existante (audience) +
    démarchage direct de créateurs identifiés à l'étape 1 — pas de pub
    payante tant que le pitch et le prix ne sont pas éprouvés en 1-to-1.
@@ -204,14 +243,23 @@ plus, dans l'ordre :
 
 ```
 app/
-  page.tsx              landing page
-  pricing/page.tsx       page tarifs + intégration Stripe Checkout
-  generate/page.tsx      dashboard : upload, style, génération, téléchargement
-  api/generate/route.ts  pipeline sharp (crop, filtre, texte, filigrane)
-  api/checkout/route.ts  création de session Stripe Checkout
+  page.tsx                  landing page
+  pricing/page.tsx          page tarifs + intégration Stripe Checkout
+  generate/page.tsx         dashboard : upload, style, génération, téléchargement
+  login/page.tsx            connexion par lien magique (Supabase Auth)
+  historique/page.tsx       miniatures sauvegardées du compte connecté
+  api/generate/route.ts     pipeline sharp (crop, filtre, texte, IA) + quota serveur
+  api/checkout/route.ts     création de session Stripe Checkout (compte requis)
+  api/history/route.ts      liste/suppression de l'historique (Supabase Storage)
+  api/stripe/webhook/route.ts  synchronise le plan Supabase avec Stripe
 lib/
-  presets.ts              définition des 4 styles + grille tarifaire
+  presets.ts              styles, grille tarifaire, constantes des zones IA
   stripe.ts               client Stripe (lazy, tolère l'absence de clé)
+  openai.ts               client OpenAI (lazy, tolère l'absence de clé)
+  supabase.ts             clients Supabase (browser + admin), résolution du user
+  useSupabaseUser.ts       hook client : session Supabase en direct
+supabase/
+  schema.sql              tables, RLS, trigger, bucket — à coller dans SQL Editor
 components/
   Navbar.tsx, Footer.tsx
 ```

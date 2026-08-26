@@ -2,11 +2,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PRICING_TIERS } from "@/lib/presets";
+import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
 export default function PricingPage() {
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { session } = useSupabaseUser();
+  const router = useRouter();
 
   async function handleCheckout(tierId: string, priceId: string | null) {
     if (tierId === "free") return;
@@ -19,11 +23,19 @@ export default function PricingPage() {
       return;
     }
 
+    if (!session) {
+      router.push("/login");
+      return;
+    }
+
     setLoadingTier(tierId);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({ priceId, tier: tierId }),
       });
       const data = await res.json();

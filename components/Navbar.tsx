@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSupabaseUser } from "@/lib/useSupabaseUser";
+import { getSupabaseBrowser } from "@/lib/supabase";
 
 const LINKS = [
   { href: "/#styles", label: "Styles" },
@@ -13,6 +15,13 @@ const LINKS = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const { session } = useSupabaseUser();
+
+  async function handleLogout() {
+    const supabase = getSupabaseBrowser();
+    await supabase?.auth.signOut();
+    setOpen(false);
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800 bg-black/80 backdrop-blur">
@@ -32,6 +41,20 @@ export default function Navbar() {
               {link.label}
             </Link>
           ))}
+          {session ? (
+            <>
+              <Link href="/historique" className="transition hover:text-white">
+                Historique
+              </Link>
+              <button onClick={handleLogout} className="transition hover:text-white">
+                Déconnexion
+              </button>
+            </>
+          ) : (
+            <Link href="/login" className="transition hover:text-white">
+              Connexion
+            </Link>
+          )}
           <Link
             href="/generate"
             className="rounded-full bg-yellow-400 px-4 py-2 font-bold text-black transition hover:bg-yellow-300"
@@ -78,6 +101,31 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
+            {session ? (
+              <>
+                <Link
+                  href="/historique"
+                  onClick={() => setOpen(false)}
+                  className="rounded-lg px-2 py-2.5 transition hover:bg-zinc-900 hover:text-white"
+                >
+                  Historique
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="rounded-lg px-2 py-2.5 text-left transition hover:bg-zinc-900 hover:text-white"
+                >
+                  Déconnexion
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => setOpen(false)}
+                className="rounded-lg px-2 py-2.5 transition hover:bg-zinc-900 hover:text-white"
+              >
+                Connexion
+              </Link>
+            )}
           </div>
         </div>
       )}

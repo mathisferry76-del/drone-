@@ -5,6 +5,7 @@ import path from "path";
 import * as opentype from "opentype.js";
 import * as wawoff2 from "wawoff2";
 import OpenAI, { toFile } from "openai";
+import { randomUUID } from "crypto";
 import {
   getPreset,
   Preset,
@@ -13,8 +14,11 @@ import {
   FACE_ZONE_BASE_RY,
   EDIT_ZONE_BASE_RX,
   EDIT_ZONE_BASE_RY,
+  FREE_GENERATIONS_PER_DEVICE,
+  CREATOR_AI_MONTHLY_LIMIT,
 } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
+import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
@@ -80,6 +84,11 @@ function isValidHexColor(value: unknown): value is string {
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const n = Number(value);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+}
+
+function currentMonthId(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 interface FacePreserve {
@@ -749,6 +758,68 @@ export async function POST(req: NextRequest) {
     const facePreserve = parseFacePreserve(formData.get("facePreserve"));
     const editZone = parseEditZone(formData.get("editZone"));
 
+    // Anonymous visitors keep the current (client-trusted) free-tier flow
+    // unchanged — no account required to try filter styles. But AI is the
+    // costly, previously-exploitable feature (anyone could set a fake plan
+    // in their own localStorage), so it now always requires a real,
+    // server-verified account with a paid plan and quota left.
+    const admin = getSupabaseAdmin();
+    const authUser = await getUserFromAuthHeader(req.headers.get("authorization"));
+    let profile: Profile | null = null;
+    let effectiveWatermark = watermark;
+
+    if (aiEnhance && !authUser) {
+      return NextResponse.json(
+        { error: "Connecte-toi (plan Creator ou Pro) pour utiliser l'amélioration IA." },
+        { status: 401 }
+      );
+    }
+
+    if (authUser && admin) {
+      const { data } = await admin
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
+      profile = (data as Profile | null) ?? null;
+
+      if (!profile) {
+        return NextResponse.json(
+          { error: "Profil introuvable. Déconnecte-toi puis reconnecte-toi." },
+          { status: 401 }
+        );
+      }
+
+      effectiveWatermark = profile.plan === "free";
+
+      if (aiEnhance) {
+        if (profile.plan === "free") {
+          return NextResponse.json(
+            { error: "L'amélioration IA nécessite un plan Creator ou Pro." },
+            { status: 403 }
+          );
+        }
+        if (profile.plan === "creator") {
+          const monthKey = currentMonthId();
+          const usesThisMonth =
+            profile.ai_uses_month_key === monthKey ? profile.ai_uses_this_month : 0;
+          if (usesThisMonth >= CREATOR_AI_MONTHLY_LIMIT) {
+            return NextResponse.json(
+              {
+                error: `Quota IA du mois atteint (${CREATOR_AI_MONTHLY_LIMIT}/mois en Creator). Passe en Pro pour un accès illimité.`,
+              },
+              { status: 403 }
+            );
+          }
+        }
+      } else if (profile.plan === "free" && profile.free_generations_used >= FREE_GENERATIONS_PER_DEVICE) {
+        return NextResponse.json(
+          { error: "Quota gratuit atteint. Passe sur un plan payant pour continuer." },
+          { status: 403 }
+        );
+      }
+    }
+
     const referenceFiles = formData
       .getAll("referenceImages")
       .filter((f): f is File => f instanceof File)
@@ -879,7 +950,7 @@ export async function POST(req: NextRequest) {
       overlays.push({ input: Buffer.from(buildBorderSvg(borderColor)), top: 0, left: 0 });
     }
 
-    if (watermark) {
+    if (effectiveWatermark) {
       overlays.push({
         input: Buffer.from(buildWatermarkSvg(font, "ThumbAI — version gratuite")),
         top: 0,
@@ -889,6 +960,46 @@ export async function POST(req: NextRequest) {
 
     const outputBuffer = await base.composite(overlays).png().toBuffer();
     const base64 = outputBuffer.toString("base64");
+
+    // Best-effort: save to the user's history and update their server-side
+    // quota counters. Never let a storage/DB hiccup break the generation
+    // the user is actually waiting on.
+    if (authUser && admin && profile) {
+      try {
+        const storagePath = `${authUser.id}/${randomUUID()}.png`;
+        const { error: uploadError } = await admin.storage
+          .from("thumbnails")
+          .upload(storagePath, outputBuffer, { contentType: "image/png" });
+
+        if (!uploadError) {
+          await admin.from("generations").insert({
+            user_id: authUser.id,
+            storage_path: storagePath,
+            preset_id: presetId,
+            used_ai: usedOpenAiCall,
+          });
+        } else {
+          console.error("history upload error", uploadError);
+        }
+
+        if (profile.plan === "free") {
+          await admin
+            .from("profiles")
+            .update({ free_generations_used: profile.free_generations_used + 1 })
+            .eq("id", authUser.id);
+        } else if (profile.plan === "creator" && usedOpenAiCall) {
+          const monthKey = currentMonthId();
+          const nextCount =
+            profile.ai_uses_month_key === monthKey ? profile.ai_uses_this_month + 1 : 1;
+          await admin
+            .from("profiles")
+            .update({ ai_uses_this_month: nextCount, ai_uses_month_key: monthKey })
+            .eq("id", authUser.id);
+        }
+      } catch (err) {
+        console.error("history/quota save error", err);
+      }
+    }
 
     return NextResponse.json({
       image: `data:image/png;base64,${base64}`,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
+import { getUserFromAuthHeader } from "@/lib/supabase";
 
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
@@ -10,6 +11,16 @@ export async function POST(req: NextRequest) {
           "Stripe n'est pas configuré sur ce déploiement. Ajoute STRIPE_SECRET_KEY dans les variables d'environnement (voir README).",
       },
       { status: 501 }
+    );
+  }
+
+  // A subscription has to be linked to an account so the webhook knows
+  // whose profile to upgrade — no anonymous checkout once accounts exist.
+  const user = await getUserFromAuthHeader(req.headers.get("authorization"));
+  if (!user) {
+    return NextResponse.json(
+      { error: "Connecte-toi avant de passer sur un plan payant." },
+      { status: 401 }
     );
   }
 
@@ -31,6 +42,8 @@ export async function POST(req: NextRequest) {
       success_url: `${origin}/generate?success=true&tier=${safeTier}`,
       cancel_url: `${origin}/pricing?canceled=true`,
       allow_promotion_codes: true,
+      client_reference_id: user.id,
+      customer_email: user.email ?? undefined,
     });
 
     return NextResponse.json({ url: session.url });

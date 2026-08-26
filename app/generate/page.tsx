@@ -13,6 +13,8 @@ import {
   PresetId,
   getPreset,
 } from "@/lib/presets";
+import { getSupabaseBrowser, Profile } from "@/lib/supabase";
+import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
 const USAGE_KEY = "thumbai_free_generations_used";
 const PLAN_KEY = "thumbai_plan";
@@ -180,17 +182,48 @@ export default function GeneratePage() {
   const [editInstruction, setEditInstruction] = useState("");
   const [naturalImgSize, setNaturalImgSize] = useState<{ w: number; h: number } | null>(null);
   const [aiBaseCache, setAiBaseCache] = useState<{ key: string; dataUrl: string } | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ kind: "text" | "shape" | "face" | "editzone"; id: string } | null>(null);
 
-  const isPaid = plan !== "free";
-  const aiPlanEligible = plan === "creator" || plan === "pro";
-  const aiLimitReached = plan === "creator" && aiUsesThisMonth >= CREATOR_AI_MONTHLY_LIMIT;
-  const canUseAi = aiPlanEligible && !aiLimitReached;
-  const aiRemaining = Math.max(CREATOR_AI_MONTHLY_LIMIT - aiUsesThisMonth, 0);
+  const { session } = useSupabaseUser();
+  const loggedIn = Boolean(session);
+
+  async function refetchProfile() {
+    const supabase = getSupabaseBrowser();
+    if (!supabase || !session) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+    if (data) setProfile(data as Profile);
+  }
+
+  // Logged-in users are the server-verified source of truth (real accounts
+  // fix the "anyone can fake Pro in localStorage" hole); anonymous visitors
+  // keep the existing device-local simulation so the free tier stays
+  // frictionless without an account.
+  const effectivePlan: Plan = loggedIn && profile ? profile.plan : plan;
+  const effectiveUsedCount = loggedIn && profile ? profile.free_generations_used : usedCount;
+  const effectiveAiUsesThisMonth =
+    loggedIn && profile
+      ? profile.ai_uses_month_key === currentMonthId()
+        ? profile.ai_uses_this_month
+        : 0
+      : aiUsesThisMonth;
+
+  const isPaid = effectivePlan !== "free";
+  const aiPlanEligible = effectivePlan === "creator" || effectivePlan === "pro";
+  const aiLimitReached =
+    effectivePlan === "creator" && effectiveAiUsesThisMonth >= CREATOR_AI_MONTHLY_LIMIT;
+  // AI always requires a real, logged-in account now — the whole point of
+  // moving plan/quota server-side was to close that off for anonymous use.
+  const canUseAi = loggedIn && aiPlanEligible && !aiLimitReached;
+  const aiRemaining = Math.max(CREATOR_AI_MONTHLY_LIMIT - effectiveAiUsesThisMonth, 0);
 
   // localStorage/window only exist client-side, so this state can't be read
   // during the server render — it has to be hydrated in an effect.
@@ -226,6 +259,44 @@ export default function GeneratePage() {
     setPlan(resolvedPlan);
     setAiUsesThisMonth(aiUsage.count);
   }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Once logged in, the account's real profile (plan + quota) takes over
+  // from the localStorage simulation above. Right after a Stripe checkout
+  // redirect the webhook may not have landed yet, so retry a few times.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!session) {
+      setProfile(null);
+      return;
+    }
+    let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
+    const justUpgraded = params.get("success") === "true";
+
+    (async () => {
+      const supabase = getSupabaseBrowser();
+      if (!supabase) return;
+      const attempts = justUpgraded ? 5 : 1;
+      for (let i = 0; i < attempts; i++) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        if (cancelled) return;
+        if (data) {
+          setProfile(data as Profile);
+          if (!justUpgraded || (data as Profile).plan !== "free") return;
+        }
+        if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // As soon as AI mode is on and a photo is loaded, drop a sensible default
@@ -392,7 +463,7 @@ export default function GeneratePage() {
     dragRef.current = null;
   }
 
-  const quotaReached = !isPaid && usedCount >= FREE_GENERATIONS_PER_DEVICE;
+  const quotaReached = !isPaid && effectiveUsedCount >= FREE_GENERATIONS_PER_DEVICE;
   const hasAnyText = textLayers.some((l) => l.text.trim());
 
   // Identifies the inputs that actually change what OpenAI would generate.
@@ -479,7 +550,11 @@ export default function GeneratePage() {
         }
       }
 
-      const res = await fetch("/api/generate", { method: "POST", body: formData });
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+        body: formData,
+      });
       const data = await res.json();
 
       if (!res.ok) {
@@ -498,22 +573,25 @@ export default function GeneratePage() {
       if (editZone && editInstruction.trim()) {
         setEditInstruction("");
       }
-      if (!isPaid) {
-        const next = usedCount + 1;
-        setUsedCount(next);
-        window.localStorage.setItem(USAGE_KEY, String(next));
-      }
-      // The server tells us authoritatively whether it actually called
-      // OpenAI (fresh generation and/or targeted edit) — a pure local
-      // re-composite from cache must not count against the Creator plan's
-      // 2/month AI quota, only genuine calls do.
-      if (data.usedOpenAiCall && plan === "creator") {
-        const next = aiUsesThisMonth + 1;
-        setAiUsesThisMonth(next);
-        window.localStorage.setItem(
-          AI_USAGE_KEY,
-          JSON.stringify({ month: currentMonthId(), count: next })
-        );
+
+      if (loggedIn) {
+        // Logged in: the server already updated the real quota/history —
+        // just pull the fresh numbers instead of guessing them locally.
+        await refetchProfile();
+      } else {
+        if (!isPaid) {
+          const next = usedCount + 1;
+          setUsedCount(next);
+          window.localStorage.setItem(USAGE_KEY, String(next));
+        }
+        if (data.usedOpenAiCall && plan === "creator") {
+          const next = aiUsesThisMonth + 1;
+          setAiUsesThisMonth(next);
+          window.localStorage.setItem(
+            AI_USAGE_KEY,
+            JSON.stringify({ month: currentMonthId(), count: next })
+          );
+        }
       }
     } catch {
       setError("Impossible de contacter le serveur. Réessaie.");
@@ -527,11 +605,21 @@ export default function GeneratePage() {
       <h1 className="text-3xl font-extrabold">Créer une miniature</h1>
       <p className="mt-2 text-zinc-400">
         {isPaid
-          ? `Plan ${plan === "pro" ? "Pro" : "Creator"} actif — miniatures illimitées, sans filigrane.`
+          ? `Plan ${effectivePlan === "pro" ? "Pro" : "Creator"} actif — miniatures illimitées, sans filigrane.`
+          : loggedIn
+          ? `${Math.max(
+              FREE_GENERATIONS_PER_DEVICE - effectiveUsedCount,
+              0
+            )} miniature(s) gratuite(s) restante(s) sur ce compte.`
           : `${Math.max(
               FREE_GENERATIONS_PER_DEVICE - usedCount,
               0
-            )} miniature(s) gratuite(s) restante(s) sur cet appareil.`}
+            )} miniature(s) gratuite(s) restante(s) sur cet appareil. `}
+        {!loggedIn && (
+          <Link href="/login" className="font-semibold text-yellow-400 hover:underline">
+            Connecte-toi
+          </Link>
+        )}
       </p>
 
       <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-2">
@@ -1017,16 +1105,26 @@ export default function GeneratePage() {
                   )}
                 </span>
                 <span className="mt-1 block text-xs text-zinc-400">
-                  {plan === "pro" &&
+                  {!loggedIn &&
+                    "Nécessite un compte : connecte-toi et passe sur Creator ou Pro pour débloquer l'IA générative."}
+                  {loggedIn && effectivePlan === "pro" &&
                     "Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative, en illimité."}
-                  {plan === "creator" && !aiLimitReached &&
+                  {loggedIn && effectivePlan === "creator" && !aiLimitReached &&
                     `Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative. Il te reste ${aiRemaining}/${CREATOR_AI_MONTHLY_LIMIT} génération(s) IA ce mois-ci.`}
-                  {plan === "creator" && aiLimitReached &&
+                  {loggedIn && effectivePlan === "creator" && aiLimitReached &&
                     `Tu as utilisé tes ${CREATOR_AI_MONTHLY_LIMIT} générations IA incluses ce mois-ci. Reviens le mois prochain, ou passe en Pro pour un accès illimité.`}
-                  {!aiPlanEligible &&
+                  {loggedIn && !aiPlanEligible &&
                     "Réservé aux plans Creator (2/mois) et Pro (illimité) : une vraie IA régénère l'éclairage et l'ambiance de la photo, pas juste un filtre."}
                 </span>
-                {!aiPlanEligible && (
+                {!loggedIn && (
+                  <Link
+                    href="/login"
+                    className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
+                  >
+                    Se connecter →
+                  </Link>
+                )}
+                {loggedIn && !aiPlanEligible && (
                   <Link
                     href="/pricing"
                     className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
@@ -1034,7 +1132,7 @@ export default function GeneratePage() {
                     Voir les plans →
                   </Link>
                 )}
-                {aiLimitReached && (
+                {loggedIn && aiLimitReached && (
                   <Link
                     href="/pricing"
                     className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
