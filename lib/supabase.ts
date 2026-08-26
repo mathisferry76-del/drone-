@@ -46,6 +46,9 @@ export interface Profile {
   free_generations_used: number;
   ai_uses_this_month: number;
   ai_uses_month_key: string | null;
+  referral_code: string | null;
+  referred_by: string | null;
+  bonus_generations: number;
 }
 
 /** Resolves the authenticated user (if any) from a request's bearer token. */

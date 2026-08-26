@@ -812,7 +812,10 @@ export async function POST(req: NextRequest) {
             );
           }
         }
-      } else if (profile.plan === "free" && profile.free_generations_used >= FREE_GENERATIONS_PER_DEVICE) {
+      } else if (
+        profile.plan === "free" &&
+        profile.free_generations_used >= FREE_GENERATIONS_PER_DEVICE + profile.bonus_generations
+      ) {
         return NextResponse.json(
           { error: "Quota gratuit atteint. Passe sur un plan payant pour continuer." },
           { status: 403 }

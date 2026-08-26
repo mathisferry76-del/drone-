@@ -10,8 +10,17 @@ create table if not exists public.profiles (
   free_generations_used int not null default 0,
   ai_uses_this_month int not null default 0,
   ai_uses_month_key text,
+  referral_code text unique,
+  referred_by uuid references public.profiles(id),
+  bonus_generations int not null default 0,
   created_at timestamptz not null default now()
 );
+
+-- Si la table existait déjà (déploiement précédent), ajoute les nouvelles
+-- colonnes de parrainage sans tout recréer.
+alter table public.profiles add column if not exists referral_code text unique;
+alter table public.profiles add column if not exists referred_by uuid references public.profiles(id);
+alter table public.profiles add column if not exists bonus_generations int not null default 0;
 
 create table if not exists public.generations (
   id uuid primary key default gen_random_uuid(),
@@ -44,11 +53,31 @@ create policy "Users can delete own generations" on public.generations
 -- Le serveur (clé service_role, qui contourne la RLS) est seul à insérer des
 -- générations et à modifier le quota/plan — jamais le navigateur directement.
 
--- Crée automatiquement une ligne de profil à chaque inscription.
+-- Crée automatiquement une ligne de profil à chaque inscription, avec un
+-- code de parrainage unique dérivé de son id (pas de risque de collision).
+-- Si l'inscription vient d'un lien de parrainage (?ref=CODE passé en
+-- metadata à signInWithOtp), les deux comptes reçoivent des générations
+-- bonus immédiatement.
 create or replace function public.handle_new_user()
 returns trigger as $$
+declare
+  new_code text := upper(substr(replace(new.id::text, '-', ''), 1, 8));
+  ref_code text := new.raw_user_meta_data->>'referral_code';
+  referrer_id uuid;
 begin
-  insert into public.profiles (id, email) values (new.id, new.email);
+  if ref_code is not null then
+    select id into referrer_id from public.profiles where referral_code = ref_code;
+  end if;
+
+  insert into public.profiles (id, email, referral_code, referred_by, bonus_generations)
+  values (new.id, new.email, new_code, referrer_id, case when referrer_id is not null then 2 else 0 end);
+
+  if referrer_id is not null then
+    update public.profiles
+    set bonus_generations = bonus_generations + 3
+    where id = referrer_id;
+  end if;
+
   return new;
 end;
 $$ language plpgsql security definer;

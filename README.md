@@ -102,6 +102,11 @@ complet, pas une liste de features.
 - **Historique des miniatures (`/historique`)** : chaque génération faite
   en étant connecté est sauvegardée (Supabase Storage) et réapparaît sur
   n'importe quel appareil — téléchargement et suppression depuis la page.
+- **Parrainage (`/parrainage`)** : chaque compte a un lien unique
+  (`/login?ref=CODE`). Un ami qui s'inscrit avec ce lien reçoit 2
+  miniatures gratuites bonus, le parrain en reçoit 3 — appliqué
+  immédiatement à l'inscription via un trigger Postgres, cumulable sans
+  limite, visible sur la page avec le nombre de filleuls.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 

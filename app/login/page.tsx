@@ -1,13 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase";
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get("ref");
 
   const supabase = getSupabaseBrowser();
 
@@ -26,7 +37,12 @@ export default function LoginPage() {
     setStatus("sending");
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin + "/generate" },
+      options: {
+        emailRedirectTo: window.location.origin + "/generate",
+        // Read by the profiles trigger on first signup only — has no
+        // effect for an email that already has an account.
+        data: refCode ? { referral_code: refCode } : undefined,
+      },
     });
 
     if (authError) {
@@ -45,6 +61,13 @@ export default function LoginPage() {
         Ton historique de miniatures et ton abonnement sont liés à ce
         compte, accessibles depuis n&apos;importe quel appareil.
       </p>
+
+      {refCode && (
+        <div className="mt-4 rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-3 text-sm text-yellow-300">
+          🎁 Tu as été invité par un ami — vous recevrez chacun des
+          miniatures gratuites bonus dès ton inscription.
+        </div>
+      )}
 
       {status === "sent" ? (
         <div className="mt-8 rounded-xl border border-emerald-800/40 bg-emerald-400/5 p-4 text-sm text-emerald-300">

@@ -46,6 +46,9 @@ export default function Navbar() {
               <Link href="/historique" className="transition hover:text-white">
                 Historique
               </Link>
+              <Link href="/parrainage" className="transition hover:text-white">
+                Parrainage
+              </Link>
               <button onClick={handleLogout} className="transition hover:text-white">
                 Déconnexion
               </button>
@@ -109,6 +112,13 @@ export default function Navbar() {
                   className="rounded-lg px-2 py-2.5 transition hover:bg-zinc-900 hover:text-white"
                 >
                   Historique
+                </Link>
+                <Link
+                  href="/parrainage"
+                  onClick={() => setOpen(false)}
+                  className="rounded-lg px-2 py-2.5 transition hover:bg-zinc-900 hover:text-white"
+                >
+                  Parrainage
                 </Link>
                 <button
                   onClick={handleLogout}
