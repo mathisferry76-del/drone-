@@ -8,6 +8,8 @@ import {
   CREATOR_AI_MONTHLY_LIMIT,
   FACE_ZONE_BASE_RX,
   FACE_ZONE_BASE_RY,
+  EDIT_ZONE_BASE_RX,
+  EDIT_ZONE_BASE_RY,
   PresetId,
   getPreset,
 } from "@/lib/presets";
@@ -16,6 +18,7 @@ const USAGE_KEY = "thumbai_free_generations_used";
 const PLAN_KEY = "thumbai_plan";
 const AI_USAGE_KEY = "thumbai_ai_usage";
 const AI_DESCRIPTION_MAX = 3000;
+const EDIT_INSTRUCTION_MAX = 300;
 const MAX_TEXT_LAYERS = 5;
 const MAX_SHAPES = 8;
 const MAX_REFERENCE_IMAGES = 3;
@@ -60,6 +63,15 @@ interface FacePreserveState {
 }
 
 const DEFAULT_FACE_PRESERVE: FacePreserveState = { x: 0.5, y: 0.38, sizeX: 1, sizeY: 1 };
+
+interface EditZoneState {
+  x: number;
+  y: number;
+  sizeX: number;
+  sizeY: number;
+}
+
+const DEFAULT_EDIT_ZONE: EditZoneState = { x: 0.72, y: 0.5, sizeX: 1, sizeY: 1 };
 
 const BOX_ASPECT = 16 / 9;
 
@@ -140,7 +152,7 @@ export default function GeneratePage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [presetId, setPresetId] = useState<PresetId>("bold-impact");
   const [intensity, setIntensity] = useState(100);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(true);
   const [fineBrightness, setFineBrightness] = useState(0);
   const [fineContrast, setFineContrast] = useState(0);
   const [fineSaturation, setFineSaturation] = useState(0);
@@ -164,13 +176,15 @@ export default function GeneratePage() {
   const [aiUsesThisMonth, setAiUsesThisMonth] = useState(0);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const [facePreserve, setFacePreserve] = useState<FacePreserveState | null>(null);
+  const [editZone, setEditZone] = useState<EditZoneState | null>(null);
+  const [editInstruction, setEditInstruction] = useState("");
   const [naturalImgSize, setNaturalImgSize] = useState<{ w: number; h: number } | null>(null);
   const [aiBaseCache, setAiBaseCache] = useState<{ key: string; dataUrl: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ kind: "text" | "shape" | "face"; id: string } | null>(null);
+  const dragRef = useRef<{ kind: "text" | "shape" | "face" | "editzone"; id: string } | null>(null);
 
   const isPaid = plan !== "free";
   const aiPlanEligible = plan === "creator" || plan === "pro";
@@ -234,6 +248,8 @@ export default function GeneratePage() {
     setPreviewUrl(URL.createObjectURL(f));
     setNaturalImgSize(null);
     setFacePreserve(null);
+    setEditZone(null);
+    setEditInstruction("");
     setAiBaseCache(null);
   }
 
@@ -337,11 +353,17 @@ export default function GeneratePage() {
     e.stopPropagation();
   }
 
+  function startEditZoneDrag(e: React.PointerEvent<HTMLDivElement>) {
+    dragRef.current = { kind: "editzone", id: "editzone" };
+    (e.target as Element).setPointerCapture(e.pointerId);
+    e.stopPropagation();
+  }
+
   function handlePreviewPointerMove(e: React.PointerEvent<HTMLDivElement>) {
     const active = dragRef.current;
     if (!active) return;
 
-    if (active.kind === "face") {
+    if (active.kind === "face" || active.kind === "editzone") {
       const box = previewBoxRef.current;
       if (!box || !naturalImgSize) return;
       const rect = box.getBoundingClientRect();
@@ -349,7 +371,11 @@ export default function GeneratePage() {
       const by = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
       const imgAspect = naturalImgSize.w / naturalImgSize.h;
       const pos = boxFractionToImageFraction(bx, by, imgAspect);
-      setFacePreserve((prev) => (prev ? { ...prev, ...pos } : prev));
+      if (active.kind === "face") {
+        setFacePreserve((prev) => (prev ? { ...prev, ...pos } : prev));
+      } else {
+        setEditZone((prev) => (prev ? { ...prev, ...pos } : prev));
+      }
       return;
     }
 
@@ -389,6 +415,7 @@ export default function GeneratePage() {
   const willReuseAiBase = Boolean(
     willUseAi && aiBaseCache && currentAiCacheKey && aiBaseCache.key === currentAiCacheKey
   );
+  const willDoTargetedEdit = Boolean(willUseAi && editZone && editInstruction.trim());
 
   async function handleGenerate() {
     setError(null);
@@ -446,6 +473,10 @@ export default function GeneratePage() {
         if (facePreserve) {
           formData.append("facePreserve", JSON.stringify(facePreserve));
         }
+        if (editZone && editInstruction.trim()) {
+          formData.append("editZone", JSON.stringify(editZone));
+          formData.append("editInstruction", editInstruction.trim());
+        }
       }
 
       const res = await fetch("/api/generate", { method: "POST", body: formData });
@@ -461,15 +492,22 @@ export default function GeneratePage() {
       if (typeof data.aiBase === "string" && cacheKey) {
         setAiBaseCache({ key: cacheKey, dataUrl: data.aiBase });
       }
+      // A targeted edit was applied to the (now updated) cached base — clear
+      // the instruction so the next click doesn't silently re-apply the same
+      // edit again. The zone marker stays in case another tweak is wanted.
+      if (editZone && editInstruction.trim()) {
+        setEditInstruction("");
+      }
       if (!isPaid) {
         const next = usedCount + 1;
         setUsedCount(next);
         window.localStorage.setItem(USAGE_KEY, String(next));
       }
-      // Reusing the cached AI base is a free local re-composite, not a new
-      // OpenAI call — it must not count against the Creator plan's 2/month
-      // AI quota, only genuine new generations do.
-      if (willUseAi && !reuseCache && plan === "creator") {
+      // The server tells us authoritatively whether it actually called
+      // OpenAI (fresh generation and/or targeted edit) — a pure local
+      // re-composite from cache must not count against the Creator plan's
+      // 2/month AI quota, only genuine calls do.
+      if (data.usedOpenAiCall && plan === "creator") {
         const next = aiUsesThisMonth + 1;
         setAiUsesThisMonth(next);
         window.localStorage.setItem(
@@ -545,6 +583,33 @@ export default function GeneratePage() {
                       >
                         <span className="absolute top-full mt-1 whitespace-nowrap rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-bold text-black shadow-lg">
                           ✥ Visage à préserver
+                        </span>
+                      </div>
+                    );
+                  })()}
+                  {canUseAi && aiEnhance && editZone && naturalImgSize && (() => {
+                    const imgAspect = naturalImgSize.w / naturalImgSize.h;
+                    const { bx, by } = imageFractionToBoxFraction(
+                      editZone.x,
+                      editZone.y,
+                      imgAspect
+                    );
+                    const { visW, visH } = letterboxFractions(imgAspect);
+                    const widthPct = 2 * EDIT_ZONE_BASE_RX * editZone.sizeX * visW * 100;
+                    const heightPct = 2 * EDIT_ZONE_BASE_RY * editZone.sizeY * visH * 100;
+                    return (
+                      <div
+                        onPointerDown={startEditZoneDrag}
+                        className="absolute flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center justify-center rounded-[50%] border-2 border-dashed border-orange-400 bg-orange-400/10"
+                        style={{
+                          left: `${bx * 100}%`,
+                          top: `${by * 100}%`,
+                          width: `${widthPct}%`,
+                          height: `${heightPct}%`,
+                        }}
+                      >
+                        <span className="absolute top-full mt-1 whitespace-nowrap rounded-full bg-orange-400 px-2 py-0.5 text-[10px] font-bold text-black shadow-lg">
+                          🎯 Zone à retoucher
                         </span>
                       </div>
                     );
@@ -1077,6 +1142,118 @@ export default function GeneratePage() {
                   </div>
                 )}
 
+                <div className="rounded-lg border border-orange-800/40 bg-orange-400/5 p-3">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold text-zinc-300">
+                      🎯 Retouche ciblée (optionnel)
+                    </label>
+                    {editZone ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditZone(null);
+                          setEditInstruction("");
+                        }}
+                        className="text-xs font-semibold text-zinc-500 hover:text-white"
+                      >
+                        Retirer
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setEditZone(DEFAULT_EDIT_ZONE)}
+                        className="text-xs font-semibold text-orange-400 hover:underline"
+                      >
+                        + Ajouter une zone
+                      </button>
+                    )}
+                  </div>
+
+                  {editZone ? (
+                    <>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        Glisse le cercle orange sur l&apos;élément à corriger
+                        (couleurs trop vives, objet mal placé...) puis décris le
+                        changement voulu. Seule cette zone sera retouchée par
+                        l&apos;IA, le reste de la photo ne bouge pas.
+                      </p>
+                      <div className="mt-2 grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="mb-1 flex items-center justify-between">
+                            <label className="text-xs text-zinc-400">Largeur</label>
+                            <span className="text-xs text-zinc-500">
+                              {Math.round(editZone.sizeX * 100)}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0.5}
+                            max={2.5}
+                            step={0.05}
+                            value={editZone.sizeX}
+                            onChange={(e) =>
+                              setEditZone((prev) =>
+                                prev ? { ...prev, sizeX: Number(e.target.value) } : prev
+                              )
+                            }
+                            className="w-full accent-orange-400"
+                          />
+                        </div>
+                        <div>
+                          <div className="mb-1 flex items-center justify-between">
+                            <label className="text-xs text-zinc-400">Hauteur</label>
+                            <span className="text-xs text-zinc-500">
+                              {Math.round(editZone.sizeY * 100)}%
+                            </span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0.5}
+                            max={2.5}
+                            step={0.05}
+                            value={editZone.sizeY}
+                            onChange={(e) =>
+                              setEditZone((prev) =>
+                                prev ? { ...prev, sizeY: Number(e.target.value) } : prev
+                              )
+                            }
+                            className="w-full accent-orange-400"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <div className="mb-1 flex items-center justify-between">
+                          <label className="text-xs text-zinc-400">
+                            Que faire dans cette zone ?
+                          </label>
+                          <span className="text-xs text-zinc-600">
+                            {editInstruction.length}/{EDIT_INSTRUCTION_MAX}
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={editInstruction}
+                          onChange={(e) => setEditInstruction(e.target.value)}
+                          maxLength={EDIT_INSTRUCTION_MAX}
+                          placeholder="Ex : réduis la saturation de cet objet / déplace-le plus à droite / enlève cet élément"
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-orange-400 focus:outline-none"
+                        />
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Laisse vide si tu ne veux pas de retouche ciblée cette
+                          fois — la zone reste en place mais rien n&apos;est
+                          modifié tant qu&apos;il n&apos;y a pas d&apos;instruction.
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      Pour corriger un détail précis (une couleur trop vive, un
+                      objet à déplacer ou enlever) sans retoucher tout le reste
+                      de la photo.
+                    </p>
+                  )}
+                </div>
+
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <label className="block text-xs font-semibold text-zinc-300">
@@ -1137,7 +1314,9 @@ export default function GeneratePage() {
 
           {willUseAi && (
             <p className="text-xs text-zinc-500">
-              {willReuseAiBase
+              {willDoTargetedEdit
+                ? "🎯 Retouche ciblée : une vraie génération IA va appliquer ce changement dans la zone marquée (~10-15s, consomme ton quota IA)."
+                : willReuseAiBase
                 ? "🔁 Seuls le texte, les couleurs et les formes ont changé depuis la dernière génération IA — retouche instantanée, sans nouvel appel IA (et sans consommer ton quota)."
                 : "✨ Le prochain clic lance une nouvelle génération IA (10-20s) — la photo, le style, la description, les références ou la zone visage ont changé."}
             </p>
@@ -1157,7 +1336,9 @@ export default function GeneratePage() {
               className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
             >
               {loading
-                ? willUseAi && !willReuseAiBase
+                ? willDoTargetedEdit
+                  ? "Retouche ciblée en cours..."
+                  : willUseAi && !willReuseAiBase
                   ? "Génération IA en cours (10-20s)..."
                   : "Génération..."
                 : "Générer la miniature"}

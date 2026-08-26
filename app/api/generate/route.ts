@@ -11,6 +11,8 @@ import {
   AI_QUALITY_DIRECTIVE,
   FACE_ZONE_BASE_RX,
   FACE_ZONE_BASE_RY,
+  EDIT_ZONE_BASE_RX,
+  EDIT_ZONE_BASE_RY,
 } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 
@@ -130,6 +132,110 @@ async function buildFaceMask(
     <ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="#000" filter="url(#feather)" />
   </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
+}
+
+interface EditZone {
+  x: number;
+  y: number;
+  sizeX: number;
+  sizeY: number;
+}
+
+// The "zone à retoucher" the user marks for a targeted local edit (tone down
+// a color, nudge an object over) instead of regenerating the whole photo.
+function parseEditZone(raw: unknown): EditZone | null {
+  if (typeof raw !== "string" || !raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      x: clampNumber(parsed.x, 0, 1, 0.5),
+      y: clampNumber(parsed.y, 0, 1, 0.5),
+      sizeX: clampNumber(parsed.sizeX, 0.4, 2.5, 1),
+      sizeY: clampNumber(parsed.sizeY, 0.4, 2.5, 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+// The inverse of buildFaceMask: opaque (preserved) everywhere *except* a
+// feathered hole over the zone the user wants changed. If a face zone is
+// also set, it's re-protected even where it overlaps the edit zone, so a
+// targeted retouch can never accidentally regenerate the face.
+async function buildEditZoneMask(
+  width: number,
+  height: number,
+  zone: EditZone,
+  face: FacePreserve | null
+): Promise<Buffer> {
+  const cx = zone.x * width;
+  const cy = zone.y * height;
+  const rx = EDIT_ZONE_BASE_RX * zone.sizeX * width;
+  const ry = EDIT_ZONE_BASE_RY * zone.sizeY * height;
+  const blur = Math.max(rx, ry) * 0.15;
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <mask id="hole">
+        <rect width="${width}" height="${height}" fill="#fff" />
+        <ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="#000" style="filter:blur(${blur.toFixed(1)}px)" />
+      </mask>
+    </defs>
+    <rect width="${width}" height="${height}" fill="#000" mask="url(#hole)" />
+  </svg>`;
+  let maskBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
+
+  if (face) {
+    const faceMask = await buildFaceMask(width, height, face);
+    maskBuffer = await sharp(maskBuffer).composite([{ input: faceMask, blend: "over" }]).png().toBuffer();
+  }
+
+  return maskBuffer;
+}
+
+// Sends a second, targeted images.edit call scoped to just the marked zone —
+// used for "tone this down" / "move that object over" style fixes on an
+// already-generated photo, without regenerating (and risking) the rest of
+// the image or the protected face.
+async function applyTargetedEdit(
+  baseBuffer: Buffer,
+  instruction: string,
+  zone: EditZone,
+  face: FacePreserve | null
+): Promise<Buffer> {
+  const openai = getOpenAI();
+  if (!openai) {
+    throw new AiNotConfiguredError();
+  }
+
+  const meta = await sharp(baseBuffer).metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  if (!width || !height) {
+    throw new Error("Image invalide pour la retouche ciblée.");
+  }
+
+  const maskBuffer = await buildEditZoneMask(width, height, zone, face);
+  const uploadable = await toFile(baseBuffer, "photo.png", { type: "image/png" });
+  const maskUploadable = await toFile(maskBuffer, "edit-zone-mask.png", { type: "image/png" });
+
+  const prompt = `Apply this specific local edit only within the editable (unmasked) region, blending it seamlessly with the surrounding lighting, colors and style: ${instruction.trim()}. Everything outside that region — including the subject and the rest of the background — must remain exactly as it is in the input image.`;
+
+  const result = await openai.images.edit({
+    model: "gpt-image-1",
+    image: uploadable,
+    mask: maskUploadable,
+    prompt,
+    size: "1536x1024",
+    quality: "high",
+    input_fidelity: "high",
+  });
+
+  const b64 = result.data?.[0]?.b64_json;
+  if (!b64) {
+    throw new Error("OpenAI n'a renvoyé aucune image pour la retouche ciblée.");
+  }
+  return Buffer.from(b64, "base64");
 }
 
 // A pure contrast/brightness/saturation touch-up pivoted around neutral gray
@@ -627,6 +733,7 @@ export async function POST(req: NextRequest) {
     const watermark = String(formData.get("watermark") ?? "true") === "true";
     const aiEnhance = String(formData.get("aiEnhance") ?? "false") === "true";
     const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 3000);
+    const editInstruction = String(formData.get("editInstruction") ?? "").trim().slice(0, 300);
     const intensity = clampNumber(formData.get("intensity"), 0, 100, 100);
     const fineBrightness = clampNumber(formData.get("fineBrightness"), -50, 50, 0);
     const fineContrast = clampNumber(formData.get("fineContrast"), -50, 50, 0);
@@ -640,6 +747,7 @@ export async function POST(req: NextRequest) {
     const textLayers = parseTextLayers(String(formData.get("textLayers") ?? "[]"), preset);
     const shapes = parseShapes(String(formData.get("shapes") ?? "[]"));
     const facePreserve = parseFacePreserve(formData.get("facePreserve"));
+    const editZone = parseEditZone(formData.get("editZone"));
 
     const referenceFiles = formData
       .getAll("referenceImages")
@@ -676,6 +784,7 @@ export async function POST(req: NextRequest) {
 
     let base: ReturnType<typeof sharp>;
     let aiBaseForResponse: Buffer | null = null;
+    let usedOpenAiCall = false;
 
     if (aiEnhance) {
       // If the client already has the AI-generated base from a previous
@@ -702,6 +811,7 @@ export async function POST(req: NextRequest) {
             references,
             facePreserve
           );
+          usedOpenAiCall = true;
         } catch (err) {
           if (err instanceof AiNotConfiguredError) {
             return NextResponse.json({ error: err.message }, { status: 501 });
@@ -713,6 +823,27 @@ export async function POST(req: NextRequest) {
           );
         }
       }
+
+      // A "zone à retoucher" + instruction always triggers a real, targeted
+      // second call — a deliberate local fix (tone this down, move that
+      // over), scoped to just that region, on top of whichever base image
+      // we ended up with above (fresh or cached).
+      if (editZone && editInstruction) {
+        try {
+          aiBuffer = await applyTargetedEdit(aiBuffer, editInstruction, editZone, facePreserve);
+          usedOpenAiCall = true;
+        } catch (err) {
+          if (err instanceof AiNotConfiguredError) {
+            return NextResponse.json({ error: err.message }, { status: 501 });
+          }
+          console.error("openai targeted edit error", err);
+          return NextResponse.json(
+            { error: describeAiError(err) },
+            { status: 502 }
+          );
+        }
+      }
+
       aiBaseForResponse = aiBuffer;
       const fine = fineOnlyAdjustments(fineBrightness, fineContrast, fineSaturation);
       base = sharp(aiBuffer)
@@ -767,6 +898,10 @@ export async function POST(req: NextRequest) {
       aiBase: aiBaseForResponse
         ? `data:image/png;base64,${aiBaseForResponse.toString("base64")}`
         : undefined,
+      // Authoritative flag: did this request actually call OpenAI (fresh
+      // generation and/or targeted edit)? The client uses this — not its
+      // own guess — to decide whether to count against the AI quota.
+      usedOpenAiCall,
     });
   } catch (err) {
     console.error("generate error", err);

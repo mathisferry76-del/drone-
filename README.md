@@ -81,6 +81,14 @@ complet, pas une liste de features.
   en mode IA** : appliqués en post-traitement sur le résultat généré, pour
   corriger une IA repartie sur des couleurs trop saturées sans avoir à
   relancer une génération.
+- **Retouche ciblée d'une zone précise** : en mode IA, on peut marquer une
+  zone (déplaçable/redimensionnable, comme la zone visage) sur un élément
+  précis de la photo (couleur trop vive, objet mal placé) et décrire le
+  changement voulu. Le serveur construit le masque inverse de celui du
+  visage — tout est préservé sauf cette zone — et envoie une seconde
+  requête `images.edit` ciblée à OpenAI, en protégeant toujours le visage
+  même si la zone le chevauche. C'est un vrai appel IA (facturé, décompté
+  du quota Creator), distinct de la retouche texte/couleur gratuite.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 

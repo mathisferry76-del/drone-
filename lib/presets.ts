@@ -44,6 +44,13 @@ export const AI_QUALITY_DIRECTIVE =
 export const FACE_ZONE_BASE_RX = 0.15;
 export const FACE_ZONE_BASE_RY = 0.24;
 
+// Same idea, but for the general-purpose "zone à retoucher" — a region the
+// user marks for a targeted local edit (tone down a color, nudge an object)
+// instead of a full regeneration. Squarer and roomier by default since it
+// can target anything, not just a face.
+export const EDIT_ZONE_BASE_RX = 0.18;
+export const EDIT_ZONE_BASE_RY = 0.18;
+
 export const PRESETS: Preset[] = [
   {
     id: "bold-impact",
