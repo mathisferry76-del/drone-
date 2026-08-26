@@ -114,6 +114,16 @@ async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
   return res.blob();
 }
 
+// 1x1 transparent PNG. When a cached AI base image is reused, the server
+// never reads the original "image" field (it rebuilds everything from the
+// cached base) — but a file must still be sent to pass validation. Sending
+// the real, full-size photo again on top of the already-generated base
+// image can push the request past Vercel's body size limit and make the
+// whole call fail with a generic network error, so send this tiny
+// placeholder instead in that case.
+const TINY_PLACEHOLDER_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
 const BACKGROUND_STYLE_OPTIONS: { id: BackgroundStyle; label: string }[] = [
   { id: "panel", label: "Panneau" },
   { id: "shadow", label: "Ombre" },
@@ -518,7 +528,11 @@ export default function GeneratePage() {
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.append("image", file);
+      formData.append(
+        "image",
+        reuseCache ? await dataUrlToBlob(TINY_PLACEHOLDER_PNG) : file,
+        reuseCache ? "placeholder.png" : file.name
+      );
       formData.append("presetId", presetId);
       formData.append("watermark", isPaid ? "false" : "true");
       formData.append("aiEnhance", willUseAi ? "true" : "false");
