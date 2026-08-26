@@ -87,6 +87,12 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
 
+-- Le trigger ne génère un code que pour les *nouvelles* inscriptions —
+-- comble le code manquant pour les comptes déjà créés avant ce script.
+update public.profiles
+set referral_code = upper(substr(replace(id::text, '-', ''), 1, 8))
+where referral_code is null;
+
 -- Bucket de stockage pour les miniatures générées (privé — accès via URL
 -- signée générée par le serveur, jamais public).
 insert into storage.buckets (id, name, public)
