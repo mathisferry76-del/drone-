@@ -580,10 +580,9 @@ function scalePresetIntensity(
 // elements from them (e.g. "add the logo from this image").
 async function applyAiEnhancement(
   inputBuffer: Buffer,
-  mimeType: string,
   preset: Preset,
   userDescription: string,
-  references: { buffer: Buffer; mimeType: string }[],
+  references: { buffer: Buffer }[],
   facePreserve: FacePreserve | null
 ): Promise<Buffer> {
   const openai = getOpenAI();
@@ -591,18 +590,36 @@ async function applyAiEnhancement(
     throw new AiNotConfiguredError();
   }
 
-  const uploadable = await toFile(inputBuffer, "photo.png", {
-    type: mimeType || "image/png",
-  });
+  // Always re-encode to real PNG bytes before sending to OpenAI, regardless
+  // of the source format. Two real bugs otherwise: (1) the filename was
+  // hardcoded to "photo.png" while the declared content-type followed
+  // whatever the browser reported (jpeg, webp...) — a mismatch some clients
+  // reject outright; (2) formats OpenAI doesn't accept at all (HEIC/HEIF,
+  // the default on iPhone camera rolls) would get forwarded as-is and
+  // rejected with a generic "invalid image file" error. sharp can decode
+  // all of these and re-encode to a guaranteed-valid PNG.
+  let normalizedInput: Buffer;
+  try {
+    normalizedInput = await sharp(inputBuffer).png().toBuffer();
+  } catch {
+    throw new Error(
+      "Cette photo n'a pas pu être lue par le serveur. Essaie de la réexporter en JPEG ou PNG."
+    );
+  }
+
+  const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
 
   const images = [uploadable];
   let referenceNote = "";
   if (references.length > 0) {
     for (let i = 0; i < references.length; i++) {
-      const ref = references[i];
-      images.push(
-        await toFile(ref.buffer, `reference-${i}.png`, { type: ref.mimeType || "image/png" })
-      );
+      let normalizedRef: Buffer;
+      try {
+        normalizedRef = await sharp(references[i].buffer).png().toBuffer();
+      } catch {
+        continue;
+      }
+      images.push(await toFile(normalizedRef, `reference-${i}.png`, { type: "image/png" }));
     }
     referenceNote =
       ` ${references.length} additional reference image(s) are also provided — use them only for the specific elements the user describes below (e.g. a logo, an object, a color palette), and blend them naturally into the main photo. Do not otherwise let a reference image replace the main subject.`;
@@ -613,7 +630,7 @@ async function applyAiEnhancement(
   // cannot be regenerated no matter what the rest of the prompt asks for.
   let maskUploadable: Awaited<ReturnType<typeof toFile>> | undefined;
   if (facePreserve) {
-    const meta = await sharp(inputBuffer).metadata();
+    const meta = await sharp(normalizedInput).metadata();
     const width = meta.width ?? 0;
     const height = meta.height ?? 0;
     if (width > 0 && height > 0) {
@@ -879,14 +896,13 @@ export async function POST(req: NextRequest) {
       if (cachedBase instanceof File) {
         aiBuffer = Buffer.from(await cachedBase.arrayBuffer());
       } else {
-        const references: { buffer: Buffer; mimeType: string }[] = [];
+        const references: { buffer: Buffer }[] = [];
         for (const ref of referenceFiles) {
-          references.push({ buffer: Buffer.from(await ref.arrayBuffer()), mimeType: ref.type });
+          references.push({ buffer: Buffer.from(await ref.arrayBuffer()) });
         }
         try {
           aiBuffer = await applyAiEnhancement(
             inputBuffer,
-            file.type,
             preset,
             aiDescription,
             references,
