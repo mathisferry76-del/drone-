@@ -207,7 +207,13 @@ export default function GeneratePage() {
   // fix the "anyone can fake Pro in localStorage" hole); anonymous visitors
   // keep the existing device-local simulation so the free tier stays
   // frictionless without an account.
-  const effectivePlan: Plan = loggedIn && profile ? profile.plan : plan;
+  // TEMPORAIRE — accès Pro pour un test manuel, à retirer sur demande.
+  // Ne modifie rien en base, juste ce qui est affiché dans ce navigateur.
+  const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com"];
+  const isTempProTest = Boolean(
+    session?.user.email && TEMP_PRO_TEST_EMAILS.includes(session.user.email.toLowerCase())
+  );
+  const effectivePlan: Plan = isTempProTest ? "pro" : loggedIn && profile ? profile.plan : plan;
   const effectiveUsedCount = loggedIn && profile ? profile.free_generations_used : usedCount;
   const effectiveAiUsesThisMonth =
     loggedIn && profile
