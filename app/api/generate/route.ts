@@ -923,7 +923,11 @@ export async function POST(req: NextRequest) {
         .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
         .modulate({ brightness: fine.brightness, saturation: fine.saturation })
         .linear(fine.contrastA, fine.contrastB)
-        .sharpen();
+        // OpenAI's output is already crisp — the default sharpen() strength
+        // (tuned for softening from JPEG-compressed phone photos in the
+        // filter-only branch below) over-sharpens fine texture here
+        // (rock, foliage) into a noisy/pixelated look.
+        .sharpen({ sigma: 0.5 });
     } else {
       const scaled = scalePresetIntensity(
         preset,
