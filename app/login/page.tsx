@@ -22,6 +22,7 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [forgotStatus, setForgotStatus] = useState<"idle" | "sending" | "sent">("idle");
   const searchParams = useSearchParams();
   const refCode = searchParams.get("ref");
   const router = useRouter();
@@ -63,6 +64,25 @@ function LoginForm() {
       return;
     }
     setStatus("sent");
+  }
+
+  async function handleForgotPassword() {
+    setError(null);
+    if (!supabase) return;
+    if (!email.trim()) {
+      setError("Entre ton email d'abord.");
+      return;
+    }
+    setForgotStatus("sending");
+    const { error: authError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin + "/reset-password",
+    });
+    if (authError) {
+      setError(authError.message);
+      setForgotStatus("idle");
+      return;
+    }
+    setForgotStatus("sent");
   }
 
   async function handlePasswordSubmit(e: React.FormEvent) {
@@ -234,6 +254,21 @@ function LoginForm() {
               ? "Pas encore de compte ? Créer un compte"
               : "Déjà un compte ? Se connecter"}
           </button>
+          {passwordAction === "signin" &&
+            (forgotStatus === "sent" ? (
+              <p className="text-center text-xs text-emerald-400">
+                Email de réinitialisation envoyé, si ce compte existe.
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={forgotStatus === "sending"}
+                className="w-full text-center text-xs text-zinc-500 hover:text-zinc-300 hover:underline disabled:opacity-60"
+              >
+                {forgotStatus === "sending" ? "Envoi..." : "Mot de passe oublié ?"}
+              </button>
+            ))}
         </form>
       )}
     </div>
