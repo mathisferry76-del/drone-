@@ -160,8 +160,8 @@ function parseEditZone(raw: unknown): EditZone | null {
     return {
       x: clampNumber(parsed.x, 0, 1, 0.5),
       y: clampNumber(parsed.y, 0, 1, 0.5),
-      sizeX: clampNumber(parsed.sizeX, 0.4, 2.5, 1),
-      sizeY: clampNumber(parsed.sizeY, 0.4, 2.5, 1),
+      sizeX: clampNumber(parsed.sizeX, 0.15, 2.5, 1),
+      sizeY: clampNumber(parsed.sizeY, 0.15, 2.5, 1),
     };
   } catch {
     return null;

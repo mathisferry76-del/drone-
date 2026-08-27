@@ -1235,7 +1235,7 @@ export default function GeneratePage() {
                           </div>
                           <input
                             type="range"
-                            min={0.5}
+                            min={0.15}
                             max={2.5}
                             step={0.05}
                             value={editZone.sizeX}
@@ -1256,7 +1256,7 @@ export default function GeneratePage() {
                           </div>
                           <input
                             type="range"
-                            min={0.5}
+                            min={0.15}
                             max={2.5}
                             step={0.05}
                             value={editZone.sizeY}
