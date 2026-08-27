@@ -1,4 +1,4 @@
--- ThumbAI — schema Supabase
+-- MIN IA — schema Supabase
 -- À exécuter une fois dans Supabase : Project -> SQL Editor -> New query -> colle tout -> Run.
 
 create table if not exists public.profiles (

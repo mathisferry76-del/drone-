@@ -1,4 +1,4 @@
-# ThumbAI — générateur de miniatures pour créateurs
+# MIN IA — générateur de miniatures pour créateurs
 
 MVP fonctionnel d'un SaaS qui génère des miniatures YouTube/TikTok/Reels
 optimisées pour le clic à partir d'une photo, d'un style et d'un titre.

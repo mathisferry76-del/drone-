@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 const SITE_URL = "https://saas-kappa-nine.vercel.app";
-const TITLE = "ThumbAI — Miniatures IA pour créateurs";
+const TITLE = "MIN IA — Miniatures IA pour créateurs";
 const DESCRIPTION =
   "Génère des miniatures YouTube/TikTok/Reels optimisées pour le clic, dans ton propre style, en quelques secondes.";
 
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     title: TITLE,
     description: DESCRIPTION,
     url: SITE_URL,
-    siteName: "ThumbAI",
+    siteName: "MIN IA",
     locale: "fr_FR",
     type: "website",
     images: [{ url: "/examples/bold-impact.webp", width: 1280, height: 720 }],

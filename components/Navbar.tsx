@@ -31,8 +31,8 @@ export default function Navbar() {
           className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white"
           onClick={() => setOpen(false)}
         >
-          <span className="rounded bg-yellow-400 px-1.5 py-0.5 text-black">Thumb</span>
-          AI
+          <span className="rounded bg-yellow-400 px-1.5 py-0.5 text-black">MIN</span>
+          IA
         </Link>
 
         <div className="hidden items-center gap-6 text-sm font-medium text-zinc-300 sm:flex">

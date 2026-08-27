@@ -1431,7 +1431,7 @@ export default function GeneratePage() {
             <>
               <p className="mt-2 text-center text-xs text-zinc-500">
                 {showOriginal
-                  ? "Ta photo de départ, avant ThumbAI."
+                  ? "Ta photo de départ, avant MIN IA."
                   : "Bascule sur \"Avant\" pour voir le chemin parcouru."}
               </p>
 

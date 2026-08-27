@@ -71,7 +71,7 @@ export default function Home() {
             </span>
           </h1>
           <p className="mt-6 max-w-xl text-lg text-zinc-400">
-            Upload une photo, choisis un style, ajoute ton titre. ThumbAI
+            Upload une photo, choisis un style, ajoute ton titre. MIN IA
             génère en 10 secondes une miniature optimisée pour le clic —
             sans designer, sans Photoshop, sans passer 30 minutes sur
             Canva.
@@ -150,7 +150,7 @@ export default function Home() {
           De la photo brute à la miniature qui capte le clic
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-zinc-400">
-          Pas besoin d&apos;être designer : ThumbAI fait le travail de
+          Pas besoin d&apos;être designer : MIN IA fait le travail de
           retouche, de mise en page et de texte à ta place, en quelques
           secondes.
         </p>
@@ -168,7 +168,7 @@ export default function Home() {
             <div className="relative aspect-video w-full">
               <Image
                 src="/examples/bold-impact.webp"
-                alt="Exemple de miniature générée avec ThumbAI"
+                alt="Exemple de miniature générée avec MIN IA"
                 fill
                 sizes="(min-width: 640px) 40vw, 100vw"
                 className="object-cover"
@@ -186,7 +186,7 @@ export default function Home() {
           Nos résultats
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-zinc-400">
-          Un aperçu de miniatures générées avec ThumbAI, sur différentes
+          Un aperçu de miniatures générées avec MIN IA, sur différentes
           thématiques de chaîne.
         </p>
         <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-4 sm:auto-rows-[9rem]">
@@ -197,7 +197,7 @@ export default function Home() {
             >
               <Image
                 src={`/examples/${r.id}.webp`}
-                alt={`Miniature générée avec ThumbAI — style ${r.niche}`}
+                alt={`Miniature générée avec MIN IA — style ${r.niche}`}
                 fill
                 sizes="(min-width: 640px) 25vw, 100vw"
                 className="object-cover transition duration-300 group-hover:scale-105"
