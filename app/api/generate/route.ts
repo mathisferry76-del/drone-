@@ -131,7 +131,7 @@ async function buildFaceMask(
   const cy = face.y * height;
   const rx = FACE_ZONE_BASE_RX * face.sizeX * width;
   const ry = FACE_ZONE_BASE_RY * face.sizeY * height;
-  const blur = Math.max(rx, ry) * 0.2;
+  const blur = Math.max(rx, ry) * 0.35;
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <filter id="feather" x="-60%" y="-60%" width="220%" height="220%">
