@@ -2,13 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import type { PaidPlan } from "@/lib/presets";
 
 export const runtime = "nodejs";
 
-function planFromPriceId(priceId: string | null | undefined): "creator" | "pro" | null {
+function planFromPriceId(priceId: string | null | undefined): PaidPlan | null {
   if (!priceId) return null;
+  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER) return "starter";
   if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_CREATOR) return "creator";
   if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO) return "pro";
+  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_STUDIO) return "studio";
   return null;
 }
 

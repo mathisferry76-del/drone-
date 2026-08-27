@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   PRESETS,
-  FREE_GENERATIONS_PER_DEVICE,
-  CREATOR_AI_MONTHLY_LIMIT,
+  PLAN_AI_CAPS,
+  PaidPlan,
   FACE_ZONE_BASE_RX,
   FACE_ZONE_BASE_RY,
   EDIT_ZONE_BASE_RX,
@@ -16,16 +16,13 @@ import {
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
-const USAGE_KEY = "thumbai_free_generations_used";
-const PLAN_KEY = "thumbai_plan";
-const AI_USAGE_KEY = "thumbai_ai_usage";
 const AI_DESCRIPTION_MAX = 3000;
 const EDIT_INSTRUCTION_MAX = 300;
 const MAX_TEXT_LAYERS = 5;
 const MAX_SHAPES = 8;
 const MAX_REFERENCE_IMAGES = 3;
 
-type Plan = "free" | "creator" | "pro";
+type Plan = "free" | PaidPlan;
 type BackgroundStyle = "panel" | "shadow" | "none";
 type ShapeType = "arrow" | "circle" | "rectangle";
 
@@ -181,11 +178,8 @@ export default function GeneratePage() {
   const [showOriginal, setShowOriginal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [usedCount, setUsedCount] = useState(0);
-  const [plan, setPlan] = useState<Plan>("free");
   const [aiEnhance, setAiEnhance] = useState(false);
   const [aiDescription, setAiDescription] = useState("");
-  const [aiUsesThisMonth, setAiUsesThisMonth] = useState(0);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const [facePreserve, setFacePreserve] = useState<FacePreserveState | null>(null);
   const [editZone, setEditZone] = useState<EditZoneState | null>(null);
@@ -199,7 +193,7 @@ export default function GeneratePage() {
   const previewBoxRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ kind: "text" | "shape" | "face" | "editzone"; id: string } | null>(null);
 
-  const { session } = useSupabaseUser();
+  const { loading: authLoading, session } = useSupabaseUser();
   const loggedIn = Boolean(session);
 
   async function refetchProfile() {
@@ -213,69 +207,28 @@ export default function GeneratePage() {
     if (data) setProfile(data as Profile);
   }
 
-  // Logged-in users are the server-verified source of truth (real accounts
-  // fix the "anyone can fake Pro in localStorage" hole); anonymous visitors
-  // keep the existing device-local simulation so the free tier stays
-  // frictionless without an account.
+  // Vrai paywall : aucune génération sans compte connecté et abonné. Le plan
+  // et le quota affichés viennent uniquement du profil Supabase réel — plus
+  // de simulation locale pour les visiteurs non connectés.
   // TEMPORAIRE — accès Pro pour un test manuel, à retirer sur demande.
   // Ne modifie rien en base, juste ce qui est affiché dans ce navigateur.
   const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com", "mathis.ferry76@gmail.com"];
   const isTempProTest = Boolean(
     session?.user.email && TEMP_PRO_TEST_EMAILS.includes(session.user.email.toLowerCase())
   );
-  const effectivePlan: Plan = isTempProTest ? "pro" : loggedIn && profile ? profile.plan : plan;
-  const effectiveUsedCount = loggedIn && profile ? profile.free_generations_used : usedCount;
-  const effectiveAiUsesThisMonth =
-    loggedIn && profile
-      ? profile.ai_uses_month_key === currentMonthId()
-        ? profile.ai_uses_this_month
-        : 0
-      : aiUsesThisMonth;
-
+  const effectivePlan: Plan = isTempProTest ? "pro" : (profile?.plan ?? "free");
   const isPaid = effectivePlan !== "free";
-  const aiPlanEligible = effectivePlan === "creator" || effectivePlan === "pro";
-  const aiLimitReached =
-    effectivePlan === "creator" && effectiveAiUsesThisMonth >= CREATOR_AI_MONTHLY_LIMIT;
-  // AI always requires a real, logged-in account now — the whole point of
-  // moving plan/quota server-side was to close that off for anonymous use.
-  const canUseAi = loggedIn && aiPlanEligible && !aiLimitReached;
-  const aiRemaining = Math.max(CREATOR_AI_MONTHLY_LIMIT - effectiveAiUsesThisMonth, 0);
-
-  // localStorage/window only exist client-side, so this state can't be read
-  // during the server render — it has to be hydrated in an effect.
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    const used = Number(window.localStorage.getItem(USAGE_KEY) ?? "0");
-    const params = new URLSearchParams(window.location.search);
-    const justUpgraded = params.get("success") === "true";
-    const upgradedTier = params.get("tier") === "pro" ? "pro" : "creator";
-
-    if (justUpgraded) {
-      window.localStorage.setItem(PLAN_KEY, upgradedTier);
-    }
-
-    const storedPlan = window.localStorage.getItem(PLAN_KEY);
-    const resolvedPlan: Plan = justUpgraded
-      ? upgradedTier
-      : storedPlan === "pro" || storedPlan === "creator"
-        ? storedPlan
-        : "free";
-
-    const month = currentMonthId();
-    let aiUsage = { month, count: 0 };
-    try {
-      const stored = JSON.parse(window.localStorage.getItem(AI_USAGE_KEY) ?? "null");
-      if (stored && stored.month === month) aiUsage = stored;
-    } catch {
-      // ignore malformed stored value, fall back to a fresh counter
-    }
-    window.localStorage.setItem(AI_USAGE_KEY, JSON.stringify(aiUsage));
-
-    setUsedCount(used);
-    setPlan(resolvedPlan);
-    setAiUsesThisMonth(aiUsage.count);
-  }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const aiCap = isPaid
+    ? PLAN_AI_CAPS[effectivePlan as PaidPlan] + (profile?.bonus_generations ?? 0)
+    : 0;
+  const effectiveAiUsesThisMonth = profile
+    ? profile.ai_uses_month_key === currentMonthId()
+      ? profile.ai_uses_this_month
+      : 0
+    : 0;
+  const aiLimitReached = effectiveAiUsesThisMonth >= aiCap;
+  const canUseAi = loggedIn && isPaid && !aiLimitReached;
+  const aiRemaining = Math.max(aiCap - effectiveAiUsesThisMonth, 0);
 
   // Once logged in, the account's real profile (plan + quota) takes over
   // from the localStorage simulation above. Right after a Stripe checkout
@@ -479,7 +432,6 @@ export default function GeneratePage() {
     dragRef.current = null;
   }
 
-  const quotaReached = !isPaid && effectiveUsedCount >= FREE_GENERATIONS_PER_DEVICE;
   const hasAnyText = textLayers.some((l) => l.text.trim());
 
   // Identifies the inputs that actually change what OpenAI would generate.
@@ -515,11 +467,6 @@ export default function GeneratePage() {
       setError("Ajoute au moins un texte pour ta miniature.");
       return;
     }
-    if (quotaReached) {
-      setError("Quota gratuit atteint. Passe sur un plan payant pour continuer.");
-      return;
-    }
-
     const cacheKey = willUseAi ? computeAiCacheKey() : null;
     const reuseCache = Boolean(
       willUseAi && aiBaseCache && cacheKey && aiBaseCache.key === cacheKey
@@ -534,7 +481,6 @@ export default function GeneratePage() {
         reuseCache ? "placeholder.png" : file.name
       );
       formData.append("presetId", presetId);
-      formData.append("watermark", isPaid ? "false" : "true");
       formData.append("aiEnhance", willUseAi ? "true" : "false");
       formData.append("aiDescription", aiDescription);
       formData.append("intensity", String(intensity));
@@ -594,25 +540,9 @@ export default function GeneratePage() {
         setEditInstruction("");
       }
 
-      if (loggedIn) {
-        // Logged in: the server already updated the real quota/history —
-        // just pull the fresh numbers instead of guessing them locally.
-        await refetchProfile();
-      } else {
-        if (!isPaid) {
-          const next = usedCount + 1;
-          setUsedCount(next);
-          window.localStorage.setItem(USAGE_KEY, String(next));
-        }
-        if (data.usedOpenAiCall && plan === "creator") {
-          const next = aiUsesThisMonth + 1;
-          setAiUsesThisMonth(next);
-          window.localStorage.setItem(
-            AI_USAGE_KEY,
-            JSON.stringify({ month: currentMonthId(), count: next })
-          );
-        }
-      }
+      // The server already updated the real quota/history — just pull the
+      // fresh numbers instead of guessing them locally.
+      await refetchProfile();
     } catch {
       setError("Impossible de contacter le serveur. Réessaie.");
     } finally {
@@ -620,26 +550,55 @@ export default function GeneratePage() {
     }
   }
 
+  // Vrai paywall : pas de compte, ou compte sans abonnement actif -> on ne
+  // montre même pas l'éditeur, juste l'invite à se connecter/s'abonner.
+  if (authLoading || (loggedIn && !profile)) {
+    return <div className="mx-auto w-full max-w-6xl px-6 py-16 text-zinc-500">Chargement...</div>;
+  }
+
+  if (!loggedIn) {
+    return (
+      <div className="mx-auto flex min-h-[50vh] w-full max-w-xl flex-col items-center justify-center px-6 py-20 text-center">
+        <h1 className="text-2xl font-extrabold">Créer une miniature</h1>
+        <p className="mt-3 text-zinc-400">
+          Connecte-toi puis choisis un plan pour créer ta première miniature.
+        </p>
+        <Link
+          href="/login"
+          className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
+        >
+          Se connecter
+        </Link>
+      </div>
+    );
+  }
+
+  if (loggedIn && profile && !isPaid) {
+    return (
+      <div className="mx-auto flex min-h-[50vh] w-full max-w-xl flex-col items-center justify-center px-6 py-20 text-center">
+        <h1 className="text-2xl font-extrabold">Créer une miniature</h1>
+        <p className="mt-3 text-zinc-400">
+          Un abonnement est nécessaire pour créer des miniatures — choisis le
+          plan qui te convient.
+        </p>
+        <Link
+          href="/pricing"
+          className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
+        >
+          Voir les plans
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-16">
       <h1 className="text-3xl font-extrabold">Créer une miniature</h1>
       <p className="mt-2 text-zinc-400">
-        {isPaid
-          ? `Plan ${effectivePlan === "pro" ? "Pro" : "Creator"} actif — miniatures illimitées, sans filigrane.`
-          : loggedIn
-          ? `${Math.max(
-              FREE_GENERATIONS_PER_DEVICE - effectiveUsedCount,
-              0
-            )} miniature(s) gratuite(s) restante(s) sur ce compte.`
-          : `${Math.max(
-              FREE_GENERATIONS_PER_DEVICE - usedCount,
-              0
-            )} miniature(s) gratuite(s) restante(s) sur cet appareil. `}
-        {!loggedIn && (
-          <Link href="/login" className="font-semibold text-yellow-400 hover:underline">
-            Connecte-toi
-          </Link>
-        )}
+        {isPaid &&
+          `Plan ${
+            effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)
+          } actif — miniatures illimitées, sans filigrane. Il te reste ${aiRemaining}/${aiCap} génération(s) IA ce mois-ci.`}
       </p>
 
       <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-2">
@@ -1116,48 +1075,19 @@ export default function GeneratePage() {
                 className="mt-1 h-4 w-4 accent-yellow-400 disabled:opacity-40"
               />
               <span>
-                <span className="block text-sm font-bold">
-                  ✨ Amélioration IA générative{" "}
-                  {!aiPlanEligible && (
-                    <span className="ml-1 rounded-full bg-zinc-700 px-2 py-0.5 text-xs font-semibold text-zinc-300">
-                      Creator / Pro
-                    </span>
-                  )}
-                </span>
+                <span className="block text-sm font-bold">✨ Amélioration IA générative</span>
                 <span className="mt-1 block text-xs text-zinc-400">
-                  {!loggedIn &&
-                    "Nécessite un compte : connecte-toi et passe sur Creator ou Pro pour débloquer l'IA générative."}
-                  {loggedIn && effectivePlan === "pro" &&
-                    "Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative, en illimité."}
-                  {loggedIn && effectivePlan === "creator" && !aiLimitReached &&
-                    `Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative. Il te reste ${aiRemaining}/${CREATOR_AI_MONTHLY_LIMIT} génération(s) IA ce mois-ci.`}
-                  {loggedIn && effectivePlan === "creator" && aiLimitReached &&
-                    `Tu as utilisé tes ${CREATOR_AI_MONTHLY_LIMIT} générations IA incluses ce mois-ci. Reviens le mois prochain, ou passe en Pro pour un accès illimité.`}
-                  {loggedIn && !aiPlanEligible &&
-                    "Réservé aux plans Creator (2/mois) et Pro (illimité) : une vraie IA régénère l'éclairage et l'ambiance de la photo, pas juste un filtre."}
+                  {!aiLimitReached &&
+                    `Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative. Il te reste ${aiRemaining}/${aiCap} génération(s) IA ce mois-ci.`}
+                  {aiLimitReached &&
+                    `Tu as utilisé tes ${aiCap} générations IA incluses ce mois-ci. Reviens le mois prochain, ou passe sur un plan supérieur pour plus de générations.`}
                 </span>
-                {!loggedIn && (
-                  <Link
-                    href="/login"
-                    className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
-                  >
-                    Se connecter →
-                  </Link>
-                )}
-                {loggedIn && !aiPlanEligible && (
+                {aiLimitReached && (
                   <Link
                     href="/pricing"
                     className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
                   >
                     Voir les plans →
-                  </Link>
-                )}
-                {loggedIn && aiLimitReached && (
-                  <Link
-                    href="/pricing"
-                    className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
-                  >
-                    Passer en Pro pour un accès illimité →
                   </Link>
                 )}
               </span>
@@ -1440,28 +1370,19 @@ export default function GeneratePage() {
             </p>
           )}
 
-          {quotaReached ? (
-            <Link
-              href="/pricing"
-              className="block w-full rounded-full bg-yellow-400 px-6 py-3 text-center font-bold text-black transition hover:bg-yellow-300"
-            >
-              Passer sur un plan payant
-            </Link>
-          ) : (
-            <button
-              onClick={handleGenerate}
-              disabled={loading}
-              className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
-            >
-              {loading
-                ? willDoTargetedEdit
-                  ? "Retouche ciblée en cours..."
-                  : willUseAi && !willReuseAiBase
-                  ? "Génération IA en cours (10-20s)..."
-                  : "Génération..."
-                : "Générer la miniature"}
-            </button>
-          )}
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
+          >
+            {loading
+              ? willDoTargetedEdit
+                ? "Retouche ciblée en cours..."
+                : willUseAi && !willReuseAiBase
+                ? "Génération IA en cours (10-20s)..."
+                : "Génération..."
+              : "Générer la miniature"}
+          </button>
         </div>
 
         <div className="lg:sticky lg:top-6 lg:self-start">

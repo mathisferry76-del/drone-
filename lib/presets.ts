@@ -228,11 +228,28 @@ export function getPreset(id: string): Preset {
   return PRESETS.find((p) => p.id === id) ?? PRESETS[0];
 }
 
-export const FREE_GENERATIONS_PER_DEVICE = 3;
-export const CREATOR_AI_MONTHLY_LIMIT = 2;
+// Pas d'offre gratuite : "free" désigne uniquement un compte pas (ou plus)
+// abonné, qui n'a accès à aucune génération (ni filtre, ni IA).
+export type PaidPlan = "starter" | "creator" | "pro" | "studio";
+export type Plan = "free" | PaidPlan;
+
+export const PAID_PLAN_IDS: PaidPlan[] = ["starter", "creator", "pro", "studio"];
+
+// Chaque génération IA (gpt-image-1, 1536x1024, qualité "high") coûte
+// environ 0,25€ à 0,30€ à l'API OpenAI (davantage si l'utilisateur fait
+// aussi une retouche ciblée, qui déclenche un second appel). Les caps et
+// prix ci-dessous sont calés sur ce coût réel avec une marge confortable
+// à chaque palier, la marge par génération augmentant avec le prix pour
+// récompenser les paliers supérieurs.
+export const PLAN_AI_CAPS: Record<PaidPlan, number> = {
+  starter: 8,
+  creator: 20,
+  pro: 50,
+  studio: 120,
+};
 
 export interface PricingTier {
-  id: "free" | "creator" | "pro";
+  id: Plan;
   name: string;
   price: string;
   period: string;
@@ -247,38 +264,40 @@ export interface PricingTier {
 
 export const PRICING_TIERS: PricingTier[] = [
   {
-    id: "free",
-    name: "Free",
-    price: "0€",
-    period: "",
-    tagline: "Pour tester l'outil",
+    id: "starter",
+    name: "Starter",
+    price: "9,99€",
+    period: "/mois",
+    tagline: "Pour démarrer sérieusement",
     description:
-      "Génère quelques miniatures avec les styles filtres, sans engagement, pour voir si l'outil te convient.",
+      "Miniatures illimitées avec les styles filtres, sans filigrane, plus un premier quota d'IA générative chaque mois.",
     features: [
-      `${FREE_GENERATIONS_PER_DEVICE} miniatures avec filigrane`,
-      "10 styles filtres (couleurs, contraste, texte)",
+      "Miniatures illimitées (styles filtres)",
+      "Sans filigrane",
+      "10 styles filtres + nouveaux styles à venir",
+      `IA générative : ${PLAN_AI_CAPS.starter} générations par mois`,
       "Export HD 1280x720",
     ],
-    notIncluded: ["Pas d'IA générative", "Filigrane sur chaque export"],
-    cta: "Essayer gratuitement",
-    priceId: null,
+    notIncluded: [`IA générative limitée à ${PLAN_AI_CAPS.starter}/mois`],
+    cta: "Choisir Starter",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER ?? null,
   },
   {
     id: "creator",
     name: "Creator",
-    price: "19€",
+    price: "19,99€",
     period: "/mois",
     tagline: "Pour publier régulièrement",
     description:
-      "Le plan pour un créateur solo actif : miniatures illimitées avec les styles filtres, sans filigrane, plus un peu d'IA générative chaque mois.",
+      "Le plan pour un créateur solo actif qui veut utiliser l'IA générative sur la majorité de ses vidéos.",
     features: [
-      "Miniatures illimitées",
+      "Miniatures illimitées (styles filtres)",
       "Sans filigrane",
       "10 styles filtres + nouveaux styles à venir",
-      `IA générative : ${CREATOR_AI_MONTHLY_LIMIT} générations par mois`,
+      `IA générative : ${PLAN_AI_CAPS.creator} générations par mois`,
       "Export HD 1280x720",
     ],
-    notIncluded: [`IA générative limitée à ${CREATOR_AI_MONTHLY_LIMIT}/mois (illimitée en Pro)`],
+    notIncluded: [`IA générative limitée à ${PLAN_AI_CAPS.creator}/mois`],
     cta: "Choisir Creator",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREATOR ?? null,
     highlighted: true,
@@ -286,19 +305,37 @@ export const PRICING_TIERS: PricingTier[] = [
   {
     id: "pro",
     name: "Pro",
-    price: "39€",
+    price: "34,99€",
     period: "/mois",
     tagline: "Pour un rendu qui se démarque vraiment",
     description:
-      "Tout Creator, avec l'IA générative en illimité pour retravailler l'image (lumière, ambiance, décor) autant de fois que tu veux.",
+      "Un gros volume d'IA générative pour retravailler l'image (lumière, ambiance, décor) sur quasiment toutes tes vidéos.",
     features: [
       "Tout Creator",
-      "IA générative d'image illimitée : transforme réellement la photo (éclairage, ambiance, décor), pas juste un filtre",
+      `IA générative : ${PLAN_AI_CAPS.pro} générations par mois`,
       "Jusqu'à 3 chaînes",
       "Support prioritaire",
     ],
-    notIncluded: [],
+    notIncluded: [`IA générative limitée à ${PLAN_AI_CAPS.pro}/mois`],
     cta: "Choisir Pro",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO ?? null,
+  },
+  {
+    id: "studio",
+    name: "Studio",
+    price: "59,99€",
+    period: "/mois",
+    tagline: "Pour les chaînes très actives ou multi-chaînes",
+    description:
+      "Le plus gros quota d'IA générative, pour une chaîne à fort rythme de publication ou plusieurs chaînes gérées ensemble.",
+    features: [
+      "Tout Pro",
+      `IA générative : ${PLAN_AI_CAPS.studio} générations par mois`,
+      "Chaînes illimitées",
+      "Support prioritaire",
+    ],
+    notIncluded: [],
+    cta: "Choisir Studio",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STUDIO ?? null,
   },
 ];

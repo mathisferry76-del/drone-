@@ -40,7 +40,7 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 export interface Profile {
   id: string;
   email: string | null;
-  plan: "free" | "creator" | "pro";
+  plan: "free" | "starter" | "creator" | "pro" | "studio";
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   free_generations_used: number;

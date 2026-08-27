@@ -20,7 +20,7 @@ const FAQS = [
   },
   {
     q: "Quelle différence avec Canva ou Photoshop ?",
-    a: "Pas de mise en page à faire à la main : tu choisis un style, tu tapes ton titre, c'est généré en quelques secondes. Les plans Creator et Pro vont plus loin avec une IA générative qui retravaille l'image elle-même, pas seulement le texte par-dessus.",
+    a: "Pas de mise en page à faire à la main : tu choisis un style, tu tapes ton titre, c'est généré en quelques secondes. Tous les plans incluent aussi une IA générative qui retravaille l'image elle-même, pas seulement le texte par-dessus.",
   },
   {
     q: "Quelle IA utilisez-vous pour générer les images ?",
@@ -28,7 +28,11 @@ const FAQS = [
   },
   {
     q: "Combien de temps prend une génération ?",
-    a: "Quelques secondes pour un style filtre. Avec l'amélioration IA (Creator/Pro), compte 10 à 20 secondes, le temps que le modèle génératif retravaille l'image.",
+    a: "Quelques secondes pour un style filtre. Avec l'amélioration IA, compte 10 à 20 secondes, le temps que le modèle génératif retravaille l'image.",
+  },
+  {
+    q: "Y a-t-il un essai gratuit ?",
+    a: "Non — chaque génération IA a un vrai coût de calcul, donc un abonnement est nécessaire dès la première miniature. En échange, même le plan le plus accessible inclut un vrai quota d'IA générative, pas juste une démo limitée.",
   },
   {
     q: "Je peux ajouter plusieurs textes, flèches ou cercles sur ma miniature ?",
@@ -40,7 +44,7 @@ const FAQS = [
   },
   {
     q: "Je peux annuler à tout moment ?",
-    a: "Oui, les abonnements Creator et Pro sont sans engagement, résiliables à tout moment depuis Stripe.",
+    a: "Oui, tous les abonnements sont sans engagement, résiliables à tout moment depuis Stripe.",
   },
   {
     q: "Mes photos sont-elles gardées ou utilisées pour autre chose ?",
@@ -74,10 +78,10 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-col gap-4 sm:flex-row">
             <Link
-              href="/generate"
+              href="/pricing"
               className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:bg-yellow-300"
             >
-              Créer ma miniature gratuite →
+              Créer ma première miniature →
             </Link>
             <Link
               href="/pricing"
@@ -89,10 +93,10 @@ export default function Home() {
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
             <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Sans carte bancaire
+              <span className="text-emerald-400">✓</span> Résiliable en 1 clic
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Sans engagement
+              <span className="text-emerald-400">✓</span> Sans engagement de durée
             </span>
             <span className="flex items-center gap-1.5">
               <span className="text-emerald-400">✓</span> Paiement sécurisé (Stripe)
@@ -206,8 +210,8 @@ export default function Home() {
         </div>
         <p className="mt-8 text-center text-sm text-zinc-500">
           Envie du même résultat sur tes vidéos ?{" "}
-          <Link href="/generate" className="font-semibold text-yellow-400 hover:text-yellow-300">
-            Essaie gratuitement →
+          <Link href="/pricing" className="font-semibold text-yellow-400 hover:text-yellow-300">
+            Voir les plans →
           </Link>
         </p>
       </section>
@@ -255,18 +259,19 @@ export default function Home() {
             <h3 className="font-bold">🎨 Styles filtres (tous les plans)</h3>
             <p className="mt-2 text-sm text-zinc-400">
               Recadrage automatique, ajustement des couleurs et du contraste,
-              texte impactant avec fond lisible. Rapide, gratuit à générer,
-              disponible dès l&apos;offre gratuite, en illimité dès Creator.
+              texte impactant avec fond lisible. Illimité et sans filigrane
+              sur tous les plans.
             </p>
           </div>
           <div className="rounded-2xl border border-yellow-800/40 bg-yellow-400/5 p-6">
-            <h3 className="font-bold">✨ IA générative (Creator &amp; Pro)</h3>
+            <h3 className="font-bold">✨ IA générative (tous les plans)</h3>
             <p className="mt-2 text-sm text-zinc-400">
               Ta photo est envoyée à un modèle d&apos;IA générative qui
               retravaille réellement l&apos;éclairage, l&apos;ambiance et le
               décor — un rendu qu&apos;un simple filtre de couleur ne peut
-              pas produire, tout en gardant ton sujet reconnaissable. Incluse
-              à raison de 2 générations/mois en Creator, illimitée en Pro.
+              pas produire, tout en gardant ton sujet reconnaissable. Un
+              quota mensuel de générations est inclus dans chaque plan, plus
+              grand sur les plans supérieurs.
             </p>
           </div>
         </div>
@@ -294,10 +299,10 @@ export default function Home() {
           Prêt à arrêter de perdre 30 minutes par miniature ?
         </h2>
         <Link
-          href="/generate"
+          href="/pricing"
           className="mt-6 inline-block rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:bg-yellow-300"
         >
-          Essayer gratuitement
+          Voir les plans
         </Link>
       </section>
     </div>

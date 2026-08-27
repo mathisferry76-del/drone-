@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { getUserFromAuthHeader } from "@/lib/supabase";
+import { PAID_PLAN_IDS } from "@/lib/presets";
 
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
@@ -34,7 +35,9 @@ export async function POST(req: NextRequest) {
     }
 
     const origin = req.headers.get("origin") ?? "http://localhost:3000";
-    const safeTier = tier === "pro" ? "pro" : "creator";
+    const safeTier = PAID_PLAN_IDS.includes(tier as (typeof PAID_PLAN_IDS)[number])
+      ? tier
+      : "creator";
 
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",

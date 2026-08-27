@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PRICING_TIERS } from "@/lib/presets";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
@@ -13,7 +12,6 @@ export default function PricingPage() {
   const router = useRouter();
 
   async function handleCheckout(tierId: string, priceId: string | null) {
-    if (tierId === "free") return;
     setError(null);
 
     if (!priceId) {
@@ -56,7 +54,7 @@ export default function PricingPage() {
       <div className="text-center">
         <h1 className="text-3xl font-extrabold sm:text-4xl">Des tarifs simples</h1>
         <p className="mt-3 text-zinc-400">
-          Annule quand tu veux. Pas de carte bancaire pour l&apos;offre gratuite.
+          Choisis le plan adapté à ton rythme de publication. Annule quand tu veux.
         </p>
         <div className="mt-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
           <span className="flex items-center gap-1.5">
@@ -77,7 +75,7 @@ export default function PricingPage() {
         </p>
       )}
 
-      <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {PRICING_TIERS.map((tier) => (
           <div
             key={tier.id}
@@ -118,48 +116,38 @@ export default function PricingPage() {
               </ul>
             )}
             <div className="flex-1" />
-            {tier.id === "free" ? (
-              <Link
-                href="/generate"
-                className="mt-8 rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold transition hover:border-zinc-400"
-              >
-                {tier.cta}
-              </Link>
-            ) : (
-              <button
-                onClick={() => handleCheckout(tier.id, tier.priceId)}
-                disabled={loadingTier === tier.id}
-                className={`mt-8 rounded-full px-6 py-3 text-center font-bold transition disabled:opacity-60 ${
-                  tier.highlighted
-                    ? "bg-yellow-400 text-black hover:bg-yellow-300"
-                    : "border border-zinc-600 text-white hover:border-zinc-400"
-                }`}
-              >
-                {loadingTier === tier.id ? "Redirection..." : tier.cta}
-              </button>
-            )}
+            <button
+              onClick={() => handleCheckout(tier.id, tier.priceId)}
+              disabled={loadingTier === tier.id}
+              className={`mt-8 rounded-full px-6 py-3 text-center font-bold transition disabled:opacity-60 ${
+                tier.highlighted
+                  ? "bg-yellow-400 text-black hover:bg-yellow-300"
+                  : "border border-zinc-600 text-white hover:border-zinc-400"
+              }`}
+            >
+              {loadingTier === tier.id ? "Redirection..." : tier.cta}
+            </button>
           </div>
         ))}
       </div>
 
       <div className="mx-auto mt-16 max-w-3xl space-y-6">
         <h2 className="text-center text-xl font-bold">
-          Quelle différence entre les offres ?
+          Quelle différence entre les plans ?
         </h2>
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-6">
-          <h3 className="font-bold text-zinc-100">
-            Free vs Creator — le volume, pas la qualité de base
-          </h3>
+          <h3 className="font-bold text-zinc-100">Le même outil, un quota d&apos;IA différent</h3>
           <p className="mt-2 text-sm text-zinc-400">
-            Les deux utilisent les mêmes 10 styles filtres (couleur, contraste,
-            texte). La différence, c&apos;est la limite : 3 miniatures avec
-            filigrane en Free, illimité et sans filigrane en Creator. Le rendu
-            filtre de base est identique.
+            Les 4 plans donnent accès aux mêmes 10 styles filtres en illimité
+            et sans filigrane. Ce qui change, c&apos;est le nombre de
+            générations IA génératives incluses chaque mois — plus le plan
+            est élevé, plus le quota est grand et plus le prix par génération
+            baisse.
           </p>
         </div>
         <div className="rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-6">
           <h3 className="font-bold text-zinc-100">
-            L&apos;IA générative : incluse en Creator, illimitée en Pro
+            L&apos;IA générative : ce qu&apos;elle fait vraiment
           </h3>
           <p className="mt-2 text-sm text-zinc-400">
             Les styles filtres ajustent les couleurs de ta photo existante.
@@ -167,11 +155,9 @@ export default function PricingPage() {
             modèle d&apos;IA générative qui retravaille réellement
             l&apos;éclairage, l&apos;ambiance et le décor de l&apos;image,
             tout en gardant ton sujet reconnaissable — un rendu que Photoshop
-            ou un simple filtre ne peuvent pas produire. Le plan Creator
-            inclut 2 générations IA par mois, de quoi tester et
-            l&apos;utiliser sur tes vidéos les plus importantes. Le plan Pro
-            la rend illimitée — c&apos;est ce qui justifie l&apos;écart de
-            prix entre les deux.
+            ou un simple filtre ne peuvent pas produire. C&apos;est une vraie
+            génération IA à chaque fois (pas un filtre), donc chaque plan a un
+            quota mensuel plutôt qu&apos;un accès illimité.
           </p>
         </div>
       </div>

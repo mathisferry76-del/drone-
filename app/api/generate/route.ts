@@ -14,8 +14,8 @@ import {
   FACE_ZONE_BASE_RY,
   EDIT_ZONE_BASE_RX,
   EDIT_ZONE_BASE_RY,
-  FREE_GENERATIONS_PER_DEVICE,
-  CREATOR_AI_MONTHLY_LIMIT,
+  PLAN_AI_CAPS,
+  PaidPlan,
 } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
@@ -529,18 +529,6 @@ function buildContentSvg(
   </svg>`;
 }
 
-function buildWatermarkSvg(font: opentype.Font, text: string): string {
-  const fontSize = 20;
-  const width = font.getAdvanceWidth(text, fontSize);
-  const x = CANVAS_WIDTH - 24 - width;
-  const y = CANVAS_HEIGHT - 24;
-  const glyphPath = font.getPath(text, x, y, fontSize);
-
-  return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-    <path d="${glyphPath.toPathData(2)}" fill="#ffffff" fill-opacity="0.55" />
-  </svg>`;
-}
-
 function buildBorderSvg(color: string): string {
   return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">${buildBorderFragment(
     color
@@ -756,7 +744,6 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("image");
     const presetId = String(formData.get("presetId") ?? "bold-impact");
-    const watermark = String(formData.get("watermark") ?? "true") === "true";
     const aiEnhance = String(formData.get("aiEnhance") ?? "false") === "true";
     const aiDescription = String(formData.get("aiDescription") ?? "").slice(0, 3000);
     const editInstruction = String(formData.get("editInstruction") ?? "").trim().slice(0, 300);
@@ -775,24 +762,23 @@ export async function POST(req: NextRequest) {
     const facePreserve = parseFacePreserve(formData.get("facePreserve"));
     const editZone = parseEditZone(formData.get("editZone"));
 
-    // Anonymous visitors keep the current (client-trusted) free-tier flow
-    // unchanged — no account required to try filter styles. But AI is the
-    // costly, previously-exploitable feature (anyone could set a fake plan
-    // in their own localStorage), so it now always requires a real,
-    // server-verified account with a paid plan and quota left.
+    // Vrai paywall : aucune génération (filtre ou IA) sans compte connecté
+    // avec un abonnement actif — plus d'essai gratuit ni de simulation
+    // côté client. Le plan et le quota ne sont jamais lus ailleurs que dans
+    // la ligne Supabase de l'utilisateur, jamais depuis une valeur envoyée
+    // par le navigateur.
     const admin = getSupabaseAdmin();
     const authUser = await getUserFromAuthHeader(req.headers.get("authorization"));
     let profile: Profile | null = null;
-    let effectiveWatermark = watermark;
 
-    if (aiEnhance && !authUser) {
+    if (!authUser || !admin) {
       return NextResponse.json(
-        { error: "Connecte-toi (plan Creator ou Pro) pour utiliser l'amélioration IA." },
+        { error: "Connecte-toi et choisis un plan pour créer une miniature." },
         { status: 401 }
       );
     }
 
-    if (authUser && admin) {
+    {
       const { data } = await admin
         .from("profiles")
         .select("*")
@@ -814,36 +800,26 @@ export async function POST(req: NextRequest) {
         profile = { ...profile, plan: "pro" };
       }
 
-      effectiveWatermark = profile.plan === "free";
+      if (profile.plan === "free") {
+        return NextResponse.json(
+          { error: "Un abonnement est nécessaire pour créer une miniature. Choisis un plan sur /pricing." },
+          { status: 403 }
+        );
+      }
 
       if (aiEnhance) {
-        if (profile.plan === "free") {
+        const cap = PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
+        const monthKey = currentMonthId();
+        const usesThisMonth =
+          profile.ai_uses_month_key === monthKey ? profile.ai_uses_this_month : 0;
+        if (usesThisMonth >= cap) {
           return NextResponse.json(
-            { error: "L'amélioration IA nécessite un plan Creator ou Pro." },
+            {
+              error: `Quota IA du mois atteint (${cap}/mois sur ton plan). Passe sur un plan supérieur pour continuer.`,
+            },
             { status: 403 }
           );
         }
-        if (profile.plan === "creator") {
-          const monthKey = currentMonthId();
-          const usesThisMonth =
-            profile.ai_uses_month_key === monthKey ? profile.ai_uses_this_month : 0;
-          if (usesThisMonth >= CREATOR_AI_MONTHLY_LIMIT) {
-            return NextResponse.json(
-              {
-                error: `Quota IA du mois atteint (${CREATOR_AI_MONTHLY_LIMIT}/mois en Creator). Passe en Pro pour un accès illimité.`,
-              },
-              { status: 403 }
-            );
-          }
-        }
-      } else if (
-        profile.plan === "free" &&
-        profile.free_generations_used >= FREE_GENERATIONS_PER_DEVICE + profile.bonus_generations
-      ) {
-        return NextResponse.json(
-          { error: "Quota gratuit atteint. Passe sur un plan payant pour continuer." },
-          { status: 403 }
-        );
       }
     }
 
@@ -976,14 +952,6 @@ export async function POST(req: NextRequest) {
       overlays.push({ input: Buffer.from(buildBorderSvg(borderColor)), top: 0, left: 0 });
     }
 
-    if (effectiveWatermark) {
-      overlays.push({
-        input: Buffer.from(buildWatermarkSvg(font, "ThumbAI — version gratuite")),
-        top: 0,
-        left: 0,
-      });
-    }
-
     const outputBuffer = await base.composite(overlays).png().toBuffer();
     const base64 = outputBuffer.toString("base64");
 
@@ -1008,12 +976,7 @@ export async function POST(req: NextRequest) {
           console.error("history upload error", uploadError);
         }
 
-        if (profile.plan === "free") {
-          await admin
-            .from("profiles")
-            .update({ free_generations_used: profile.free_generations_used + 1 })
-            .eq("id", authUser.id);
-        } else if (profile.plan === "creator" && usedOpenAiCall) {
+        if (usedOpenAiCall) {
           const monthKey = currentMonthId();
           const nextCount =
             profile.ai_uses_month_key === monthKey ? profile.ai_uses_this_month + 1 : 1;

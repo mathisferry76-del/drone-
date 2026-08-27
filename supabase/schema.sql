@@ -4,7 +4,7 @@
 create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
   email text,
-  plan text not null default 'free' check (plan in ('free', 'creator', 'pro')),
+  plan text not null default 'free' check (plan in ('free', 'starter', 'creator', 'pro', 'studio')),
   stripe_customer_id text,
   stripe_subscription_id text,
   free_generations_used int not null default 0,
@@ -21,6 +21,12 @@ create table if not exists public.profiles (
 alter table public.profiles add column if not exists referral_code text unique;
 alter table public.profiles add column if not exists referred_by uuid references public.profiles(id);
 alter table public.profiles add column if not exists bonus_generations int not null default 0;
+
+-- Nouveau modèle : 4 paliers payants (starter/creator/pro/studio), plus
+-- d'offre gratuite. Élargit la contrainte pour un déploiement existant.
+alter table public.profiles drop constraint if exists profiles_plan_check;
+alter table public.profiles add constraint profiles_plan_check
+  check (plan in ('free', 'starter', 'creator', 'pro', 'studio'));
 
 create table if not exists public.generations (
   id uuid primary key default gen_random_uuid(),

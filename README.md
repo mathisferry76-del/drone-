@@ -24,8 +24,10 @@ complet, pas une liste de features.
   - **Réglages avancés** : luminosité/contraste/saturation ajustables
     finement en plus du curseur d'intensité du style, vignette
     (assombrissement des bords), cadre bordure avec couleur au choix.
-  - Génération et téléchargement en HD (1280x720), quota de 3 générations
-    gratuites par appareil (filigrane sur le plan gratuit).
+  - Génération et téléchargement en HD (1280x720). Aucune génération n'est
+    possible sans compte connecté et abonnement actif (vrai paywall, pas
+    d'essai gratuit) — les styles filtres sont illimités sur tous les plans,
+    seule l'IA générative a un quota mensuel qui dépend du plan.
 - **`/api/generate`** : pipeline d'image réel avec `sharp` pour le fond
   (recadrage 16:9, ajustement couleur/contraste par style) et un moteur de
   rendu maison au-dessus pour le texte (`opentype.js`, glyphe par glyphe,
@@ -33,20 +35,24 @@ complet, pas une liste de features.
   indépendants) et les formes (SVG généré à la volée) — testé avec de
   vraies requêtes combinant plusieurs calques de texte, formes, vignette
   et cadre en une seule génération, voir captures.
-- **`/pricing`** : 3 paliers (Free / Creator 19€ / Pro 39€) avec CTA
-  connectés à Stripe Checkout, et une section qui explique concrètement la
-  différence entre les offres (volume vs IA générative).
+- **`/pricing`** : 4 paliers payants (Starter 9,99€ / Creator 19,99€ / Pro
+  34,99€ / Studio 59,99€), chacun avec un quota de générations IA différent
+  (8 / 20 / 50 / 120 par mois), calé sur le coût réel d'une génération
+  `gpt-image-1` (~0,25-0,30$ par appel en qualité "high"). Pas d'offre
+  gratuite : tous les plans sont payants dès la première miniature. CTA
+  connectés à Stripe Checkout.
 - **`/api/checkout`** : crée une session Stripe Checkout en mode
   abonnement. Sans clé Stripe configurée, renvoie un message clair au lieu
   de planter.
-- **Amélioration IA générative (Creator & Pro)** : un toggle dans
-  `/generate` envoie la photo à l'API OpenAI (`gpt-image-1`,
+- **Amélioration IA générative (tous les plans, quota différent)** : un
+  toggle dans `/generate` envoie la photo à l'API OpenAI (`gpt-image-1`,
   `images.edit`) qui retravaille réellement l'éclairage/l'ambiance/le
   décor, au lieu d'un filtre de couleur déterministe — avec un champ de
-  description libre pour préciser ce qu'on veut voir. Creator a droit à
-  2 générations IA par mois, Pro est illimité. Côté serveur, sans
-  `OPENAI_API_KEY` configurée, l'appel renvoie une erreur 501 claire (et
-  les erreurs OpenAI réelles — clé invalide, org non vérifiée, quota —
+  description libre pour préciser ce qu'on veut voir. Chaque plan a un
+  quota mensuel de générations IA (voir `PLAN_AI_CAPS` dans
+  `lib/presets.ts`), plus grand sur les plans supérieurs. Côté serveur,
+  sans `OPENAI_API_KEY` configurée, l'appel renvoie une erreur 501 claire
+  (et les erreurs OpenAI réelles — clé invalide, org non vérifiée, quota —
   remontent avec un message actionnable) au lieu de planter.
 - **Style "Réaliste (sans filtre)"** : aucun grading couleur (photo
   inchangée) ; son prompt IA vise le photoréalisme maximal plutôt qu'un
@@ -88,17 +94,16 @@ complet, pas une liste de features.
   visage — tout est préservé sauf cette zone — et envoie une seconde
   requête `images.edit` ciblée à OpenAI, en protégeant toujours le visage
   même si la zone le chevauche. C'est un vrai appel IA (facturé, décompté
-  du quota Creator), distinct de la retouche texte/couleur gratuite.
+  du quota du plan), distinct de la retouche texte/couleur gratuite.
 - **Comptes utilisateurs, statut payant et quota vérifiés côté serveur
   (Supabase)** : connexion par lien magique (email, sans mot de passe).
-  Une fois connecté, le plan (free/creator/pro) et les compteurs de quota
-  vivent dans une vraie base Postgres, mis à jour par un webhook Stripe —
-  ce n'est plus le `localStorage` du navigateur qui décide. L'IA générative
-  nécessite maintenant un compte connecté (elle ne peut plus être débloquée
-  en trafiquant le `localStorage`, l'exploit initial du MVP est corrigé).
-  Les visiteurs non connectés gardent l'accès libre aux styles filtres
-  (3 gratuites par appareil, comme avant) — aucun compte requis pour
-  essayer le produit.
+  Une fois connecté, le plan (starter/creator/pro/studio, ou `free` = pas
+  encore abonné) et les compteurs de quota vivent dans une vraie base
+  Postgres, mis à jour par un webhook Stripe — ce n'est jamais une valeur
+  envoyée par le navigateur qui décide. Vrai paywall : `/api/generate`
+  refuse toute génération (filtre ou IA) sans compte connecté avec un
+  abonnement actif, il n'y a plus de simulation `localStorage` ni d'essai
+  gratuit.
 - **Historique des miniatures (`/historique`)** : chaque génération faite
   en étant connecté est sauvegardée (Supabase Storage) et réapparaît sur
   n'importe quel appareil — téléchargement et suppression depuis la page.
@@ -113,16 +118,12 @@ complet, pas une liste de features.
 Pour rester dans l'esprit "workflow complet minimal", certaines choses ne
 sont **pas** implémentées et devront l'être avant un vrai lancement payant :
 
-- **Le statut payant et le quota ne sont vérifiés côté serveur que pour les
-  utilisateurs connectés.** Un visiteur anonyme reste sur l'ancienne
-  simulation `localStorage`, mais elle ne donne accès qu'aux styles
-  filtres gratuits — l'IA générative (la fonctionnalité coûteuse) est
-  bloquée sans compte réel, donc l'exploit "je me mets `isPro=true` dans
-  la console" ne fonctionne plus pour ce qui coûte de l'argent.
 - **L'amélioration IA générative facture réellement OpenAI** à chaque
   génération (le modèle `gpt-image-1` n'est pas gratuit) — contrairement
-  aux styles filtres qui ne coûtent rien à faire tourner. Le prix du plan
-  Pro doit couvrir ce coût variable ; à surveiller une fois en usage réel.
+  aux styles filtres qui ne coûtent rien à faire tourner. Les caps par plan
+  (`PLAN_AI_CAPS` dans `lib/presets.ts`) sont calés sur ce coût avec une
+  marge, à surveiller une fois en usage réel (une retouche ciblée déclenche
+  un second appel OpenAI, donc double le coût de cette génération).
 - **Pas de ré-édition après export.** Le positionnement/couleurs/courbure
   se règlent avant de cliquer "Générer" (sur la photo, pas sur le résultat
   déjà aplati en PNG) — on ne peut pas rouvrir une miniature téléchargée
@@ -150,8 +151,10 @@ Copie `.env.example` en `.env.local` et renseigne ce dont tu as besoin :
 ```
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+NEXT_PUBLIC_STRIPE_PRICE_STARTER=price_...
 NEXT_PUBLIC_STRIPE_PRICE_CREATOR=price_...
 NEXT_PUBLIC_STRIPE_PRICE_PRO=price_...
+NEXT_PUBLIC_STRIPE_PRICE_STUDIO=price_...
 OPENAI_API_KEY=sk-...
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
@@ -178,15 +181,18 @@ SUPABASE_SERVICE_ROLE_KEY=eyJ...
 5. Redémarre `npm run dev` — le lien "Connexion" du menu devient
    fonctionnel, `/historique` se remplit après une génération connectée.
 
-Sans ces variables, tout continue de fonctionner comme avant : styles
-filtres en libre accès, mais connexion, historique et IA générative
-indisponibles (avec des messages clairs, pas de plantage).
+Sans ces variables, `/api/generate` refuse toute génération (vrai paywall :
+il n'y a pas de repli "libre accès" sans compte/abonnement) — connexion,
+historique et IA générative sont indisponibles avec des messages clairs, pas
+de plantage.
 
 **Stripe** (pour activer le paiement) :
-1. Crée un compte Stripe (mode test), crée deux produits récurrents
-   (Creator 19€/mois, Pro 39€/mois), récupère leurs `price_id`.
+1. Crée un compte Stripe (mode test), crée quatre produits récurrents
+   (Starter 9,99€/mois, Creator 19,99€/mois, Pro 34,99€/mois, Studio
+   59,99€/mois), récupère leurs `price_id`.
 2. Colle `STRIPE_SECRET_KEY` (clé secrète du dashboard Stripe test) et les
-   deux `price_id` ci-dessus.
+   quatre `price_id` ci-dessus (`NEXT_PUBLIC_STRIPE_PRICE_STARTER`,
+   `..._CREATOR`, `..._PRO`, `..._STUDIO`).
 3. **Webhook** (nécessaire pour que payer active vraiment le plan) : dans
    le dashboard Stripe → Developers → Webhooks → "Add endpoint" → URL
    `https://<ton-domaine>/api/stripe/webhook` → sélectionne les événements

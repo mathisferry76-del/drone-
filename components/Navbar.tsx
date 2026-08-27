@@ -59,19 +59,19 @@ export default function Navbar() {
             </Link>
           )}
           <Link
-            href="/generate"
+            href="/pricing"
             className="rounded-full bg-yellow-400 px-4 py-2 font-bold text-black transition hover:bg-yellow-300"
           >
-            Essayer gratuitement
+            Voir les tarifs
           </Link>
         </div>
 
         <div className="flex items-center gap-3 sm:hidden">
           <Link
-            href="/generate"
+            href="/pricing"
             className="rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-300"
           >
-            Essayer
+            Tarifs
           </Link>
           <button
             type="button"
