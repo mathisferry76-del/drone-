@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { getUserFromAuthHeader } from "@/lib/supabase";
-import { PAID_PLAN_IDS } from "@/lib/presets";
+import { PAID_PLAN_IDS, PRICING_TIERS } from "@/lib/presets";
 
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
@@ -32,6 +32,14 @@ export async function POST(req: NextRequest) {
     };
     if (!priceId) {
       return NextResponse.json({ error: "priceId manquant." }, { status: 400 });
+    }
+    // Only ever create a checkout session for one of our own configured
+    // plan prices — never trust an arbitrary priceId string from the
+    // client, in case a differently-priced object ever exists in the same
+    // Stripe account (e.g. an internal test price).
+    const knownPriceIds = PRICING_TIERS.map((t) => t.priceId).filter(Boolean);
+    if (!knownPriceIds.includes(priceId)) {
+      return NextResponse.json({ error: "Plan inconnu." }, { status: 400 });
     }
 
     const origin = req.headers.get("origin") ?? "http://localhost:3000";
