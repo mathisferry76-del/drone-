@@ -61,24 +61,23 @@ export default function Home() {
             Fait pour les créateurs solo
           </span>
           <h1 className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-            Des miniatures qui font{" "}
+            Plus de vues sur tes vidéos, avec{" "}
             <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-              cliquer
+              zéro compétence design
             </span>
-            , générées en 10 secondes
           </h1>
           <p className="mt-6 max-w-xl text-lg text-zinc-400">
             Upload une photo, choisis un style, ajoute ton titre. ThumbAI
-            génère une miniature optimisée pour le CTR, dans ton propre
-            style — sans designer, sans Photoshop, sans passer 30 minutes
-            sur Canva.
+            génère en 10 secondes une miniature optimisée pour le clic —
+            sans designer, sans Photoshop, sans passer 30 minutes sur
+            Canva.
           </p>
           <div className="mt-8 flex flex-col gap-4 sm:flex-row">
             <Link
               href="/generate"
               className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:bg-yellow-300"
             >
-              Créer ma première miniature — gratuit
+              Créer ma miniature gratuite →
             </Link>
             <Link
               href="/pricing"
