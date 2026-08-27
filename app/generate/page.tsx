@@ -218,6 +218,10 @@ export default function GeneratePage() {
   );
   const effectivePlan: Plan = isTempProTest ? "pro" : (profile?.plan ?? "free");
   const isPaid = effectivePlan !== "free";
+  // Un seul essai gratuit par compte, réservé à l'IA — au-delà, un
+  // abonnement est nécessaire (vérifié aussi côté serveur).
+  const hasFreeTrialAvailable =
+    !isPaid && (profile?.free_generations_used ?? 0) < 1;
   const aiCap = isPaid
     ? PLAN_AI_CAPS[effectivePlan as PaidPlan] + (profile?.bonus_generations ?? 0)
     : 0;
@@ -226,8 +230,8 @@ export default function GeneratePage() {
       ? profile.ai_uses_this_month
       : 0
     : 0;
-  const aiLimitReached = effectiveAiUsesThisMonth >= aiCap;
-  const canUseAi = loggedIn && isPaid && !aiLimitReached;
+  const aiLimitReached = isPaid && effectiveAiUsesThisMonth >= aiCap;
+  const canUseAi = loggedIn && (isPaid ? !aiLimitReached : hasFreeTrialAvailable);
   const aiRemaining = Math.max(aiCap - effectiveAiUsesThisMonth, 0);
 
   // Once logged in, the account's real profile (plan + quota) takes over
@@ -277,6 +281,17 @@ export default function GeneratePage() {
       setFacePreserve(DEFAULT_FACE_PRESERVE);
     }
   }, [canUseAi, aiEnhance, naturalImgSize, facePreserve]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // The free trial is IA-only (no plain-filter freebie) — the server
+  // rejects anything else, so force the toggle on and lock it instead of
+  // letting the user uncheck it into a confusing 403.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!isPaid && hasFreeTrialAvailable && !aiEnhance) {
+      setAiEnhance(true);
+    }
+  }, [isPaid, hasFreeTrialAvailable, aiEnhance]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -573,7 +588,7 @@ export default function GeneratePage() {
     );
   }
 
-  if (loggedIn && profile && !isPaid) {
+  if (loggedIn && profile && !isPaid && !hasFreeTrialAvailable) {
     return (
       <div className="mx-auto flex min-h-[50vh] w-full max-w-xl flex-col items-center justify-center px-6 py-20 text-center">
         <h1 className="text-2xl font-extrabold">Créer une miniature</h1>
@@ -599,6 +614,8 @@ export default function GeneratePage() {
           `Plan ${
             effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)
           } actif — miniatures illimitées, sans filigrane. Il te reste ${aiRemaining}/${aiCap} génération(s) IA ce mois-ci.`}
+        {!isPaid && hasFreeTrialAvailable &&
+          "🎁 Ton essai gratuit avec IA générative — avec filigrane, et le téléchargement HD nécessite un abonnement."}
       </p>
 
       <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-2">
@@ -1070,16 +1087,18 @@ export default function GeneratePage() {
               <input
                 type="checkbox"
                 checked={canUseAi && aiEnhance}
-                disabled={!canUseAi}
+                disabled={!canUseAi || (!isPaid && hasFreeTrialAvailable)}
                 onChange={(e) => setAiEnhance(e.target.checked)}
                 className="mt-1 h-4 w-4 accent-yellow-400 disabled:opacity-40"
               />
               <span>
                 <span className="block text-sm font-bold">✨ Amélioration IA générative</span>
                 <span className="mt-1 block text-xs text-zinc-400">
-                  {!aiLimitReached &&
+                  {!isPaid && hasFreeTrialAvailable &&
+                    "Ton essai gratuit — une vraie génération IA, avec filigrane. Le téléchargement HD nécessite un abonnement."}
+                  {isPaid && !aiLimitReached &&
                     `Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative. Il te reste ${aiRemaining}/${aiCap} génération(s) IA ce mois-ci.`}
-                  {aiLimitReached &&
+                  {isPaid && aiLimitReached &&
                     `Tu as utilisé tes ${aiCap} générations IA incluses ce mois-ci. Reviens le mois prochain, ou passe sur un plan supérieur pour plus de générations.`}
                 </span>
                 {aiLimitReached && (
@@ -1467,13 +1486,22 @@ export default function GeneratePage() {
                 </p>
               </div>
 
-              <a
-                href={resultUrl}
-                download="thumbnail.png"
-                className="mt-4 block w-full rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold transition hover:border-zinc-400"
-              >
-                Télécharger en HD
-              </a>
+              {isPaid ? (
+                <a
+                  href={resultUrl}
+                  download="thumbnail.png"
+                  className="mt-4 block w-full rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold transition hover:border-zinc-400"
+                >
+                  Télécharger en HD
+                </a>
+              ) : (
+                <Link
+                  href="/pricing"
+                  className="mt-4 block w-full rounded-full bg-yellow-400 px-6 py-3 text-center font-bold text-black transition hover:bg-yellow-300"
+                >
+                  Passe sur un plan pour télécharger en HD
+                </Link>
+              )}
             </>
           )}
         </div>

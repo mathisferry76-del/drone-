@@ -32,7 +32,7 @@ const FAQS = [
   },
   {
     q: "Y a-t-il un essai gratuit ?",
-    a: "Non — chaque génération IA a un vrai coût de calcul, donc un abonnement est nécessaire dès la première miniature. En échange, même le plan le plus accessible inclut un vrai quota d'IA générative, pas juste une démo limitée.",
+    a: "Oui — 1 génération IA gratuite par compte, avec un léger filigrane (le téléchargement HD nécessite un abonnement). Au-delà, chaque génération IA a un vrai coût de calcul, donc un abonnement est nécessaire pour continuer.",
   },
   {
     q: "Je peux ajouter plusieurs textes, flèches ou cercles sur ma miniature ?",

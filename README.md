@@ -25,9 +25,11 @@ complet, pas une liste de features.
     finement en plus du curseur d'intensité du style, vignette
     (assombrissement des bords), cadre bordure avec couleur au choix.
   - Génération et téléchargement en HD (1280x720). Aucune génération n'est
-    possible sans compte connecté et abonnement actif (vrai paywall, pas
-    d'essai gratuit) — les styles filtres sont illimités sur tous les plans,
-    seule l'IA générative a un quota mensuel qui dépend du plan.
+    possible sans compte connecté — un compte non abonné a droit à 1 essai
+    gratuit avec IA (filigrane, pas de téléchargement HD), puis un
+    abonnement est nécessaire pour continuer. Les styles filtres sont
+    illimités sur tous les plans payants, seule l'IA générative a un quota
+    mensuel qui dépend du plan.
 - **`/api/generate`** : pipeline d'image réel avec `sharp` pour le fond
   (recadrage 16:9, ajustement couleur/contraste par style) et un moteur de
   rendu maison au-dessus pour le texte (`opentype.js`, glyphe par glyphe,
@@ -96,14 +98,17 @@ complet, pas une liste de features.
   même si la zone le chevauche. C'est un vrai appel IA (facturé, décompté
   du quota du plan), distinct de la retouche texte/couleur gratuite.
 - **Comptes utilisateurs, statut payant et quota vérifiés côté serveur
-  (Supabase)** : connexion par lien magique (email, sans mot de passe).
-  Une fois connecté, le plan (starter/creator/pro/studio, ou `free` = pas
-  encore abonné) et les compteurs de quota vivent dans une vraie base
-  Postgres, mis à jour par un webhook Stripe — ce n'est jamais une valeur
-  envoyée par le navigateur qui décide. Vrai paywall : `/api/generate`
-  refuse toute génération (filtre ou IA) sans compte connecté avec un
-  abonnement actif, il n'y a plus de simulation `localStorage` ni d'essai
-  gratuit.
+  (Supabase)** : connexion par lien magique (email, sans mot de passe) ou
+  par email + mot de passe classique (8 caractères min.), au choix sur
+  `/login` — utile pour les utilisateurs qui préfèrent ne pas dépendre de
+  la sécurité de leur boîte mail pour se connecter. Une fois connecté, le
+  plan (starter/creator/pro/studio, ou `free` = pas encore abonné) et les
+  compteurs de quota vivent dans une vraie base Postgres, mis à jour par
+  un webhook Stripe — ce n'est jamais une valeur envoyée par le navigateur
+  qui décide. Paywall : `/api/generate` refuse toute génération sans
+  compte connecté ; un compte non abonné a droit à 1 essai gratuit avec IA
+  (filigrane, pas de téléchargement HD), au-delà un abonnement est
+  nécessaire — il n'y a plus de simulation `localStorage`.
 - **Historique des miniatures (`/historique`)** : chaque génération faite
   en étant connecté est sauvegardée (Supabase Storage) et réapparaît sur
   n'importe quel appareil — téléchargement et suppression depuis la page.

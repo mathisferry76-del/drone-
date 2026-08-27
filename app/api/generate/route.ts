@@ -529,6 +529,18 @@ function buildContentSvg(
   </svg>`;
 }
 
+function buildWatermarkSvg(font: opentype.Font, text: string): string {
+  const fontSize = 20;
+  const width = font.getAdvanceWidth(text, fontSize);
+  const x = CANVAS_WIDTH - 24 - width;
+  const y = CANVAS_HEIGHT - 24;
+  const glyphPath = font.getPath(text, x, y, fontSize);
+
+  return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+    <path d="${glyphPath.toPathData(2)}" fill="#ffffff" fill-opacity="0.55" />
+  </svg>`;
+}
+
 function buildBorderSvg(color: string): string {
   return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">${buildBorderFragment(
     color
@@ -770,6 +782,7 @@ export async function POST(req: NextRequest) {
     const admin = getSupabaseAdmin();
     const authUser = await getUserFromAuthHeader(req.headers.get("authorization"));
     let profile: Profile | null = null;
+    let effectiveWatermark = false;
 
     if (!authUser || !admin) {
       return NextResponse.json(
@@ -801,13 +814,29 @@ export async function POST(req: NextRequest) {
       }
 
       if (profile.plan === "free") {
-        return NextResponse.json(
-          { error: "Un abonnement est nécessaire pour créer une miniature. Choisis un plan sur /pricing." },
-          { status: 403 }
-        );
-      }
-
-      if (aiEnhance) {
+        // Un seul essai gratuit par compte, réservé à l'IA (le vrai
+        // différenciateur à montrer) — pas de version filtre gratuite, et
+        // au-delà de cet essai il faut un abonnement. Compte réel vérifié
+        // par email obligatoire pour s'inscrire, donc pas de formulaire
+        // anonyme à répétition possible.
+        if (!aiEnhance) {
+          return NextResponse.json(
+            {
+              error: "Un abonnement est nécessaire pour créer une miniature. Choisis un plan sur /pricing.",
+            },
+            { status: 403 }
+          );
+        }
+        if (profile.free_generations_used >= 1) {
+          return NextResponse.json(
+            {
+              error: "Ton essai gratuit IA a déjà été utilisé. Choisis un plan sur /pricing pour continuer.",
+            },
+            { status: 403 }
+          );
+        }
+        effectiveWatermark = true;
+      } else if (aiEnhance) {
         const cap = PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
         const monthKey = currentMonthId();
         const usesThisMonth =
@@ -956,6 +985,14 @@ export async function POST(req: NextRequest) {
       overlays.push({ input: Buffer.from(buildBorderSvg(borderColor)), top: 0, left: 0 });
     }
 
+    if (effectiveWatermark) {
+      overlays.push({
+        input: Buffer.from(buildWatermarkSvg(font, "MIN IA — essai gratuit")),
+        top: 0,
+        left: 0,
+      });
+    }
+
     const outputBuffer = await base.composite(overlays).png().toBuffer();
     const base64 = outputBuffer.toString("base64");
 
@@ -980,7 +1017,12 @@ export async function POST(req: NextRequest) {
           console.error("history upload error", uploadError);
         }
 
-        if (usedOpenAiCall) {
+        if (profile.plan === "free") {
+          await admin
+            .from("profiles")
+            .update({ free_generations_used: profile.free_generations_used + 1 })
+            .eq("id", authUser.id);
+        } else if (usedOpenAiCall) {
           const monthKey = currentMonthId();
           const nextCount =
             profile.ai_uses_month_key === monthKey ? profile.ai_uses_this_month + 1 : 1;
