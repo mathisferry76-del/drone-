@@ -44,9 +44,13 @@ drop policy if exists "Users can view own profile" on public.profiles;
 create policy "Users can view own profile" on public.profiles
   for select using (auth.uid() = id);
 
+-- Volontairement PAS de policy UPDATE pour les utilisateurs sur profiles :
+-- plan, quota et champs Stripe ne doivent jamais être modifiables depuis le
+-- navigateur (même sa propre ligne), seul le serveur (clé service_role, qui
+-- contourne RLS) écrit ces colonnes. Une policy UPDATE basée sur
+-- auth.uid() = id laisserait n'importe quel utilisateur s'attribuer
+-- plan = 'pro' directement depuis la console du navigateur.
 drop policy if exists "Users can update own profile" on public.profiles;
-create policy "Users can update own profile" on public.profiles
-  for update using (auth.uid() = id);
 
 drop policy if exists "Users can view own generations" on public.generations;
 create policy "Users can view own generations" on public.generations
