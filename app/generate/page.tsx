@@ -219,7 +219,7 @@ export default function GeneratePage() {
   // frictionless without an account.
   // TEMPORAIRE — accès Pro pour un test manuel, à retirer sur demande.
   // Ne modifie rien en base, juste ce qui est affiché dans ce navigateur.
-  const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com"];
+  const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com", "mathis.ferry76@gmail.com"];
   const isTempProTest = Boolean(
     session?.user.email && TEMP_PRO_TEST_EMAILS.includes(session.user.email.toLowerCase())
   );

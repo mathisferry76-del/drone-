@@ -809,7 +809,7 @@ export async function POST(req: NextRequest) {
 
       // TEMPORAIRE — accès Pro pour un test manuel, à retirer sur demande.
       // Ne modifie pas la ligne réelle en base, juste ce qui est vu ici.
-      const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com"];
+      const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com", "mathis.ferry76@gmail.com"];
       if (authUser.email && TEMP_PRO_TEST_EMAILS.includes(authUser.email.toLowerCase())) {
         profile = { ...profile, plan: "pro" };
       }
