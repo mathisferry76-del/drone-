@@ -1434,10 +1434,43 @@ export default function GeneratePage() {
                   ? "Ta photo de départ, avant ThumbAI."
                   : "Bascule sur \"Avant\" pour voir le chemin parcouru."}
               </p>
+
+              <div className="mt-4 rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  📱 Aperçu dans le flux mobile
+                </p>
+                <div className="flex gap-3">
+                  <div className="h-[73px] w-[130px] shrink-0 overflow-hidden rounded-lg bg-black">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={resultUrl}
+                      alt="Aperçu de la miniature à taille mobile réelle"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                  <div className="flex min-w-0 flex-1 gap-2">
+                    <div className="mt-0.5 h-7 w-7 shrink-0 rounded-full bg-zinc-700" />
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <p className="line-clamp-2 text-[13px] font-medium leading-tight text-zinc-100">
+                        {textLayers.find((l) => l.text.trim())?.text || "Ton titre de vidéo"}
+                      </p>
+                      <p className="text-[11px] text-zinc-500">
+                        Ta chaîne · 128 k vues · il y a 2 jours
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-zinc-500">
+                  Vérifie que ton texte et ton sujet restent lisibles à cette
+                  taille — c&apos;est comme ça que la majorité des gens
+                  verront ta miniature, sur mobile.
+                </p>
+              </div>
+
               <a
                 href={resultUrl}
                 download="thumbnail.png"
-                className="mt-2 block w-full rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold transition hover:border-zinc-400"
+                className="mt-4 block w-full rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold transition hover:border-zinc-400"
               >
                 Télécharger en HD
               </a>
