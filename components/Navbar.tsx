@@ -59,19 +59,19 @@ export default function Navbar() {
             </Link>
           )}
           <Link
-            href="/pricing"
+            href="/generate"
             className="rounded-full bg-yellow-400 px-4 py-2 font-bold text-black transition hover:bg-yellow-300"
           >
-            Voir les tarifs
+            Créer une miniature
           </Link>
         </div>
 
         <div className="flex items-center gap-3 sm:hidden">
           <Link
-            href="/pricing"
+            href="/generate"
             className="rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-300"
           >
-            Tarifs
+            Créer
           </Link>
           <button
             type="button"

@@ -78,7 +78,7 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-col gap-4 sm:flex-row">
             <Link
-              href="/pricing"
+              href="/generate"
               className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:bg-yellow-300"
             >
               Créer ma première miniature →
