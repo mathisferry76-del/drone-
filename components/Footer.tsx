@@ -45,8 +45,13 @@ export default function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-zinc-900 py-6 text-center text-xs text-zinc-600">
-        © {new Date().getFullYear()} MIN IA — Générateur de miniatures pour créateurs.
+      <div className="border-t border-zinc-900 px-6 py-6 text-center text-xs text-zinc-600">
+        <p>© {new Date().getFullYear()} MIN IA — Générateur de miniatures pour créateurs.</p>
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+          <Link href="/mentions-legales" className="transition hover:text-zinc-300">Mentions légales</Link>
+          <Link href="/cgv" className="transition hover:text-zinc-300">CGV</Link>
+          <Link href="/confidentialite" className="transition hover:text-zinc-300">Confidentialité</Link>
+        </div>
       </div>
     </footer>
   );
