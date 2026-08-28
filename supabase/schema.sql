@@ -112,3 +112,100 @@ on conflict (id) do nothing;
 drop policy if exists "Service role manages thumbnails" on storage.objects;
 create policy "Service role manages thumbnails" on storage.objects
   for all using (bucket_id = 'thumbnails' and auth.role() = 'service_role');
+
+-- Réservation atomique d'un quota de génération (essai gratuit ou quota IA
+-- mensuel). "for update" verrouille la ligne du profil le temps de la
+-- transaction : si deux requêtes du même utilisateur arrivent en même temps,
+-- la deuxième attend que la première ait fini avant de lire le compteur —
+-- élimine la race condition d'un simple "lire puis écrire" en deux temps
+-- séparés côté application, qui laissait dépasser le quota par des appels
+-- concurrents. Retourne un statut texte que le serveur interprète :
+-- 'no_profile', 'needs_plan', 'trial_used', 'ok_trial', 'quota_exceeded',
+-- 'ok_ai', 'ok_filter'.
+create or replace function public.reserve_generation(
+  p_user_id uuid,
+  p_ai_enhance boolean,
+  p_month_key text,
+  p_ai_cap int,
+  -- Lets the caller force the paid/capped path even for a "free" plan row
+  -- (used for the app's temporary manual Pro test accounts) instead of the
+  -- single free-trial path, while staying on the same atomic reservation.
+  p_force_paid boolean default false
+)
+returns text
+language plpgsql
+security definer
+as $$
+declare
+  v_plan text;
+  v_free_used int;
+  v_ai_used int;
+  v_ai_key text;
+begin
+  select plan, free_generations_used, ai_uses_this_month, ai_uses_month_key
+  into v_plan, v_free_used, v_ai_used, v_ai_key
+  from public.profiles
+  where id = p_user_id
+  for update;
+
+  if not found then
+    return 'no_profile';
+  end if;
+
+  if v_plan = 'free' and not p_force_paid then
+    if not p_ai_enhance then
+      return 'needs_plan';
+    end if;
+    if v_free_used >= 1 then
+      return 'trial_used';
+    end if;
+    update public.profiles set free_generations_used = free_generations_used + 1
+      where id = p_user_id;
+    return 'ok_trial';
+  end if;
+
+  if not p_ai_enhance then
+    return 'ok_filter';
+  end if;
+
+  if v_ai_key is distinct from p_month_key then
+    v_ai_used := 0;
+  end if;
+
+  if v_ai_used >= p_ai_cap then
+    return 'quota_exceeded';
+  end if;
+
+  update public.profiles
+  set ai_uses_this_month = v_ai_used + 1,
+      ai_uses_month_key = p_month_key
+  where id = p_user_id;
+
+  return 'ok_ai';
+end;
+$$;
+
+-- Compense une réservation faite par reserve_generation quand la génération
+-- échoue ensuite (erreur OpenAI, etc.) — sans ça, un utilisateur dont la
+-- génération plante perdrait quand même une unité de son quota pour rien.
+create or replace function public.release_generation_reservation(
+  p_user_id uuid,
+  p_reservation text,
+  p_month_key text
+)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  if p_reservation = 'ok_trial' then
+    update public.profiles
+    set free_generations_used = greatest(0, free_generations_used - 1)
+    where id = p_user_id;
+  elsif p_reservation = 'ok_ai' then
+    update public.profiles
+    set ai_uses_this_month = greatest(0, ai_uses_this_month - 1)
+    where id = p_user_id and ai_uses_month_key = p_month_key;
+  end if;
+end;
+$$;

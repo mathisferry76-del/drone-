@@ -752,6 +752,28 @@ function parseShapes(raw: string): ShapeInput[] {
 }
 
 export async function POST(req: NextRequest) {
+  const admin = getSupabaseAdmin();
+  let authUser: { id: string; email: string | null } | null = null;
+  let reservation: string | null = null;
+  const monthKey = currentMonthId();
+
+  // Releases an atomically-reserved quota slot if the generation ends up
+  // failing after the reservation was made — otherwise a failed OpenAI call
+  // would still cost the user part of their quota for nothing.
+  async function releaseReservationIfNeeded() {
+    if (!reservation || !admin || !authUser) return;
+    if (reservation !== "ok_trial" && reservation !== "ok_ai") return;
+    try {
+      await admin.rpc("release_generation_reservation", {
+        p_user_id: authUser.id,
+        p_reservation: reservation,
+        p_month_key: monthKey,
+      });
+    } catch (err) {
+      console.error("release_generation_reservation error", err);
+    }
+  }
+
   try {
     const formData = await req.formData();
     const file = formData.get("image");
@@ -774,89 +796,25 @@ export async function POST(req: NextRequest) {
     const facePreserve = parseFacePreserve(formData.get("facePreserve"));
     const editZone = parseEditZone(formData.get("editZone"));
 
-    // Vrai paywall : aucune génération (filtre ou IA) sans compte connecté
-    // avec un abonnement actif — plus d'essai gratuit ni de simulation
-    // côté client. Le plan et le quota ne sont jamais lus ailleurs que dans
-    // la ligne Supabase de l'utilisateur, jamais depuis une valeur envoyée
-    // par le navigateur.
-    const admin = getSupabaseAdmin();
-    const authUser = await getUserFromAuthHeader(req.headers.get("authorization"));
-    let profile: Profile | null = null;
-    let effectiveWatermark = false;
-
-    if (!authUser || !admin) {
-      return NextResponse.json(
-        { error: "Connecte-toi et choisis un plan pour créer une miniature." },
-        { status: 401 }
-      );
-    }
-
-    {
-      const { data } = await admin
-        .from("profiles")
-        .select("*")
-        .eq("id", authUser.id)
-        .single();
-      profile = (data as Profile | null) ?? null;
-
-      if (!profile) {
-        return NextResponse.json(
-          { error: "Profil introuvable. Déconnecte-toi puis reconnecte-toi." },
-          { status: 401 }
-        );
-      }
-
-      // TEMPORAIRE — accès Pro pour un test manuel, à retirer sur demande.
-      // Ne modifie pas la ligne réelle en base, juste ce qui est vu ici.
-      const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com", "mathis.ferry76@gmail.com"];
-      if (authUser.email && TEMP_PRO_TEST_EMAILS.includes(authUser.email.toLowerCase())) {
-        profile = { ...profile, plan: "pro" };
-      }
-
-      if (profile.plan === "free") {
-        // Un seul essai gratuit par compte, réservé à l'IA (le vrai
-        // différenciateur à montrer) — pas de version filtre gratuite, et
-        // au-delà de cet essai il faut un abonnement. Compte réel vérifié
-        // par email obligatoire pour s'inscrire, donc pas de formulaire
-        // anonyme à répétition possible.
-        if (!aiEnhance) {
-          return NextResponse.json(
-            {
-              error: "Un abonnement est nécessaire pour créer une miniature. Choisis un plan sur /pricing.",
-            },
-            { status: 403 }
-          );
-        }
-        if (profile.free_generations_used >= 1) {
-          return NextResponse.json(
-            {
-              error: "Ton essai gratuit IA a déjà été utilisé. Choisis un plan sur /pricing pour continuer.",
-            },
-            { status: 403 }
-          );
-        }
-        effectiveWatermark = true;
-      } else if (aiEnhance) {
-        const cap = PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
-        const monthKey = currentMonthId();
-        const usesThisMonth =
-          profile.ai_uses_month_key === monthKey ? profile.ai_uses_this_month : 0;
-        if (usesThisMonth >= cap) {
-          return NextResponse.json(
-            {
-              error: `Quota IA du mois atteint (${cap}/mois sur ton plan). Passe sur un plan supérieur pour continuer.`,
-            },
-            { status: 403 }
-          );
-        }
-      }
-    }
-
     const referenceFiles = formData
       .getAll("referenceImages")
       .filter((f): f is File => f instanceof File)
       .slice(0, MAX_REFERENCE_IMAGES);
 
+    // Reusing a cached AI base (see below) to only re-composite text/colors/
+    // shapes is free — it never calls OpenAI again. Except a targeted edit
+    // (editZone + instruction) always makes a real, separate paid call even
+    // on top of a cached base. This — not the raw aiEnhance flag — is what
+    // should actually be charged against the quota below: charging on raw
+    // aiEnhance would both bill paid users for free cache-only retouches and
+    // let a free-trial user dodge the paywall entirely by sending a
+    // fabricated aiBaseImage to skip the real generation.
+    const cachedAiBaseField = formData.get("aiBaseImage");
+    const hasCachedAiBase = cachedAiBaseField instanceof File;
+    const willCallOpenAi = aiEnhance && (!hasCachedAiBase || Boolean(editZone && editInstruction));
+
+    // Validate the request shape before touching the database — a
+    // malformed request shouldn't consume a quota reservation.
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
     }
@@ -881,6 +839,110 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Vrai paywall : aucune génération (filtre ou IA) sans compte connecté
+    // avec un abonnement actif — plus d'essai gratuit ni de simulation
+    // côté client. Le plan et le quota ne sont jamais lus ailleurs que dans
+    // la ligne Supabase de l'utilisateur, jamais depuis une valeur envoyée
+    // par le navigateur. La réservation du quota (reserve_generation) est
+    // atomique côté base — un verrou de ligne empêche des requêtes
+    // concurrentes de dépasser le quota en lisant toutes le même compteur
+    // avant qu'aucune d'elles ne l'ait incrémenté.
+    let profile: Profile | null = null;
+    let effectiveWatermark = false;
+
+    if (!admin) {
+      return NextResponse.json(
+        { error: "Connecte-toi et choisis un plan pour créer une miniature." },
+        { status: 401 }
+      );
+    }
+    authUser = await getUserFromAuthHeader(req.headers.get("authorization"));
+    if (!authUser) {
+      return NextResponse.json(
+        { error: "Connecte-toi et choisis un plan pour créer une miniature." },
+        { status: 401 }
+      );
+    }
+
+    {
+      const { data } = await admin
+        .from("profiles")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
+      profile = (data as Profile | null) ?? null;
+
+      if (!profile) {
+        return NextResponse.json(
+          { error: "Profil introuvable. Déconnecte-toi puis reconnecte-toi." },
+          { status: 401 }
+        );
+      }
+
+      // TEMPORAIRE — accès Pro pour un test manuel, à retirer sur demande.
+      // Ne modifie pas la ligne réelle en base (toujours son vrai plan) :
+      // seul le plafond appliqué à la réservation ci-dessous change, en
+      // forçant le chemin "payant" niveau Pro au lieu du chemin "free" que
+      // lirait la fonction pour ces comptes sinon — le compteur mensuel
+      // réel continue d'être suivi et plafonné, juste avec le quota Pro.
+      const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com", "mathis.ferry76@gmail.com"];
+      const isTempProTest =
+        !!authUser.email && TEMP_PRO_TEST_EMAILS.includes(authUser.email.toLowerCase());
+
+      if (!isTempProTest && profile.plan === "free" && !willCallOpenAi) {
+        return NextResponse.json(
+          {
+            error: "Un abonnement est nécessaire pour créer une miniature. Choisis un plan sur /pricing.",
+          },
+          { status: 403 }
+        );
+      } else {
+        const cap = isTempProTest
+          ? PLAN_AI_CAPS.pro + profile.bonus_generations
+          : profile.plan === "free"
+            ? 0
+            : PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
+
+        const { data: reserved, error: reserveError } = await admin.rpc("reserve_generation", {
+          p_user_id: authUser.id,
+          p_ai_enhance: willCallOpenAi,
+          p_month_key: monthKey,
+          p_ai_cap: cap,
+          p_force_paid: isTempProTest,
+        });
+
+        if (reserveError) {
+          console.error("reserve_generation error", reserveError);
+          return NextResponse.json(
+            { error: "Erreur pendant la vérification du quota." },
+            { status: 500 }
+          );
+        }
+
+        reservation = reserved as string;
+
+        if (reservation === "trial_used") {
+          return NextResponse.json(
+            {
+              error: "Ton essai gratuit IA a déjà été utilisé. Choisis un plan sur /pricing pour continuer.",
+            },
+            { status: 403 }
+          );
+        }
+        if (reservation === "quota_exceeded") {
+          return NextResponse.json(
+            {
+              error: `Quota IA du mois atteint (${cap}/mois sur ton plan). Passe sur un plan supérieur pour continuer.`,
+            },
+            { status: 403 }
+          );
+        }
+        if (reservation === "ok_trial") {
+          effectiveWatermark = true;
+        }
+      }
+    }
+
     const font = await loadFont();
     const arrayBuffer = await file.arrayBuffer();
     const inputBuffer = Buffer.from(arrayBuffer);
@@ -895,11 +957,9 @@ export async function POST(req: NextRequest) {
       // references/face zone), it sends it back here instead of the raw
       // photo — lets the user retouch text, colors, shapes etc. for free
       // and instantly, without paying for a new OpenAI generation.
-      const cachedBase = formData.get("aiBaseImage");
-
       let aiBuffer: Buffer;
-      if (cachedBase instanceof File) {
-        aiBuffer = Buffer.from(await cachedBase.arrayBuffer());
+      if (hasCachedAiBase) {
+        aiBuffer = Buffer.from(await (cachedAiBaseField as File).arrayBuffer());
       } else {
         const references: { buffer: Buffer }[] = [];
         for (const ref of referenceFiles) {
@@ -915,6 +975,7 @@ export async function POST(req: NextRequest) {
           );
           usedOpenAiCall = true;
         } catch (err) {
+          await releaseReservationIfNeeded();
           if (err instanceof AiNotConfiguredError) {
             return NextResponse.json({ error: err.message }, { status: 501 });
           }
@@ -935,6 +996,7 @@ export async function POST(req: NextRequest) {
           aiBuffer = await applyTargetedEdit(aiBuffer, editInstruction, editZone, facePreserve);
           usedOpenAiCall = true;
         } catch (err) {
+          await releaseReservationIfNeeded();
           if (err instanceof AiNotConfiguredError) {
             return NextResponse.json({ error: err.message }, { status: 501 });
           }
@@ -996,9 +1058,10 @@ export async function POST(req: NextRequest) {
     const outputBuffer = await base.composite(overlays).png().toBuffer();
     const base64 = outputBuffer.toString("base64");
 
-    // Best-effort: save to the user's history and update their server-side
-    // quota counters. Never let a storage/DB hiccup break the generation
-    // the user is actually waiting on.
+    // Best-effort: save to the user's history. Quota counters were already
+    // updated atomically by reserve_generation before generation started —
+    // incrementing them again here would double-count. Never let a
+    // storage/DB hiccup break the generation the user is actually waiting on.
     if (authUser && admin && profile) {
       try {
         const storagePath = `${authUser.id}/${randomUUID()}.png`;
@@ -1016,23 +1079,8 @@ export async function POST(req: NextRequest) {
         } else {
           console.error("history upload error", uploadError);
         }
-
-        if (profile.plan === "free") {
-          await admin
-            .from("profiles")
-            .update({ free_generations_used: profile.free_generations_used + 1 })
-            .eq("id", authUser.id);
-        } else if (usedOpenAiCall) {
-          const monthKey = currentMonthId();
-          const nextCount =
-            profile.ai_uses_month_key === monthKey ? profile.ai_uses_this_month + 1 : 1;
-          await admin
-            .from("profiles")
-            .update({ ai_uses_this_month: nextCount, ai_uses_month_key: monthKey })
-            .eq("id", authUser.id);
-        }
       } catch (err) {
-        console.error("history/quota save error", err);
+        console.error("history save error", err);
       }
     }
 
@@ -1050,6 +1098,7 @@ export async function POST(req: NextRequest) {
       usedOpenAiCall,
     });
   } catch (err) {
+    await releaseReservationIfNeeded();
     console.error("generate error", err);
     return NextResponse.json(
       { error: "Erreur pendant la génération. Réessaie avec une autre image." },
