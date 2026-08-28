@@ -56,20 +56,36 @@ export async function POST(req: NextRequest) {
             ? session.subscription
             : session.subscription?.id;
 
-        if (!userId || !subscriptionId) break;
+        if (!userId || !subscriptionId) {
+          console.error("stripe webhook: missing userId or subscriptionId", {
+            userId,
+            subscriptionId,
+          });
+          break;
+        }
 
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const plan = planFromPriceId(subscription.items.data[0]?.price.id);
-        if (!plan) break;
+        const priceId = subscription.items.data[0]?.price.id;
+        const plan = planFromPriceId(priceId);
+        if (!plan) {
+          console.error("stripe webhook: unrecognized price id", { priceId });
+          break;
+        }
 
-        await admin
+        const { error: updateError, count } = await admin
           .from("profiles")
           .update({
             plan,
             stripe_customer_id: customerId ?? null,
             stripe_subscription_id: subscriptionId,
           })
-          .eq("id", userId);
+          .eq("id", userId)
+          .select("id", { count: "exact" });
+        if (updateError) {
+          console.error("stripe webhook: profile update failed", updateError);
+        } else if (!count) {
+          console.error("stripe webhook: no profile matched userId", { userId });
+        }
         break;
       }
 
