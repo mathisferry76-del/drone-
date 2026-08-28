@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        const { error: updateError, count } = await admin
+        const { error: updateError, data: updatedRows } = await admin
           .from("profiles")
           .update({
             plan,
@@ -80,10 +80,10 @@ export async function POST(req: NextRequest) {
             stripe_subscription_id: subscriptionId,
           })
           .eq("id", userId)
-          .select("id", { count: "exact" });
+          .select("id");
         if (updateError) {
           console.error("stripe webhook: profile update failed", updateError);
-        } else if (!count) {
+        } else if (!updatedRows || updatedRows.length === 0) {
           console.error("stripe webhook: no profile matched userId", { userId });
         }
         break;
