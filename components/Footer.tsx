@@ -33,8 +33,8 @@ export default function Footer() {
           </h3>
           <ul className="mt-4 space-y-2 text-sm text-zinc-500">
             <li>
-              <a href="mailto:contact@thumbai.app" className="transition hover:text-white">
-                contact@thumbai.app
+              <a href="mailto:contact@min-ia.fr" className="transition hover:text-white">
+                contact@min-ia.fr
               </a>
             </li>
             <li className="text-zinc-600">
