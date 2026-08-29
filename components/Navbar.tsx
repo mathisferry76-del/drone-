@@ -25,17 +25,17 @@ export default function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-800 bg-black/80 backdrop-blur">
-      <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+      <nav className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
         <Link
           href="/"
-          className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white"
+          className="flex shrink-0 items-center gap-2 text-lg font-extrabold tracking-tight text-white"
           onClick={() => setOpen(false)}
         >
           <span className="rounded bg-yellow-400 px-1.5 py-0.5 text-black">MIN</span>
           IA
         </Link>
 
-        <div className="hidden items-center gap-6 text-sm font-medium text-zinc-300 sm:flex">
+        <div className="hidden items-center gap-6 text-sm font-medium text-zinc-300 lg:flex">
           {LINKS.map((link) => (
             <Link key={link.href} href={link.href} className="transition hover:text-white">
               {link.label}
