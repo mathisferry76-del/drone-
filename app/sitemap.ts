@@ -11,6 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/mentions-legales",
     "/cgv",
     "/confidentialite",
+    "/contact",
   ];
   return routes.map((route) => ({
     url: `${SITE_URL}${route}`,

@@ -52,12 +52,9 @@ export default function Navbar() {
               <Link href="/compte" className="transition hover:text-white">
                 Mon compte
               </Link>
-              <a
-                href="mailto:contact@min-ia.fr?subject=Avis%20%2F%20am%C3%A9lioration%20MIN%20IA"
-                className="transition hover:text-white"
-              >
+              <Link href="/contact" className="transition hover:text-white">
                 Donner mon avis
-              </a>
+              </Link>
               <button onClick={handleLogout} className="transition hover:text-white">
                 Déconnexion
               </button>
@@ -136,13 +133,13 @@ export default function Navbar() {
                 >
                   Mon compte
                 </Link>
-                <a
-                  href="mailto:contact@min-ia.fr?subject=Avis%20%2F%20am%C3%A9lioration%20MIN%20IA"
+                <Link
+                  href="/contact"
                   onClick={() => setOpen(false)}
                   className="rounded-lg px-2 py-2.5 transition hover:bg-zinc-900 hover:text-white"
                 >
                   Donner mon avis
-                </a>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="rounded-lg px-2 py-2.5 text-left transition hover:bg-zinc-900 hover:text-white"
