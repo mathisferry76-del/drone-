@@ -6,7 +6,6 @@ import HeroTitle from "@/components/motion/HeroTitle";
 import FloatingShowcase from "@/components/motion/FloatingShowcase";
 import Marquee from "@/components/motion/Marquee";
 import TiltCard from "@/components/motion/TiltCard";
-import ParallaxItem from "@/components/motion/ParallaxItem";
 import CountUp from "@/components/motion/CountUp";
 
 const RESULTS = [
@@ -216,30 +215,24 @@ export default function Home() {
           Un aperçu de miniatures générées avec MIN IA, sur différentes
           thématiques de chaîne.
         </p>
-        <div className="relative overflow-hidden py-20">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4 sm:auto-rows-[9rem]">
-            {RESULTS.map((r, i) => (
-              <ParallaxItem
-                key={r.id}
-                strength={i % 3 === 0 ? 220 : i % 3 === 1 ? -160 : 120}
-                spin={i % 2 === 0 ? 12 : -12}
-                className={r.span}
-              >
-                <div className="group relative aspect-video w-full overflow-hidden rounded-2xl border border-zinc-800 sm:aspect-auto sm:h-full">
-                  <Image
-                    src={`/examples/${r.id}.webp`}
-                    alt={`Miniature générée avec MIN IA — style ${r.niche}`}
-                    fill
-                    sizes="(min-width: 640px) 25vw, 100vw"
-                    className="object-cover transition duration-300 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-3">
-                    <span className="text-xs font-semibold text-white">{r.niche}</span>
-                  </div>
-                </div>
-              </ParallaxItem>
-            ))}
-          </div>
+        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-4 sm:auto-rows-[9rem]">
+          {RESULTS.map((r) => (
+            <div
+              key={r.id}
+              className={`group relative overflow-hidden rounded-2xl border border-zinc-800 ${r.span}`}
+            >
+              <Image
+                src={`/examples/${r.id}.webp`}
+                alt={`Miniature générée avec MIN IA — style ${r.niche}`}
+                fill
+                sizes="(min-width: 640px) 25vw, 100vw"
+                className="object-cover transition duration-300 group-hover:scale-105"
+              />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                <span className="text-xs font-semibold text-white">{r.niche}</span>
+              </div>
+            </div>
+          ))}
         </div>
         <p className="mt-8 text-center text-sm text-zinc-500">
           Envie du même résultat sur tes vidéos ?{" "}
