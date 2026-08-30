@@ -585,6 +585,75 @@ function scalePresetIntensity(
   };
 }
 
+// gpt-image-1 only accepts 1024x1024, 1024x1536 or 1536x1024 as an output
+// size — never the 16:9 our thumbnail actually is, and (crucially) never
+// whatever arbitrary aspect ratio the user's uploaded photo happens to be
+// (4:3, 9:16 phone photos are the common case). When input and requested
+// output aspect ratios differ, OpenAI has to reconcile them somehow before
+// generating — and our face mask, built in the *original* photo's pixel
+// coordinates, has no guarantee of landing in the same place once OpenAI
+// does that. Cropping and resizing to the exact target size ourselves,
+// centered on the face the user marked, removes that ambiguity entirely:
+// the image we send already matches `size`, so nothing needs reconciling,
+// and we can remap the face zone into the new frame with simple pixel math
+// instead of hoping OpenAI's internal handling matches our assumptions.
+const AI_OUTPUT_WIDTH = 1536;
+const AI_OUTPUT_HEIGHT = 1024;
+
+async function prepareAiInput(
+  input: Buffer,
+  facePreserve: FacePreserve | null
+): Promise<{ buffer: Buffer; face: FacePreserve | null }> {
+  const meta = await sharp(input).metadata();
+  const width = meta.width ?? 0;
+  const height = meta.height ?? 0;
+  if (!width || !height) return { buffer: input, face: facePreserve };
+
+  const targetAspect = AI_OUTPUT_WIDTH / AI_OUTPUT_HEIGHT;
+  const currentAspect = width / height;
+
+  let cropWidth = width;
+  let cropHeight = height;
+  if (currentAspect > targetAspect) {
+    cropWidth = Math.round(height * targetAspect);
+  } else if (currentAspect < targetAspect) {
+    cropHeight = Math.round(width / targetAspect);
+  }
+
+  // Center the crop on the marked face when we have one, clamped so the
+  // crop window never runs outside the actual photo.
+  const faceCx = facePreserve ? facePreserve.x * width : width / 2;
+  const faceCy = facePreserve ? facePreserve.y * height : height / 2;
+  const cropX = Math.min(Math.max(Math.round(faceCx - cropWidth / 2), 0), width - cropWidth);
+  const cropY = Math.min(Math.max(Math.round(faceCy - cropHeight / 2), 0), height - cropHeight);
+
+  const needsCrop = cropWidth !== width || cropHeight !== height;
+  const pipeline = needsCrop
+    ? sharp(input).extract({ left: cropX, top: cropY, width: cropWidth, height: cropHeight })
+    : sharp(input);
+  const buffer = await pipeline
+    .resize(AI_OUTPUT_WIDTH, AI_OUTPUT_HEIGHT, { fit: "fill" })
+    .png()
+    .toBuffer();
+
+  if (!facePreserve) return { buffer, face: null };
+
+  const scaleX = AI_OUTPUT_WIDTH / cropWidth;
+  const scaleY = AI_OUTPUT_HEIGHT / cropHeight;
+  const cxOrig = facePreserve.x * width;
+  const cyOrig = facePreserve.y * height;
+  const rxOrig = FACE_ZONE_BASE_RX * facePreserve.sizeX * width;
+  const ryOrig = FACE_ZONE_BASE_RY * facePreserve.sizeY * height;
+
+  const face: FacePreserve = {
+    x: ((cxOrig - cropX) * scaleX) / AI_OUTPUT_WIDTH,
+    y: ((cyOrig - cropY) * scaleY) / AI_OUTPUT_HEIGHT,
+    sizeX: (rxOrig * scaleX) / (FACE_ZONE_BASE_RX * AI_OUTPUT_WIDTH),
+    sizeY: (ryOrig * scaleY) / (FACE_ZONE_BASE_RY * AI_OUTPUT_HEIGHT),
+  };
+  return { buffer, face };
+}
+
 // Calls OpenAI's image editing model to actually regenerate the photo's
 // lighting/atmosphere/background per the preset's prompt — a real
 // generative transformation, not a deterministic color filter. Optional
@@ -596,7 +665,7 @@ async function applyAiEnhancement(
   userDescription: string,
   references: { buffer: Buffer }[],
   facePreserve: FacePreserve | null
-): Promise<Buffer> {
+): Promise<{ buffer: Buffer; face: FacePreserve | null }> {
   const openai = getOpenAI();
   if (!openai) {
     throw new AiNotConfiguredError();
@@ -619,7 +688,17 @@ async function applyAiEnhancement(
     );
   }
 
-  const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
+  // Crop/resize to exactly match the size we're about to request from
+  // OpenAI (see prepareAiInput above) — the face zone comes back remapped
+  // into this same frame, so the mask we build from it is guaranteed to
+  // line up with what OpenAI actually receives, regardless of the photo's
+  // original aspect ratio.
+  const { buffer: aiReadyInput, face: mappedFace } = await prepareAiInput(
+    normalizedInput,
+    facePreserve
+  );
+
+  const uploadable = await toFile(aiReadyInput, "photo.png", { type: "image/png" });
 
   const images = [uploadable];
   let referenceNote = "";
@@ -638,17 +717,14 @@ async function applyAiEnhancement(
   }
 
   // Hard pixel-level guarantee on top of the prompt instructions: the mask's
-  // opaque ellipse over the face is preserved byte-for-byte by OpenAI, it
+  // opaque zone over the face is preserved byte-for-byte by OpenAI, it
   // cannot be regenerated no matter what the rest of the prompt asks for.
+  // Built from aiReadyInput/mappedFace, not the original photo/facePreserve
+  // — see prepareAiInput for why that distinction matters.
   let maskUploadable: Awaited<ReturnType<typeof toFile>> | undefined;
-  if (facePreserve) {
-    const meta = await sharp(normalizedInput).metadata();
-    const width = meta.width ?? 0;
-    const height = meta.height ?? 0;
-    if (width > 0 && height > 0) {
-      const maskBuffer = await buildFaceMask(width, height, facePreserve);
-      maskUploadable = await toFile(maskBuffer, "face-mask.png", { type: "image/png" });
-    }
+  if (mappedFace) {
+    const maskBuffer = await buildFaceMask(AI_OUTPUT_WIDTH, AI_OUTPUT_HEIGHT, mappedFace);
+    maskUploadable = await toFile(maskBuffer, "face-mask.png", { type: "image/png" });
   }
 
   const faceLockNote = maskUploadable
@@ -678,7 +754,7 @@ async function applyAiEnhancement(
   if (!b64) {
     throw new Error("OpenAI n'a renvoyé aucune image.");
   }
-  return Buffer.from(b64, "base64");
+  return { buffer: Buffer.from(b64, "base64"), face: mappedFace };
 }
 
 class AiNotConfiguredError extends Error {
@@ -963,6 +1039,15 @@ export async function POST(req: NextRequest) {
       // photo — lets the user retouch text, colors, shapes etc. for free
       // and instantly, without paying for a new OpenAI generation.
       let aiBuffer: Buffer;
+      // The face zone the user marked is in the *original* photo's
+      // coordinates. A fresh generation remaps it into the cropped/resized
+      // frame actually sent to OpenAI (see prepareAiInput) and we reuse
+      // that remapped version below for the targeted-edit mask too, so it
+      // stays aligned with the real pixels in aiBuffer. On a cache hit we
+      // don't have the original photo to redo that math (the client sends
+      // a placeholder instead) — same known limitation as before this fix,
+      // just no longer masking the wrong region on top of it.
+      let faceForEdits = facePreserve;
       if (hasCachedAiBase) {
         aiBuffer = Buffer.from(await (cachedAiBaseField as File).arrayBuffer());
       } else {
@@ -971,13 +1056,15 @@ export async function POST(req: NextRequest) {
           references.push({ buffer: Buffer.from(await ref.arrayBuffer()) });
         }
         try {
-          aiBuffer = await applyAiEnhancement(
+          const enhanced = await applyAiEnhancement(
             inputBuffer,
             preset,
             aiDescription,
             references,
             facePreserve
           );
+          aiBuffer = enhanced.buffer;
+          faceForEdits = enhanced.face;
           usedOpenAiCall = true;
         } catch (err) {
           await releaseReservationIfNeeded();
@@ -998,7 +1085,7 @@ export async function POST(req: NextRequest) {
       // we ended up with above (fresh or cached).
       if (editZone && editInstruction) {
         try {
-          aiBuffer = await applyTargetedEdit(aiBuffer, editInstruction, editZone, facePreserve);
+          aiBuffer = await applyTargetedEdit(aiBuffer, editInstruction, editZone, faceForEdits);
           usedOpenAiCall = true;
         } catch (err) {
           await releaseReservationIfNeeded();
