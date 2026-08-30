@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+@keyframes drift-glow {
+  0%,
+  100% {
+    transform: translate(-6%, -4%) scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translate(6%, 4%) scale(1.15);
+    opacity: 1;
+  }
+}

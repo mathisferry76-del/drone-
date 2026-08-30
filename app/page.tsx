@@ -1,6 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { PRESETS } from "@/lib/presets";
+import FadeInSection from "@/components/motion/FadeInSection";
+import HeroTitle from "@/components/motion/HeroTitle";
 
 const RESULTS = [
   { id: "bold-impact", niche: "Gaming / réaction", span: "sm:row-span-2" },
@@ -58,18 +60,18 @@ export default function Home() {
       <section className="relative overflow-hidden">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-40 h-[32rem] bg-[radial-gradient(ellipse_at_top,theme(colors.yellow.400/18%),transparent_65%)]"
+          className="pointer-events-none absolute inset-x-0 -top-40 h-[32rem] bg-[radial-gradient(ellipse_at_top,theme(colors.yellow.400/18%),transparent_65%)] [animation:drift-glow_14s_ease-in-out_infinite]"
         />
         <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 pb-20 pt-24 text-center">
           <span className="mb-4 rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
             Fait pour les créateurs solo
           </span>
-          <h1 className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
+          <HeroTitle className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
             Plus de vues sur tes vidéos, avec{" "}
             <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
               zéro compétence design
             </span>
-          </h1>
+          </HeroTitle>
           <p className="mt-6 max-w-xl text-lg text-zinc-400">
             Upload une photo, choisis un style, ajoute ton titre. MIN IA
             génère en 10 secondes une miniature optimisée pour le clic —
@@ -79,13 +81,13 @@ export default function Home() {
           <div className="mt-8 flex flex-col gap-4 sm:flex-row">
             <Link
               href="/generate"
-              className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:bg-yellow-300"
+              className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
             >
               Créer ma première miniature →
             </Link>
             <Link
               href="/pricing"
-              className="rounded-full border border-zinc-700 px-8 py-3 text-base font-semibold text-white transition hover:border-zinc-500"
+              className="rounded-full border border-zinc-700 px-8 py-3 text-base font-semibold text-white transition hover:scale-105 hover:border-zinc-500"
             >
               Voir les tarifs
             </Link>
@@ -113,7 +115,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="styles" className="mx-auto w-full max-w-6xl px-6 py-16">
+      <FadeInSection id="styles" className="mx-auto w-full max-w-6xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
           10 styles prêts à l&apos;emploi
         </h2>
@@ -143,9 +145,9 @@ export default function Home() {
             </div>
           ))}
         </div>
-      </section>
+      </FadeInSection>
 
-      <section className="mx-auto w-full max-w-5xl px-6 py-16">
+      <FadeInSection className="mx-auto w-full max-w-5xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
           De la photo brute à la miniature qui capte le clic
         </h2>
@@ -179,9 +181,9 @@ export default function Home() {
             </p>
           </div>
         </div>
-      </section>
+      </FadeInSection>
 
-      <section id="resultats" className="mx-auto w-full max-w-6xl px-6 py-16">
+      <FadeInSection id="resultats" className="mx-auto w-full max-w-6xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
           Nos résultats
         </h2>
@@ -214,9 +216,9 @@ export default function Home() {
             Voir les plans →
           </Link>
         </p>
-      </section>
+      </FadeInSection>
 
-      <section className="mx-auto w-full max-w-5xl px-6 py-16">
+      <FadeInSection className="mx-auto w-full max-w-5xl px-6 py-16">
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
           <div className="rounded-2xl border border-zinc-800/60 p-6">
             <div className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-400/40 text-lg font-extrabold text-yellow-400">
@@ -248,9 +250,9 @@ export default function Home() {
             </p>
           </div>
         </div>
-      </section>
+      </FadeInSection>
 
-      <section className="mx-auto w-full max-w-5xl px-6 py-16">
+      <FadeInSection className="mx-auto w-full max-w-5xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
           Filtre ou IA générative : deux façons de traiter ta photo
         </h2>
@@ -275,9 +277,9 @@ export default function Home() {
             </p>
           </div>
         </div>
-      </section>
+      </FadeInSection>
 
-      <section id="faq" className="mx-auto w-full max-w-3xl px-6 py-16">
+      <FadeInSection id="faq" className="mx-auto w-full max-w-3xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
           Questions fréquentes
         </h2>
@@ -292,9 +294,9 @@ export default function Home() {
             </div>
           ))}
         </div>
-      </section>
+      </FadeInSection>
 
-      <section className="mx-auto w-full max-w-4xl px-6 py-20 text-center">
+      <FadeInSection className="mx-auto w-full max-w-4xl px-6 py-20 text-center">
         <h2 className="text-2xl font-bold sm:text-3xl">
           Prêt à arrêter de perdre 30 minutes par miniature ?
         </h2>
@@ -304,7 +306,7 @@ export default function Home() {
         >
           Voir les plans
         </Link>
-      </section>
+      </FadeInSection>
     </div>
   );
 }
