@@ -3,6 +3,9 @@ import Link from "next/link";
 import { PRESETS } from "@/lib/presets";
 import FadeInSection from "@/components/motion/FadeInSection";
 import HeroTitle from "@/components/motion/HeroTitle";
+import FloatingShowcase from "@/components/motion/FloatingShowcase";
+import Marquee from "@/components/motion/Marquee";
+import TiltCard from "@/components/motion/TiltCard";
 
 const RESULTS = [
   { id: "bold-impact", niche: "Gaming / réaction", span: "sm:row-span-2" },
@@ -62,6 +65,10 @@ export default function Home() {
           aria-hidden
           className="pointer-events-none absolute inset-x-0 -top-40 h-[32rem] bg-[radial-gradient(ellipse_at_top,theme(colors.yellow.400/18%),transparent_65%)] [animation:drift-glow_14s_ease-in-out_infinite]"
         />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 -top-20 h-[28rem] bg-[radial-gradient(ellipse_at_top,theme(colors.orange.500/12%),transparent_60%)] [animation:drift-glow-alt_18s_ease-in-out_infinite]"
+        />
         <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 pb-20 pt-24 text-center">
           <span className="mb-4 rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
             Fait pour les créateurs solo
@@ -112,8 +119,24 @@ export default function Home() {
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
             <span>IA générative <span className="font-bold text-white">gpt-image-1</span></span>
           </div>
+
+          <FloatingShowcase
+            src="/examples/bold-impact.webp"
+            alt="Aperçu d'une miniature générée avec MIN IA"
+          />
         </div>
       </section>
+
+      <div className="border-y border-zinc-900 bg-zinc-950/60 py-4">
+        <Marquee
+          className="text-sm font-semibold uppercase tracking-wide text-zinc-600"
+          items={PRESETS.map((p) => (
+            <span key={p.id} className="flex items-center gap-2">
+              {p.name} <span className="text-yellow-400/50">✦</span>
+            </span>
+          ))}
+        />
+      </div>
 
       <FadeInSection id="styles" className="mx-auto w-full max-w-6xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
@@ -125,24 +148,23 @@ export default function Home() {
         </p>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {PRESETS.map((preset) => (
-            <div
-              key={preset.id}
-              className="group overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 transition hover:border-zinc-700 hover:shadow-[0_0_30px_-12px_theme(colors.yellow.400/40%)]"
-            >
-              <div className="relative aspect-video w-full overflow-hidden">
-                <Image
-                  src={`/examples/${preset.id}.webp`}
-                  alt={`Exemple de miniature générée avec le style ${preset.name}`}
-                  fill
-                  sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                  className="object-cover transition duration-300 group-hover:scale-105"
-                />
+            <TiltCard key={preset.id} className="group">
+              <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 transition hover:border-zinc-700 hover:shadow-[0_0_30px_-12px_theme(colors.yellow.400/40%)]">
+                <div className="relative aspect-video w-full overflow-hidden">
+                  <Image
+                    src={`/examples/${preset.id}.webp`}
+                    alt={`Exemple de miniature générée avec le style ${preset.name}`}
+                    fill
+                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
+                    className="object-cover transition duration-300 group-hover:scale-105"
+                  />
+                </div>
+                <div className="p-6">
+                  <h3 className="font-bold">{preset.name}</h3>
+                  <p className="mt-1 text-sm text-zinc-400">{preset.description}</p>
+                </div>
               </div>
-              <div className="p-6">
-                <h3 className="font-bold">{preset.name}</h3>
-                <p className="mt-1 text-sm text-zinc-400">{preset.description}</p>
-              </div>
-            </div>
+            </TiltCard>
           ))}
         </div>
       </FadeInSection>

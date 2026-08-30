@@ -54,6 +54,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-black text-white">
+        <div aria-hidden className="grain-overlay" />
         <Navbar />
         <main className="flex flex-1 flex-col">{children}</main>
         <Footer />
