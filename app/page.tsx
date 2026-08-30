@@ -220,8 +220,8 @@ export default function Home() {
           {RESULTS.map((r, i) => (
             <ParallaxItem
               key={r.id}
-              strength={i % 3 === 0 ? 50 : i % 3 === 1 ? -34 : 24}
-              spin={i % 2 === 0 ? 12 : -12}
+              strength={i % 3 === 0 ? 420 : i % 3 === 1 ? -300 : 220}
+              spin={i % 2 === 0 ? 16 : -16}
               className={r.span}
             >
               <div className="group relative aspect-video w-full overflow-hidden rounded-2xl border border-zinc-800 sm:aspect-auto sm:h-full">
