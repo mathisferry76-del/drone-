@@ -7,6 +7,7 @@ import FloatingShowcase from "@/components/motion/FloatingShowcase";
 import Marquee from "@/components/motion/Marquee";
 import TiltCard from "@/components/motion/TiltCard";
 import ParallaxItem from "@/components/motion/ParallaxItem";
+import CountUp from "@/components/motion/CountUp";
 
 const RESULTS = [
   { id: "bold-impact", niche: "Gaming / réaction", span: "sm:row-span-2" },
@@ -115,9 +116,9 @@ export default function Home() {
           </div>
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
-            <span><span className="font-bold text-white">10</span> styles prêts à l&apos;emploi</span>
+            <span><CountUp value={10} className="font-bold text-white" /> styles prêts à l&apos;emploi</span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
-            <span><span className="font-bold text-white">5</span> calques de texte + formes</span>
+            <span><CountUp value={5} className="font-bold text-white" /> calques de texte + formes</span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
             <span>IA générative <span className="font-bold text-white">gpt-image-1</span></span>
           </div>
@@ -151,7 +152,7 @@ export default function Home() {
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {PRESETS.map((preset) => (
             <TiltCard key={preset.id} className="group">
-              <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 transition hover:border-zinc-700 hover:shadow-[0_0_30px_-12px_theme(colors.yellow.400/40%)]">
+              <div className="holo-border overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 transition hover:border-zinc-700 hover:shadow-[0_0_30px_-12px_theme(colors.yellow.400/40%)]">
                 <div className="relative aspect-video w-full overflow-hidden">
                   <Image
                     src={`/examples/${preset.id}.webp`}
@@ -219,7 +220,8 @@ export default function Home() {
           {RESULTS.map((r, i) => (
             <ParallaxItem
               key={r.id}
-              strength={i % 3 === 0 ? 36 : i % 3 === 1 ? -24 : 16}
+              strength={i % 3 === 0 ? 50 : i % 3 === 1 ? -34 : 24}
+              spin={i % 2 === 0 ? 12 : -12}
               className={r.span}
             >
               <div className="group relative aspect-video w-full overflow-hidden rounded-2xl border border-zinc-800 sm:aspect-auto sm:h-full">

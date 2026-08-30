@@ -24,6 +24,86 @@
   }
 }
 
+@keyframes holo-sweep {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Animated holographic border sheen — sits behind a card with a 1px inset
+   so only the border edge shows the moving gradient. */
+.holo-border {
+  position: relative;
+}
+.holo-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    theme(colors.yellow.400/70%) 45%,
+    theme(colors.orange.400/70%) 50%,
+    theme(colors.yellow.400/70%) 55%,
+    transparent 70%
+  );
+  background-size: 250% 100%;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.holo-border:hover::before {
+  opacity: 1;
+  animation: holo-sweep 2.2s linear infinite;
+}
+
+@keyframes scan-beam {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  5% {
+    opacity: 1;
+  }
+  95% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+/* A faint light beam that periodically sweeps down the full page — a
+   sci-fi "scanning" ambiance, subtle enough not to distract from reading. */
+.scan-beam {
+  position: fixed;
+  inset-inline: 0;
+  top: 0;
+  z-index: 35;
+  height: 40vh;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    theme(colors.yellow.400/6%) 45%,
+    theme(colors.yellow.400/10%) 50%,
+    theme(colors.yellow.400/6%) 55%,
+    transparent
+  );
+  animation: scan-beam 9s ease-in-out infinite;
+}
+
 @keyframes grid-drift {
   from {
     background-position: 0 0;
