@@ -56,7 +56,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col bg-black text-white">
         <div aria-hidden className="grain-overlay" />
-        <div aria-hidden className="scan-beam" />
         <CursorGlow />
         <Navbar />
         <main className="flex flex-1 flex-col">{children}</main>
