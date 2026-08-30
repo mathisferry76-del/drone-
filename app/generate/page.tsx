@@ -447,8 +447,6 @@ export default function GeneratePage() {
     dragRef.current = null;
   }
 
-  const hasAnyText = textLayers.some((l) => l.text.trim());
-
   // Identifies the inputs that actually change what OpenAI would generate.
   // As long as these stay the same, we can reuse the cached AI base and only
   // re-run the (free, instant) local compositing — new text, colors, shapes,
@@ -476,10 +474,6 @@ export default function GeneratePage() {
 
     if (!file) {
       setError("Ajoute d'abord une photo.");
-      return;
-    }
-    if (!hasAnyText) {
-      setError("Ajoute au moins un texte pour ta miniature.");
       return;
     }
     const cacheKey = willUseAi ? computeAiCacheKey() : null;
@@ -867,7 +861,7 @@ export default function GeneratePage() {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label className="text-sm font-semibold text-zinc-300">
-                3. Textes ({textLayers.length}/{MAX_TEXT_LAYERS})
+                3. Textes ({textLayers.length}/{MAX_TEXT_LAYERS}) — optionnel
               </label>
               <button
                 type="button"
@@ -878,6 +872,9 @@ export default function GeneratePage() {
                 + Ajouter un texte
               </button>
             </div>
+            <p className="mb-3 text-xs text-zinc-500">
+              Laisse un champ vide (ou supprime-le) si tu ne veux aucun texte sur ta miniature.
+            </p>
             <div className="space-y-3">
               {textLayers.map((layer, i) => (
                 <div

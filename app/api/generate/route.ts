@@ -832,13 +832,6 @@ export async function POST(req: NextRequest) {
         );
       }
     }
-    if (textLayers.length === 0 || !textLayers.some((l) => l.text.trim())) {
-      return NextResponse.json(
-        { error: "Ajoute au moins un texte pour ta miniature." },
-        { status: 400 }
-      );
-    }
-
     // Vrai paywall : aucune génération (filtre ou IA) sans compte connecté
     // avec un abonnement actif — plus d'essai gratuit ni de simulation
     // côté client. Le plan et le quota ne sont jamais lus ailleurs que dans
