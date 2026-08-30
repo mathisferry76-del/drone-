@@ -651,7 +651,7 @@ export default function GeneratePage() {
                     return (
                       <div
                         onPointerDown={startFaceDrag}
-                        className="absolute flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center justify-center rounded-[50%] border-2 border-dashed border-emerald-400 bg-emerald-400/10"
+                        className="absolute flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center justify-center rounded-2xl border-2 border-dashed border-emerald-400 bg-emerald-400/10"
                         style={{
                           left: `${bx * 100}%`,
                           top: `${by * 100}%`,
