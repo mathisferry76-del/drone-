@@ -6,6 +6,7 @@ import HeroTitle from "@/components/motion/HeroTitle";
 import FloatingShowcase from "@/components/motion/FloatingShowcase";
 import Marquee from "@/components/motion/Marquee";
 import TiltCard from "@/components/motion/TiltCard";
+import ParallaxItem from "@/components/motion/ParallaxItem";
 
 const RESULTS = [
   { id: "bold-impact", niche: "Gaming / réaction", span: "sm:row-span-2" },
@@ -61,6 +62,7 @@ export default function Home() {
   return (
     <div className="flex flex-col">
       <section className="relative overflow-hidden">
+        <div aria-hidden className="sci-grid pointer-events-none absolute inset-x-0 top-0 h-[36rem]" />
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 -top-40 h-[32rem] bg-[radial-gradient(ellipse_at_top,theme(colors.yellow.400/18%),transparent_65%)] [animation:drift-glow_14s_ease-in-out_infinite]"
@@ -214,22 +216,25 @@ export default function Home() {
           thématiques de chaîne.
         </p>
         <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-4 sm:auto-rows-[9rem]">
-          {RESULTS.map((r) => (
-            <div
+          {RESULTS.map((r, i) => (
+            <ParallaxItem
               key={r.id}
-              className={`group relative overflow-hidden rounded-2xl border border-zinc-800 ${r.span}`}
+              strength={i % 3 === 0 ? 36 : i % 3 === 1 ? -24 : 16}
+              className={r.span}
             >
-              <Image
-                src={`/examples/${r.id}.webp`}
-                alt={`Miniature générée avec MIN IA — style ${r.niche}`}
-                fill
-                sizes="(min-width: 640px) 25vw, 100vw"
-                className="object-cover transition duration-300 group-hover:scale-105"
-              />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-3">
-                <span className="text-xs font-semibold text-white">{r.niche}</span>
+              <div className="group relative aspect-video w-full overflow-hidden rounded-2xl border border-zinc-800 sm:aspect-auto sm:h-full">
+                <Image
+                  src={`/examples/${r.id}.webp`}
+                  alt={`Miniature générée avec MIN IA — style ${r.niche}`}
+                  fill
+                  sizes="(min-width: 640px) 25vw, 100vw"
+                  className="object-cover transition duration-300 group-hover:scale-105"
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                  <span className="text-xs font-semibold text-white">{r.niche}</span>
+                </div>
               </div>
-            </div>
+            </ParallaxItem>
           ))}
         </div>
         <p className="mt-8 text-center text-sm text-zinc-500">

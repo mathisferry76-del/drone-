@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
+import CursorGlow from "@/components/motion/CursorGlow";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col bg-black text-white">
         <div aria-hidden className="grain-overlay" />
+        <CursorGlow />
         <Navbar />
         <main className="flex flex-1 flex-col">{children}</main>
         <Footer />
