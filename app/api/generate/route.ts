@@ -119,9 +119,18 @@ function parseFacePreserve(raw: unknown): FacePreserve | null {
 
 // Builds a PNG mask for OpenAI's images.edit: fully transparent pixels mark
 // the area the model is allowed to regenerate, fully opaque pixels are
-// preserved untouched. We render a feathered opaque ellipse over the face
-// zone the user marked, so the face comes back pixel-for-pixel identical —
-// no amount of prompting can guarantee that the way a real pixel mask does.
+// preserved untouched. We render a feathered opaque rounded rectangle over
+// the face zone the user marked, so the face comes back pixel-for-pixel
+// identical — no amount of prompting can guarantee that the way a real
+// pixel mask does.
+//
+// Deliberately a rectangle, not an ellipse: an ellipse inscribed in the
+// same bounding box excludes its four corners (~20% of the area) by
+// construction. On a face, those corners are exactly the jawline/beard and
+// the temples/eyes — so even a well-sized, well-centered ellipse routinely
+// left the beard and eyes unprotected and let the model regenerate them,
+// which is the actual failure users were hitting. A rounded rect covers
+// the full box, corners included.
 async function buildFaceMask(
   width: number,
   height: number,
@@ -129,16 +138,19 @@ async function buildFaceMask(
 ): Promise<Buffer> {
   const cx = face.x * width;
   const cy = face.y * height;
-  const rx = FACE_ZONE_BASE_RX * face.sizeX * width;
-  const ry = FACE_ZONE_BASE_RY * face.sizeY * height;
-  const blur = Math.max(rx, ry) * 0.35;
+  const halfW = FACE_ZONE_BASE_RX * face.sizeX * width;
+  const halfH = FACE_ZONE_BASE_RY * face.sizeY * height;
+  const blur = Math.max(halfW, halfH) * 0.2;
+  const rectX = cx - halfW;
+  const rectY = cy - halfH;
+  const corner = Math.min(halfW, halfH) * 0.4;
   const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
     <defs>
       <filter id="feather" x="-60%" y="-60%" width="220%" height="220%">
         <feGaussianBlur stdDeviation="${blur.toFixed(1)}" />
       </filter>
     </defs>
-    <ellipse cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" rx="${rx.toFixed(1)}" ry="${ry.toFixed(1)}" fill="#000" filter="url(#feather)" />
+    <rect x="${rectX.toFixed(1)}" y="${rectY.toFixed(1)}" width="${(halfW * 2).toFixed(1)}" height="${(halfH * 2).toFixed(1)}" rx="${corner.toFixed(1)}" ry="${corner.toFixed(1)}" fill="#000" filter="url(#feather)" />
   </svg>`;
   return sharp(Buffer.from(svg)).png().toBuffer();
 }
