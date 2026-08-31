@@ -11,6 +11,7 @@ interface Sparkle {
   delay: number;
   duration: number;
   rotate: number;
+  repeatDelay: number;
 }
 
 function makeSparkles(count: number): Sparkle[] {
@@ -24,9 +25,10 @@ function makeSparkles(count: number): Sparkle[] {
       x: Math.cos(angle) * distance,
       y: Math.sin(angle) * distance,
       size: 10 + Math.random() * 22,
-      delay: Math.random() * 0.35,
+      delay: Math.random() * 1.2,
       duration: 0.9 + Math.random() * 0.9,
       rotate: Math.random() * 180,
+      repeatDelay: 0.6 + Math.random() * 0.8,
     };
   });
 }
@@ -56,7 +58,7 @@ export default function ResultReveal({
     setActiveSrc(src);
     setSparkles(makeSparkles(42));
     setShow(true);
-    const timer = setTimeout(() => setShow(false), 2800);
+    const timer = setTimeout(() => setShow(false), 5500);
     return () => clearTimeout(timer);
     // Only re-fire when the key identifying *this* result changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -96,7 +98,13 @@ export default function ResultReveal({
                 style={{ fontSize: s.size, filter: "drop-shadow(0 0 6px rgba(250,204,21,0.9))" }}
                 initial={{ x: 0, y: 0, opacity: 1, scale: 0, rotate: 0 }}
                 animate={{ x: s.x, y: s.y, opacity: 0, scale: 1, rotate: s.rotate }}
-                transition={{ duration: s.duration, delay: s.delay, ease: "easeOut" }}
+                transition={{
+                  duration: s.duration,
+                  delay: s.delay,
+                  ease: "easeOut",
+                  repeat: Infinity,
+                  repeatDelay: s.repeatDelay,
+                }}
               >
                 ✦
               </motion.span>
