@@ -24,38 +24,34 @@ const MAX_TEXT_LAYERS = 5;
 const MAX_SHAPES = 8;
 const MAX_REFERENCE_IMAGES = 3;
 
-// Ready-made description prompts for people who don't know what to write.
-// Deliberately generic (no named real person, no reference photo of a
-// third party) — combining a real face upload with a named public figure
-// or a violent/scary description is what actually gets flagged by
-// OpenAI's safety system, so these stay in territory that reliably
-// generates cleanly.
-const PROMPT_SUGGESTIONS: { label: string; text: string }[] = [
-  {
-    label: "😱 Réaction choquée",
-    text: "Garde mon visage exactement comme sur la photo de référence, expression choquée et stupéfaite, yeux écarquillés, bouche entrouverte, une main près du visage. Arrière-plan flouté avec une ambiance dramatique, forte lumière de contour séparant le sujet du fond, fort contraste, étalonnage cinématique.",
-  },
-  {
-    label: "💰 Luxe / réussite",
-    text: "Garde mon visage exactement comme sur la photo de référence, expression confiante et souriante. Décor luxueux (intérieur moderne haut de gamme ou vue sur une ville la nuit), lumière chaude et cinématographique, ambiance premium, légère profondeur de champ sur l'arrière-plan.",
-  },
-  {
-    label: "🎮 Gaming / esport",
-    text: "Garde mon visage exactement comme sur la photo de référence, expression intense et concentrée. Arrière-plan néon bleu/violet avec effets de lumière façon setup gaming, ambiance électrique, forte saturation des couleurs, style thumbnail esport dynamique.",
-  },
-  {
-    label: "🕵️ Mystère / suspense",
-    text: "Garde mon visage exactement comme sur la photo de référence, expression sérieuse et intriguée. Ambiance sombre et mystérieuse, silhouette floutée à l'arrière-plan dans l'ombre, éclairage tamisé façon clair-obscur, forte tension visuelle, palette de couleurs froides désaturées.",
-  },
-  {
-    label: "🌍 Voyage / aventure",
-    text: "Garde mon visage exactement comme sur la photo de référence, expression émerveillée et souriante. Décor extérieur spectaculaire (montagne, plage ou ville étrangère), lumière naturelle dorée de fin de journée, ambiance aventure et évasion, légère profondeur de champ.",
-  },
-  {
-    label: "💪 Motivation / avant-après",
-    text: "Garde mon visage exactement comme sur la photo de référence, expression déterminée et confiante. Décor de salle de sport ou d'extérieur urbain, lumière dramatique et contrastée, ambiance intense et motivante, couleurs vives et saturées façon thumbnail sport/motivation.",
-  },
-];
+// One ready-made description prompt per filter, matching that preset's own
+// mood (see PRESETS' aiPrompt in lib/presets.ts) so the suggestion actually
+// complements the style instead of fighting it. Deliberately generic — no
+// named real person, no reference photo of a third party — since that
+// combination is what actually gets flagged by OpenAI's safety system, per
+// the Messi thumbnail rejection.
+const PRESET_PROMPT_SUGGESTIONS: Record<PresetId, string> = {
+  "bold-impact":
+    "Garde mon visage exactement comme sur la photo de référence, expression choquée et surexcitée, bouche ouverte, yeux écarquillés, une main sur la tête. Arrière-plan avec des confettis ou des billets qui volent, explosion de couleurs vives, énergie maximale façon miniature virale.",
+  "clean-minimal":
+    "Garde mon visage exactement comme sur la photo de référence, expression posée et confiante, léger sourire. Décor de bureau moderne ou studio épuré, grande fenêtre en arrière-plan légèrement floutée, lumière naturelle douce, ambiance professionnelle et soignée.",
+  "neon-pop":
+    "Garde mon visage exactement comme sur la photo de référence, expression concentrée et intense, casque gaming autour du cou ou posé à côté. Setup gaming en arrière-plan avec bandeaux LED violets et cyan, écrans flous à l'arrière-plan, ambiance électrique nocturne.",
+  "high-contrast-drama":
+    "Garde mon visage exactement comme sur la photo de référence, expression grave et sérieuse, regard intense vers la caméra. Arrière-plan sombre avec un rai de lumière dramatique traversant la scène, ombres profondes, ambiance documentaire/storytime tendue.",
+  "retro-vintage":
+    "Garde mon visage exactement comme sur la photo de référence, expression nostalgique et souriante. Décor d'intérieur ou de rue avec une ambiance années 80/90, grain de pellicule visible, tons chauds désaturés façon photo argentique retrouvée.",
+  "pastel-soft":
+    "Garde mon visage exactement comme sur la photo de référence, expression douce et apaisée, léger sourire. Décor lumineux et épuré (chambre cosy ou espace bien-être), lumière douce diffuse, tons pastel clairs, ambiance lifestyle/bien-être.",
+  "cyberpunk":
+    "Garde mon visage exactement comme sur la photo de référence, expression déterminée, légèrement de profil. Arrière-plan de ville futuriste la nuit, néons violets et bleus, reflets sur sol mouillé, ambiance cyberpunk cinématographique.",
+  "nature-vive":
+    "Garde mon visage exactement comme sur la photo de référence, expression émerveillée et souriante, regard vers l'horizon. Décor extérieur en pleine nature (forêt, montagne ou sentier), lumière naturelle du jour, verdure saturée, ambiance vlog outdoor/aventure.",
+  "golden-vacation":
+    "Garde mon visage exactement comme sur la photo de référence, expression détendue et joyeuse. Décor de plage ou terrasse au coucher du soleil, lumière dorée chaude, ciel orangé en arrière-plan, ambiance vacances d'été.",
+  realiste:
+    "Garde mon visage exactement comme sur la photo de référence sans aucune retouche stylisée. Améliore juste la netteté, l'exposition et les couleurs pour un rendu naturel et professionnel, comme une vraie photo prise en studio avec un bon éclairage.",
+};
 
 type Plan = "free" | PaidPlan;
 type BackgroundStyle = "panel" | "shadow" | "none";
@@ -1156,18 +1152,13 @@ export default function GeneratePage() {
                       {aiDescription.length}/{AI_DESCRIPTION_MAX}
                     </span>
                   </div>
-                  <div className="mb-2 flex flex-wrap gap-1.5">
-                    {PROMPT_SUGGESTIONS.map((suggestion) => (
-                      <button
-                        key={suggestion.label}
-                        type="button"
-                        onClick={() => setAiDescription(suggestion.text)}
-                        className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300 transition hover:border-yellow-400 hover:text-yellow-400"
-                      >
-                        {suggestion.label}
-                      </button>
-                    ))}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAiDescription(PRESET_PROMPT_SUGGESTIONS[presetId])}
+                    className="mb-2 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300 transition hover:border-yellow-400 hover:text-yellow-400"
+                  >
+                    ✨ Suggestion pour le style {PRESETS.find((p) => p.id === presetId)?.name}
+                  </button>
                   <textarea
                     value={aiDescription}
                     onChange={(e) => setAiDescription(e.target.value)}
