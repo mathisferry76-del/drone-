@@ -16,6 +16,7 @@ import {
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import GeneratingCard from "@/components/motion/GeneratingCard";
+import ResultReveal from "@/components/motion/ResultReveal";
 
 const AI_DESCRIPTION_MAX = 3000;
 const EDIT_INSTRUCTION_MAX = 300;
@@ -603,6 +604,7 @@ export default function GeneratePage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-16">
+      <ResultReveal src={resultUrl} revealKey={resultUrl} />
       <h1 className="text-3xl font-extrabold">Créer une miniature</h1>
       <p className="mt-2 text-zinc-400">
         {isPaid &&
