@@ -987,7 +987,7 @@ export async function POST(req: NextRequest) {
         );
       } else {
         const cap = isOwnerAccount
-          ? Number.MAX_SAFE_INTEGER
+          ? 999999999 // effectively unlimited, but still fits Postgres' `int` (p_ai_cap)
           : profile.plan === "free"
             ? 0
             : PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
