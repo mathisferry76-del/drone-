@@ -117,6 +117,29 @@ complet, pas une liste de features.
   miniatures gratuites bonus, le parrain en reçoit 3 — appliqué
   immédiatement à l'inscription via un trigger Postgres, cumulable sans
   limite, visible sur la page avec le nombre de filleuls.
+- **Recadrage final centré sur le visage réellement connu** : la sortie
+  `gpt-image-1` (1536x1024) est recadrée en 1280x720 — un vrai crop, pas
+  juste un redimensionnement, vu la différence d'aspect ratio. Ce crop
+  final utilise la position réelle du visage (celle du masque envoyé à
+  OpenAI) plutôt que la détection de contenu automatique de `sharp`, qui
+  n'a aucune idée d'où se trouve le masque et pouvait recadrer le visage
+  hors du cadre même quand la génération elle-même était réussie.
+- **Rate limiting basique par IP** (en mémoire, best-effort) sur
+  `/api/generate`, `/api/checkout` et `/api/contact`, vérifié avant même
+  la lecture du corps de la requête sur `/api/generate` — évite qu'un
+  flood non authentifié force le serveur à décoder de gros uploads avant
+  que la vérification d'auth ne les rejette.
+- **En-têtes de sécurité HTTP** (`next.config.ts`) : CSP, HSTS,
+  anti-clickjacking, `X-Content-Type-Options`, `Referrer-Policy`.
+- **Changement de plan via le portail Stripe** (`/api/portal`) :
+  upgrade/downgrade avec proration automatique et résiliation en libre
+  service, sans créer un second abonnement en plus de l'existant.
+- **SEO de base** : métadonnées et URL canonique propres par page
+  (`/`, `/pricing`, `/generate`...), sitemap et robots.txt.
+- **Suggestions de prompt IA prêtes à l'emploi** : dans `/generate`, un
+  bouton par style pré-remplit le champ description avec un prompt
+  détaillé (décor, objets, angle de caméra, lumière) cohérent avec le
+  style sélectionné, pour les utilisateurs qui ne savent pas quoi écrire.
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
@@ -164,6 +187,8 @@ OPENAI_API_KEY=sk-...
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
+RESEND_API_KEY=re_...
+NEXT_PUBLIC_GOOGLE_ADS_ID=AW-...
 ```
 
 **Supabase** (comptes, statut payant/quota côté serveur, historique) :
@@ -212,6 +237,14 @@ de plantage.
 Sans ces variables, `/pricing` reste utilisable mais affiche un message
 "non configuré" au clic sur un plan payant, au lieu de planter.
 
+**Changer de plan une fois abonné** : `/api/portal` ouvre le Stripe
+Billing Portal (upgrade/downgrade avec proration, moyen de paiement,
+résiliation) pour un utilisateur qui a déjà un `stripe_customer_id` —
+c'est ce qu'utilisent le bouton "Changer de plan / résilier" sur
+`/compte` et le clic sur un autre plan depuis `/pricing` quand un
+abonnement est déjà actif. Ne nécessite aucune configuration
+supplémentaire (le portail par défaut de Stripe suffit).
+
 **OpenAI** (pour activer l'amélioration IA générative, plan Pro) :
 1. Crée une clé API sur [platform.openai.com](https://platform.openai.com/api-keys)
    et assure-toi que le compte a accès au modèle `gpt-image-1`.
@@ -224,9 +257,21 @@ Sans cette clé, l'appel renvoie une erreur claire (501) au lieu de
 planter — le reste du produit (styles filtres) continue de fonctionner
 normalement.
 
-**Tester le plan Pro sans Stripe configuré** : dans la console du
-navigateur sur `/generate`, exécute
-`localStorage.setItem('thumbai_plan', 'pro')` puis recharge la page.
+**Contact** (formulaire `/contact`) : optionnel, nécessite un compte
+[Resend](https://resend.com) et `RESEND_API_KEY`. Sans cette variable,
+le formulaire affiche un message "non configuré" au lieu de planter.
+
+**Google Ads** (suivi de conversion) : optionnel, colle l'ID de balise
+(`AW-XXXXXXXXXX`, visible dans Google Ads → Outils → Balises Google)
+dans `NEXT_PUBLIC_GOOGLE_ADS_ID`. Sans cette variable, aucun script
+Google n'est chargé sur le site.
+
+**Tester le plan Pro/Studio sans payer** : il n'y a pas de simulation
+côté client — le plan vient uniquement de la ligne `profiles` en base
+(jamais du navigateur). Pour te donner un accès illimité à ton propre
+compte sans passer par Stripe, `app/api/generate/route.ts` contient un
+court-circuit `isOwnerAccount` sur un email précis — à adapter avec le
+tien ou à retirer avant un vrai lancement multi-utilisateurs.
 
 ## Déploiement
 
