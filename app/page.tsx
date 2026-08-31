@@ -9,10 +9,10 @@ import TiltCard from "@/components/motion/TiltCard";
 import CountUp from "@/components/motion/CountUp";
 
 const RESULTS = [
-  { id: "bold-impact", niche: "Gaming / réaction", span: "sm:row-span-2" },
+  { id: "bold-impact", niche: "Argent / réussite", span: "sm:row-span-2" },
   { id: "neon-pop", niche: "Musique / clip", span: "" },
-  { id: "high-contrast-drama", niche: "Actu / débat", span: "" },
-  { id: "golden-vacation", niche: "Voyage / lifestyle", span: "" },
+  { id: "high-contrast-drama", niche: "Business / SaaS", span: "" },
+  { id: "golden-vacation", niche: "Luxe / lifestyle", span: "" },
   { id: "cyberpunk", niche: "Tech / gadgets", span: "sm:row-span-2" },
   { id: "nature-vive", niche: "Outdoor / vlog", span: "" },
   { id: "clean-minimal", niche: "Podcast / interview", span: "" },
