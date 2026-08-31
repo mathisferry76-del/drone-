@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { getUserFromAuthHeader } from "@/lib/supabase";
+import { getUserFromAuthHeader, getSupabaseAdmin, Profile } from "@/lib/supabase";
 import { PAID_PLAN_IDS, PRICING_TIERS } from "@/lib/presets";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
@@ -48,6 +48,30 @@ export async function POST(req: NextRequest) {
     const knownPriceIds = PRICING_TIERS.map((t) => t.priceId).filter(Boolean);
     if (!knownPriceIds.includes(priceId)) {
       return NextResponse.json({ error: "Plan inconnu." }, { status: 400 });
+    }
+
+    // A user who already has an active subscription must switch plans
+    // through the Stripe portal (/api/portal), which prorates the change
+    // on the *existing* subscription — creating a second Checkout session
+    // here would start a second, separate subscription and double-bill them.
+    const admin = getSupabaseAdmin();
+    if (admin) {
+      const { data } = await admin
+        .from("profiles")
+        .select("plan, stripe_subscription_id")
+        .eq("id", user.id)
+        .single();
+      const profile = data as Pick<Profile, "plan" | "stripe_subscription_id"> | null;
+      if (profile?.stripe_subscription_id && profile.plan !== "free") {
+        return NextResponse.json(
+          {
+            error: "changer_de_plan",
+            message:
+              "Tu as déjà un abonnement actif. Gère ton changement de plan depuis la page Mon compte.",
+          },
+          { status: 409 }
+        );
+      }
     }
 
     const origin = req.headers.get("origin") ?? "http://localhost:3000";

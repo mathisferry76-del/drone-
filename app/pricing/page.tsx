@@ -37,6 +37,24 @@ export default function PricingPage() {
         body: JSON.stringify({ priceId, tier: tierId }),
       });
       const data = await res.json();
+
+      // Already subscribed: hand off to the Stripe portal instead, which
+      // changes the *existing* subscription (with proration) rather than
+      // starting a second one on top of it.
+      if (res.status === 409 && data.error === "changer_de_plan") {
+        const portalRes = await fetch("/api/portal", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const portalData = await portalRes.json();
+        if (!portalRes.ok || !portalData.url) {
+          setError(portalData.error ?? "Impossible d'ouvrir la gestion d'abonnement.");
+          return;
+        }
+        window.location.assign(portalData.url);
+        return;
+      }
+
       if (!res.ok || !data.url) {
         setError(data.error ?? "Erreur inconnue.");
         return;

@@ -13,6 +13,8 @@ export default function ComptePage() {
     "idle"
   );
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
+  const [portalError, setPortalError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session) return;
@@ -51,6 +53,28 @@ export default function ComptePage() {
   async function handleLogout() {
     const supabase = getSupabaseBrowser();
     await supabase?.auth.signOut();
+  }
+
+  async function handleManageSubscription() {
+    if (!session) return;
+    setPortalError(null);
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/portal", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setPortalError(data.error ?? "Impossible d'ouvrir la gestion d'abonnement.");
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setPortalError("Impossible de contacter le serveur.");
+    } finally {
+      setPortalLoading(false);
+    }
   }
 
   if (!authLoading && !session) {
@@ -101,6 +125,18 @@ export default function ComptePage() {
             Mon parrainage →
           </Link>
         </div>
+        {profile && profile.plan !== "free" && (
+          <div className="mt-4 border-t border-zinc-800 pt-4">
+            <button
+              onClick={handleManageSubscription}
+              disabled={portalLoading}
+              className="rounded-full border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-60"
+            >
+              {portalLoading ? "..." : "Changer de plan / résilier mon abonnement"}
+            </button>
+            {portalError && <p className="mt-2 text-sm text-red-400">{portalError}</p>}
+          </div>
+        )}
       </div>
 
       <div className="mt-6 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6">
