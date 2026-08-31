@@ -655,6 +655,53 @@ async function prepareAiInput(
   return { buffer, face };
 }
 
+// The AI output (1536x1024, aspect 3:2) has to be cropped down to the
+// thumbnail's actual 16:9 canvas — a real crop, not just a resize, since
+// the aspect ratios differ. Sharp's `position: "attention"` (content-based
+// auto-crop) has no idea where the face mask we sent OpenAI actually was,
+// so it can just as easily crop the subject's face itself off-frame or
+// push it awkwardly off-center — this was a real, reproducible cause of
+// disappointing results even when the AI generation itself was good. When
+// we know exactly where the face sits in *this* buffer (a fresh generation
+// this request — see the `hasCachedAiBase` guard at the call site, since a
+// cached base's face position can't be trusted the same way), crop
+// centered on it directly instead.
+async function resizeCoverCenteredOnFace(
+  buffer: Buffer,
+  width: number,
+  height: number,
+  face: FacePreserve | null
+): Promise<ReturnType<typeof sharp>> {
+  if (!face) {
+    return sharp(buffer).resize(width, height, { fit: "cover", position: "attention" });
+  }
+
+  const meta = await sharp(buffer).metadata();
+  const srcWidth = meta.width ?? width;
+  const srcHeight = meta.height ?? height;
+  const targetAspect = width / height;
+  const srcAspect = srcWidth / srcHeight;
+
+  let cropWidth = srcWidth;
+  let cropHeight = srcHeight;
+  if (srcAspect > targetAspect) {
+    cropWidth = Math.round(srcHeight * targetAspect);
+  } else if (srcAspect < targetAspect) {
+    cropHeight = Math.round(srcWidth / targetAspect);
+  }
+
+  const faceCx = face.x * srcWidth;
+  const faceCy = face.y * srcHeight;
+  const cropX = Math.min(Math.max(Math.round(faceCx - cropWidth / 2), 0), srcWidth - cropWidth);
+  const cropY = Math.min(Math.max(Math.round(faceCy - cropHeight / 2), 0), srcHeight - cropHeight);
+
+  const needsCrop = cropWidth !== srcWidth || cropHeight !== srcHeight;
+  const pipeline = needsCrop
+    ? sharp(buffer).extract({ left: cropX, top: cropY, width: cropWidth, height: cropHeight })
+    : sharp(buffer);
+  return pipeline.resize(width, height, { fit: "fill" });
+}
+
 // Calls OpenAI's image editing model to actually regenerate the photo's
 // lighting/atmosphere/background per the preset's prompt — a real
 // generative transformation, not a deterministic color filter. Optional
@@ -1110,8 +1157,14 @@ export async function POST(req: NextRequest) {
 
       aiBaseForResponse = aiBuffer;
       const fine = fineOnlyAdjustments(fineBrightness, fineContrast, fineSaturation);
-      base = sharp(aiBuffer)
-        .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
+      // Only trust faceForEdits for this crop when aiBuffer was actually
+      // generated fresh this request — on a cache hit it's still in the
+      // *original* photo's coordinate frame, not this buffer's (see the
+      // comment above `faceForEdits`), so it would crop the wrong region.
+      const knownFaceForCrop = hasCachedAiBase ? null : faceForEdits;
+      base = (
+        await resizeCoverCenteredOnFace(aiBuffer, CANVAS_WIDTH, CANVAS_HEIGHT, knownFaceForCrop)
+      )
         .modulate({ brightness: fine.brightness, saturation: fine.saturation })
         .linear(fine.contrastA, fine.contrastB)
         // OpenAI's output is already crisp — the default sharpen() strength
