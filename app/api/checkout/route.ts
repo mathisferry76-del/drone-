@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { getUserFromAuthHeader } from "@/lib/supabase";
 import { PAID_PLAN_IDS, PRICING_TIERS } from "@/lib/presets";
+import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  if (isRateLimited(`checkout:${getClientIp(req)}`, 10, 10 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Trop de tentatives. Réessaie dans quelques minutes." },
+      { status: 429 }
+    );
+  }
+
   const stripe = getStripe();
   if (!stripe) {
     return NextResponse.json(

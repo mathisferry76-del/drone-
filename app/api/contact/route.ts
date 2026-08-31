@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getResend } from "@/lib/resend";
+import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
 const CATEGORIES = ["Avis", "Suggestion", "Bug", "Autre"];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function POST(req: NextRequest) {
+  if (isRateLimited(`contact:${getClientIp(req)}`, 5, 10 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Trop de messages envoyés. Réessaie dans quelques minutes." },
+      { status: 429 }
+    );
+  }
+
   const resend = getResend();
   if (!resend) {
     return NextResponse.json(

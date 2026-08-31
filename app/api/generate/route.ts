@@ -19,6 +19,7 @@ import {
 } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
+import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -840,6 +841,17 @@ function parseShapes(raw: string): ShapeInput[] {
 }
 
 export async function POST(req: NextRequest) {
+  // Checked before the multipart body is even parsed — otherwise an
+  // unauthenticated flood could still force the server to decode up to
+  // ~48MB of uploaded images per request (main photo + 3 references)
+  // before the auth check below ever rejects it.
+  if (isRateLimited(`generate:${getClientIp(req)}`, 20, 5 * 60 * 1000)) {
+    return NextResponse.json(
+      { error: "Trop de requêtes. Réessaie dans quelques minutes." },
+      { status: 429 }
+    );
+  }
+
   const admin = getSupabaseAdmin();
   let authUser: { id: string; email: string | null } | null = null;
   let reservation: string | null = null;
@@ -960,17 +972,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // TEMPORAIRE — accès Pro pour un test manuel, à retirer sur demande.
-      // Ne modifie pas la ligne réelle en base (toujours son vrai plan) :
-      // seul le plafond appliqué à la réservation ci-dessous change, en
-      // forçant le chemin "payant" niveau Pro au lieu du chemin "free" que
-      // lirait la fonction pour ces comptes sinon — le compteur mensuel
-      // réel continue d'être suivi et plafonné, juste avec le quota Pro.
-      const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com", "mathis.ferry76@gmail.com"];
-      const isTempProTest =
-        !!authUser.email && TEMP_PRO_TEST_EMAILS.includes(authUser.email.toLowerCase());
-
-      if (!isTempProTest && profile.plan === "free" && !willCallOpenAi) {
+      if (profile.plan === "free" && !willCallOpenAi) {
         return NextResponse.json(
           {
             error: "Un abonnement est nécessaire pour créer une miniature. Choisis un plan sur /pricing.",
@@ -978,9 +980,8 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       } else {
-        const cap = isTempProTest
-          ? PLAN_AI_CAPS.pro + profile.bonus_generations
-          : profile.plan === "free"
+        const cap =
+          profile.plan === "free"
             ? 0
             : PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
 
@@ -989,7 +990,7 @@ export async function POST(req: NextRequest) {
           p_ai_enhance: willCallOpenAi,
           p_month_key: monthKey,
           p_ai_cap: cap,
-          p_force_paid: isTempProTest,
+          p_force_paid: false,
         });
 
         if (reserveError) {
