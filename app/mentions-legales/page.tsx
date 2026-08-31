@@ -1,5 +1,7 @@
 export const metadata = {
-  title: "Mentions légales — MIN IA",
+  title: "Mentions légales",
+  description: "Mentions légales du site MIN IA.",
+  alternates: { canonical: "/mentions-legales" },
 };
 
 export default function MentionsLegalesPage() {

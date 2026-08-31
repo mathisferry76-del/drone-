@@ -1,5 +1,7 @@
 export const metadata = {
-  title: "Politique de confidentialité — MIN IA",
+  title: "Politique de confidentialité",
+  description: "Politique de confidentialité et protection des données du site MIN IA.",
+  alternates: { canonical: "/confidentialite" },
 };
 
 export default function ConfidentialitePage() {

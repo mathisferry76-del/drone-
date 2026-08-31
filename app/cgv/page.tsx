@@ -1,5 +1,7 @@
 export const metadata = {
-  title: "Conditions Générales de Vente — MIN IA",
+  title: "Conditions Générales de Vente",
+  description: "Conditions générales de vente des abonnements MIN IA.",
+  alternates: { canonical: "/cgv" },
 };
 
 export default function CgvPage() {

@@ -15,21 +15,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITE_URL = "https://saas-kappa-nine.vercel.app";
-const TITLE = "MIN IA — Miniatures IA pour créateurs";
+const SITE_URL = "https://min-ia.fr";
+const TITLE = "MIN IA — Générateur de miniatures YouTube par IA";
 const DESCRIPTION =
-  "Génère des miniatures YouTube/TikTok/Reels optimisées pour le clic, dans ton propre style, en quelques secondes.";
+  "Crée des miniatures YouTube, TikTok et Reels optimisées pour le clic en quelques secondes grâce à l'IA — garde ton vrai visage, choisis un style, ajoute ton titre.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: TITLE,
+  title: { default: TITLE, template: "%s — MIN IA" },
   description: DESCRIPTION,
+  alternates: { canonical: "/" },
   keywords: [
     "générateur de miniature YouTube",
-    "miniature IA",
-    "thumbnail YouTube",
-    "créateur de contenu",
+    "miniature YouTube IA",
+    "créer miniature youtube gratuit",
+    "thumbnail YouTube IA",
     "miniature TikTok",
+    "outil miniature créateur de contenu",
   ],
   openGraph: {
     title: TITLE,
