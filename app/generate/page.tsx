@@ -15,6 +15,7 @@ import {
 } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
+import GeneratingCard from "@/components/motion/GeneratingCard";
 
 const AI_DESCRIPTION_MAX = 3000;
 const EDIT_INSTRUCTION_MAX = 300;
@@ -1430,7 +1431,17 @@ export default function GeneratePage() {
             )}
           </div>
           <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
-            {resultUrl ? (
+            {loading ? (
+              <GeneratingCard
+                label={
+                  willDoTargetedEdit
+                    ? "Retouche ciblée en cours..."
+                    : willUseAi && !willReuseAiBase
+                    ? "Génération IA en cours..."
+                    : "Génération..."
+                }
+              />
+            ) : resultUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={showOriginal && previewUrl ? previewUrl : resultUrl}
