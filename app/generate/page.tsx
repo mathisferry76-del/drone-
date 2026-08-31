@@ -24,6 +24,39 @@ const MAX_TEXT_LAYERS = 5;
 const MAX_SHAPES = 8;
 const MAX_REFERENCE_IMAGES = 3;
 
+// Ready-made description prompts for people who don't know what to write.
+// Deliberately generic (no named real person, no reference photo of a
+// third party) — combining a real face upload with a named public figure
+// or a violent/scary description is what actually gets flagged by
+// OpenAI's safety system, so these stay in territory that reliably
+// generates cleanly.
+const PROMPT_SUGGESTIONS: { label: string; text: string }[] = [
+  {
+    label: "😱 Réaction choquée",
+    text: "Garde mon visage exactement comme sur la photo de référence, expression choquée et stupéfaite, yeux écarquillés, bouche entrouverte, une main près du visage. Arrière-plan flouté avec une ambiance dramatique, forte lumière de contour séparant le sujet du fond, fort contraste, étalonnage cinématique.",
+  },
+  {
+    label: "💰 Luxe / réussite",
+    text: "Garde mon visage exactement comme sur la photo de référence, expression confiante et souriante. Décor luxueux (intérieur moderne haut de gamme ou vue sur une ville la nuit), lumière chaude et cinématographique, ambiance premium, légère profondeur de champ sur l'arrière-plan.",
+  },
+  {
+    label: "🎮 Gaming / esport",
+    text: "Garde mon visage exactement comme sur la photo de référence, expression intense et concentrée. Arrière-plan néon bleu/violet avec effets de lumière façon setup gaming, ambiance électrique, forte saturation des couleurs, style thumbnail esport dynamique.",
+  },
+  {
+    label: "🕵️ Mystère / suspense",
+    text: "Garde mon visage exactement comme sur la photo de référence, expression sérieuse et intriguée. Ambiance sombre et mystérieuse, silhouette floutée à l'arrière-plan dans l'ombre, éclairage tamisé façon clair-obscur, forte tension visuelle, palette de couleurs froides désaturées.",
+  },
+  {
+    label: "🌍 Voyage / aventure",
+    text: "Garde mon visage exactement comme sur la photo de référence, expression émerveillée et souriante. Décor extérieur spectaculaire (montagne, plage ou ville étrangère), lumière naturelle dorée de fin de journée, ambiance aventure et évasion, légère profondeur de champ.",
+  },
+  {
+    label: "💪 Motivation / avant-après",
+    text: "Garde mon visage exactement comme sur la photo de référence, expression déterminée et confiante. Décor de salle de sport ou d'extérieur urbain, lumière dramatique et contrastée, ambiance intense et motivante, couleurs vives et saturées façon thumbnail sport/motivation.",
+  },
+];
+
 type Plan = "free" | PaidPlan;
 type BackgroundStyle = "panel" | "shadow" | "none";
 type ShapeType = "arrow" | "circle" | "rectangle";
@@ -1122,6 +1155,18 @@ export default function GeneratePage() {
                     <span className="text-xs text-zinc-600">
                       {aiDescription.length}/{AI_DESCRIPTION_MAX}
                     </span>
+                  </div>
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {PROMPT_SUGGESTIONS.map((suggestion) => (
+                      <button
+                        key={suggestion.label}
+                        type="button"
+                        onClick={() => setAiDescription(suggestion.text)}
+                        className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300 transition hover:border-yellow-400 hover:text-yellow-400"
+                      >
+                        {suggestion.label}
+                      </button>
+                    ))}
                   </div>
                   <textarea
                     value={aiDescription}
