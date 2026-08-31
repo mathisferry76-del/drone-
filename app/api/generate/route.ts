@@ -972,7 +972,13 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      if (profile.plan === "free" && !willCallOpenAi) {
+      // Compte propriétaire du site — accès illimité, sans passer par
+      // Stripe. Ne modifie pas la ligne réelle en base (toujours son vrai
+      // plan) : seul le plafond appliqué à la réservation ci-dessous
+      // change, en forçant le chemin payant Studio.
+      const isOwnerAccount = authUser.email?.toLowerCase() === "mathis.ferry76@gmail.com";
+
+      if (!isOwnerAccount && profile.plan === "free" && !willCallOpenAi) {
         return NextResponse.json(
           {
             error: "Un abonnement est nécessaire pour créer une miniature. Choisis un plan sur /pricing.",
@@ -980,8 +986,9 @@ export async function POST(req: NextRequest) {
           { status: 403 }
         );
       } else {
-        const cap =
-          profile.plan === "free"
+        const cap = isOwnerAccount
+          ? Number.MAX_SAFE_INTEGER
+          : profile.plan === "free"
             ? 0
             : PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
 
@@ -990,7 +997,7 @@ export async function POST(req: NextRequest) {
           p_ai_enhance: willCallOpenAi,
           p_month_key: monthKey,
           p_ai_cap: cap,
-          p_force_paid: false,
+          p_force_paid: isOwnerAccount,
         });
 
         if (reserveError) {
