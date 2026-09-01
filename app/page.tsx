@@ -123,7 +123,7 @@ export default function Home() {
           </div>
 
           <FloatingShowcase
-            src="/examples/golden-vacation.webp"
+            src="/examples/nature-vive.webp"
             alt="Aperçu d'une miniature générée avec MIN IA"
           />
         </div>
