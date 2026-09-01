@@ -30,7 +30,7 @@ const FAQS = [
   },
   {
     q: "Quelle IA utilisez-vous pour générer les images ?",
-    a: "On utilise le modèle gpt-image-1 d'OpenAI (pas Gemini/nano-banana de Google). Il retravaille l'éclairage, l'ambiance et le décor de ta photo tout en préservant tes traits, avec un réglage de fidélité poussé au maximum pour que tu restes reconnaissable.",
+    a: "On utilise Gemini 2.5 Flash Image (Google), avec gpt-image-1 d'OpenAI en secours. Le modèle retravaille l'éclairage, l'ambiance et le décor de ta photo tout en préservant tes traits, pour que tu restes reconnaissable.",
   },
   {
     q: "Combien de temps prend une génération ?",
@@ -119,7 +119,7 @@ export default function Home() {
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
             <span><CountUp value={5} className="font-bold text-white" /> calques de texte + formes</span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
-            <span>IA générative <span className="font-bold text-white">gpt-image-1</span></span>
+            <span>IA générative <span className="font-bold text-white">Gemini 2.5 Flash</span></span>
           </div>
 
           <FloatingShowcase
