@@ -47,15 +47,22 @@ complet, pas une liste de features.
   abonnement. Sans clé Stripe configurée, renvoie un message clair au lieu
   de planter.
 - **Amélioration IA générative (tous les plans, quota différent)** : un
-  toggle dans `/generate` envoie la photo à l'API OpenAI (`gpt-image-1`,
-  `images.edit`) qui retravaille réellement l'éclairage/l'ambiance/le
-  décor, au lieu d'un filtre de couleur déterministe — avec un champ de
-  description libre pour préciser ce qu'on veut voir. Chaque plan a un
-  quota mensuel de générations IA (voir `PLAN_AI_CAPS` dans
+  toggle dans `/generate` envoie la photo au fournisseur IA configuré, qui
+  retravaille réellement l'éclairage/l'ambiance/le décor, au lieu d'un
+  filtre de couleur déterministe — avec un champ de description libre
+  pour préciser ce qu'on veut voir. **Deux fournisseurs** (`lib/gemini.ts`
+  / `lib/openai.ts`) : Gemini (`gemini-2.5-flash-image`) est utilisé en
+  priorité si `GEMINI_API_KEY` est configurée — sa préservation de
+  l'identité du sujet a testé plus fiable en pratique que le masque pixel
+  d'OpenAI — sinon repli sur `gpt-image-1` (`OPENAI_API_KEY`). La retouche
+  ciblée d'une zone (voir plus bas) passe toujours par OpenAI, quel que
+  soit le fournisseur utilisé pour la génération principale. Chaque plan a
+  un quota mensuel de générations IA (voir `PLAN_AI_CAPS` dans
   `lib/presets.ts`), plus grand sur les plans supérieurs. Côté serveur,
-  sans `OPENAI_API_KEY` configurée, l'appel renvoie une erreur 501 claire
-  (et les erreurs OpenAI réelles — clé invalide, org non vérifiée, quota —
-  remontent avec un message actionnable) au lieu de planter.
+  sans aucune des deux clés configurées, l'appel renvoie une erreur 501
+  claire (et les erreurs réelles du fournisseur — clé invalide, quota,
+  facturation non activée — remontent avec un message actionnable) au
+  lieu de planter.
 - **Style "Réaliste (sans filtre)"** : aucun grading couleur (photo
   inchangée) ; son prompt IA vise le photoréalisme maximal plutôt qu'un
   style artistique.
@@ -67,15 +74,20 @@ complet, pas une liste de features.
   explicitement au modèle de conserver au maximum les traits du sujet
   (visage en particulier) au lieu de le réinterpréter librement — ce
   paramètre est à `"low"` par défaut côté OpenAI.
-- **Zone "visage à préserver" verrouillée pixel par pixel** : en mode IA,
-  un marqueur ellipse apparaît sur l'aperçu (centré par défaut, déplaçable,
-  et redimensionnable **indépendamment en largeur et en hauteur**) que
-  l'utilisateur positionne sur son visage. Côté serveur, cette zone devient
-  un vrai masque PNG (transparence = zone que l'IA peut modifier, opaque =
-  zone préservée telle quelle) envoyé à `images.edit` — le visage revient
-  donc identique pixel pour pixel, garantie qu'aucune instruction de
-  prompt seule ne peut donner. Combiné à `input_fidelity: "high"` pour la
-  zone de transition (cheveux, oreilles) qui reste éditable.
+- **Zone "visage à préserver" verrouillée pixel par pixel (fournisseur
+  OpenAI uniquement)** : en mode IA, un marqueur ellipse apparaît sur
+  l'aperçu (centré par défaut, déplaçable, et redimensionnable
+  **indépendamment en largeur et en hauteur**) que l'utilisateur
+  positionne sur son visage. Côté serveur, cette zone devient un vrai
+  masque PNG (transparence = zone que l'IA peut modifier, opaque = zone
+  préservée telle quelle) envoyé à `images.edit` — le visage revient donc
+  identique pixel pour pixel, garantie qu'aucune instruction de prompt
+  seule ne peut donner. Combiné à `input_fidelity: "high"` pour la zone de
+  transition (cheveux, oreilles) qui reste éditable. Gemini n'a pas
+  d'équivalent masque pixel dans son API — sa préservation du visage
+  repose entièrement sur l'instruction de prompt dédiée dans
+  `applyGeminiEnhancement` (testée fiable en pratique, mais sans la même
+  garantie absolue que le masque).
 - **Retouche gratuite et instantanée après une génération IA** : le
   serveur renvoie l'image brute générée par OpenAI (avant texte/formes) en
   plus du rendu final. Le client la garde en cache tant que la photo, le
@@ -245,17 +257,32 @@ c'est ce qu'utilisent le bouton "Changer de plan / résilier" sur
 abonnement est déjà actif. Ne nécessite aucune configuration
 supplémentaire (le portail par défaut de Stripe suffit).
 
-**OpenAI** (pour activer l'amélioration IA générative, plan Pro) :
+**Amélioration IA générative — deux fournisseurs possibles :**
+
+**Gemini** (préféré quand configuré — meilleure fidélité au visage en
+pratique que gpt-image-1 seul, testé et comparé côte à côte) :
+1. Crée une clé sur [aistudio.google.com/api-keys](https://aistudio.google.com/api-keys).
+2. **Active la facturation** sur le projet Google Cloud associé (bouton
+   "Configurer la facturation" à côté de la clé) — le palier gratuit a un
+   quota de **0** pour la génération d'images, l'appel échoue sinon avec
+   une erreur 429 "quota exceeded".
+3. Colle la clé dans `GEMINI_API_KEY`, redémarre `npm run dev`.
+
+Sans mask pixel (Gemini n'a pas cette notion, contrairement à
+`images.edit` d'OpenAI) — la préservation du visage repose entièrement sur
+l'instruction du prompt, qui a testé de façon fiable en pratique.
+
+**OpenAI** (fallback si `GEMINI_API_KEY` n'est pas configurée, et
+toujours utilisé pour la retouche ciblée d'une zone quelle que soit la
+clé IA principale) :
 1. Crée une clé API sur [platform.openai.com](https://platform.openai.com/api-keys)
    et assure-toi que le compte a accès au modèle `gpt-image-1`.
 2. Colle-la dans `OPENAI_API_KEY`.
-3. Redémarre `npm run dev` — le toggle "Amélioration IA" dans `/generate`
-   (visible seulement en simulant un compte Pro, voir ci-dessous) appelle
-   alors vraiment l'API.
+3. Redémarre `npm run dev`.
 
-Sans cette clé, l'appel renvoie une erreur claire (501) au lieu de
-planter — le reste du produit (styles filtres) continue de fonctionner
-normalement.
+Sans aucune des deux clés, l'appel renvoie une erreur claire (501) au
+lieu de planter — le reste du produit (styles filtres) continue de
+fonctionner normalement.
 
 **Contact** (formulaire `/contact`) : optionnel, nécessite un compte
 [Resend](https://resend.com) et `RESEND_API_KEY`. Sans cette variable,

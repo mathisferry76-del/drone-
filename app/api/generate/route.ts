@@ -18,6 +18,7 @@ import {
   PaidPlan,
 } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
+import { getGeminiKey, editImageWithGemini, GeminiApiError, describeGeminiError } from "@/lib/gemini";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
@@ -805,6 +806,60 @@ async function applyAiEnhancement(
   return { buffer: Buffer.from(b64, "base64"), face: mappedFace };
 }
 
+// Gemini's image model (gemini-2.5-flash-image, aka "Nano Banana") does
+// real conversational editing from the reference photo + a text
+// instruction — no separate alpha-mask parameter like OpenAI's images.edit,
+// so face preservation here relies entirely on the prompt's explicit
+// face-lock instruction rather than a pixel-level guarantee. Verified
+// against real photos to hold up reliably in practice, which is the reason
+// this provider was added: gpt-image-1's face fidelity kept disappointing
+// even with the pixel mask, while Gemini's built-in identity preservation
+// from the instruction alone tested consistently stronger.
+async function applyGeminiEnhancement(
+  inputBuffer: Buffer,
+  preset: Preset,
+  userDescription: string,
+  references: { buffer: Buffer }[]
+): Promise<{ buffer: Buffer; face: FacePreserve | null }> {
+  let normalizedInput: Buffer;
+  try {
+    normalizedInput = await sharp(inputBuffer).png().toBuffer();
+  } catch {
+    throw new Error(
+      "Cette photo n'a pas pu être lue par le serveur. Essaie de la réexporter en JPEG ou PNG."
+    );
+  }
+
+  const images: { buffer: Buffer }[] = [{ buffer: normalizedInput }];
+  let referenceNote = "";
+  if (references.length > 0) {
+    for (const ref of references) {
+      try {
+        images.push({ buffer: await sharp(ref.buffer).png().toBuffer() });
+      } catch {
+        continue;
+      }
+    }
+    referenceNote =
+      ` ${references.length} additional reference image(s) are also provided — use them only for the specific elements the user describes below (e.g. a logo, an object, a color palette), and blend them naturally into the main photo. Do not otherwise let a reference image replace the main subject.`;
+  }
+
+  const faceLockNote =
+    " Keep the main subject's face exactly as it is in the reference photo — same identity, same facial features, same expression, same skin texture. Do not beautify, smooth, restyle or alter their face in any way. Only change the background, lighting, decor and atmosphere around them.";
+
+  const basePrompt = `${preset.aiPrompt} ${AI_QUALITY_DIRECTIVE}${faceLockNote}${referenceNote}`;
+  const prompt = userDescription.trim()
+    ? `${basePrompt} Also incorporate these specific instructions from the user: ${userDescription.trim()}`
+    : basePrompt;
+
+  const buffer = await editImageWithGemini(images, prompt);
+  // No pixel mask involved for this provider, so there's no remapped face
+  // position to hand off to a later targeted edit (see applyTargetedEdit,
+  // which still runs through OpenAI regardless of which provider produced
+  // this buffer) or to the final face-centered crop.
+  return { buffer, face: null };
+}
+
 class AiNotConfiguredError extends Error {
   constructor() {
     super(
@@ -1110,25 +1165,42 @@ export async function POST(req: NextRequest) {
         for (const ref of referenceFiles) {
           references.push({ buffer: Buffer.from(await ref.arrayBuffer()) });
         }
+        // Gemini's identity preservation from the prompt alone tested more
+        // reliable than gpt-image-1's pixel mask in practice, so it's the
+        // preferred provider whenever configured — OpenAI stays as the
+        // fallback (and is still what powers the targeted-edit feature
+        // below, regardless of which provider produced this base image).
+        const useGemini = Boolean(getGeminiKey());
         try {
-          const enhanced = await applyAiEnhancement(
-            inputBuffer,
-            preset,
-            aiDescription,
-            references,
-            facePreserve
-          );
-          aiBuffer = enhanced.buffer;
-          faceForEdits = enhanced.face;
+          if (useGemini) {
+            const enhanced = await applyGeminiEnhancement(
+              inputBuffer,
+              preset,
+              aiDescription,
+              references
+            );
+            aiBuffer = enhanced.buffer;
+            faceForEdits = enhanced.face;
+          } else {
+            const enhanced = await applyAiEnhancement(
+              inputBuffer,
+              preset,
+              aiDescription,
+              references,
+              facePreserve
+            );
+            aiBuffer = enhanced.buffer;
+            faceForEdits = enhanced.face;
+          }
           usedOpenAiCall = true;
         } catch (err) {
           await releaseReservationIfNeeded();
           if (err instanceof AiNotConfiguredError) {
             return NextResponse.json({ error: err.message }, { status: 501 });
           }
-          console.error("openai enhancement error", err);
+          console.error(useGemini ? "gemini enhancement error" : "openai enhancement error", err);
           return NextResponse.json(
-            { error: describeAiError(err) },
+            { error: useGemini || err instanceof GeminiApiError ? describeGeminiError(err) : describeAiError(err) },
             { status: 502 }
           );
         }
