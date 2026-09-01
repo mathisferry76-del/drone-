@@ -819,7 +819,8 @@ async function applyGeminiEnhancement(
   inputBuffer: Buffer,
   preset: Preset,
   userDescription: string,
-  references: { buffer: Buffer }[]
+  references: { buffer: Buffer }[],
+  facePreserve: FacePreserve | null
 ): Promise<{ buffer: Buffer; face: FacePreserve | null }> {
   let normalizedInput: Buffer;
   try {
@@ -844,8 +845,14 @@ async function applyGeminiEnhancement(
       ` ${references.length} additional reference image(s) are also provided — use them only for the specific elements the user describes below (e.g. a logo, an object, a color palette), and blend them naturally into the main photo. Do not otherwise let a reference image replace the main subject.`;
   }
 
+  // Locks identity, not the whole photo: an earlier version also froze
+  // expression/pose/clothing ("same expression... do not alter their face
+  // in any way"), which made Gemini paste the source photo back almost
+  // unchanged — including framing gpt-image-1 used to freely restage. The
+  // actual goal is that the person stays recognizably themselves while the
+  // model is free to reinterpret expression, pose and outfit for the scene.
   const faceLockNote =
-    " Keep the main subject's face exactly as it is in the reference photo — same identity, same facial features, same expression, same skin texture. Do not beautify, smooth, restyle or alter their face in any way. Only change the background, lighting, decor and atmosphere around them.";
+    " Keep this exact person's facial identity clearly recognizable — same face shape, eyes, nose, mouth and skin tone as in the reference photo, not a different-looking person. Within that constraint, feel free to adjust their expression, pose, angle and clothing to naturally fit the requested scene and mood. Do not beautify or idealize their face into a generic-looking person.";
 
   const basePrompt = `${preset.aiPrompt} ${AI_QUALITY_DIRECTIVE}${faceLockNote}${referenceNote}`;
   const prompt = userDescription.trim()
@@ -853,11 +860,19 @@ async function applyGeminiEnhancement(
     : basePrompt;
 
   const buffer = await editImageWithGemini(images, prompt);
-  // No pixel mask involved for this provider, so there's no remapped face
-  // position to hand off to a later targeted edit (see applyTargetedEdit,
-  // which still runs through OpenAI regardless of which provider produced
-  // this buffer) or to the final face-centered crop.
-  return { buffer, face: null };
+  // Unlike OpenAI, nothing here forces the output into a fixed frame that
+  // needs the face zone remapped (see prepareAiInput) — Gemini preserves
+  // the input's overall framing closely in practice, so the *original*
+  // normalized facePreserve position (fraction of width/height, resolution
+  // independent) still lands close to correct on the output. Passing it
+  // through — rather than null — is what the final face-centered crop
+  // needs: without it, a visually busy background (a black hole, a
+  // cityscape...) can pull sharp's "attention" auto-crop away from the
+  // face entirely, cropping it almost out of frame even though the
+  // generation itself was fine. It's an approximation, not the pixel
+  // guarantee OpenAI's mask gives, but reliably closer than no position
+  // at all.
+  return { buffer, face: facePreserve };
 }
 
 class AiNotConfiguredError extends Error {
@@ -1177,7 +1192,8 @@ export async function POST(req: NextRequest) {
               inputBuffer,
               preset,
               aiDescription,
-              references
+              references,
+              facePreserve
             );
             aiBuffer = enhanced.buffer;
             faceForEdits = enhanced.face;
