@@ -3,7 +3,7 @@ import Link from "next/link";
 import { PRESETS } from "@/lib/presets";
 import { FORMATS } from "@/lib/formats";
 import FadeInSection from "@/components/motion/FadeInSection";
-import HeroJourney from "@/components/three/HeroJourney";
+import HeroJourney from "@/components/motion/HeroJourney";
 import Marquee from "@/components/motion/Marquee";
 import TiltCard from "@/components/motion/TiltCard";
 import GradientOrb from "@/components/motion/GradientOrb";
