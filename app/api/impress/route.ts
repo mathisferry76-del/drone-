@@ -175,21 +175,19 @@ export async function POST(req: NextRequest) {
     }
 
     const prompt = buildImpressPrompt(description);
-    const useGemini = Boolean(getGeminiKey());
+    // Unlike /api/generate (thumbnails, where Gemini's stylized regeneration
+    // is preferred), this route prioritizes OpenAI's gpt-image-1 first —
+    // its masked-editing pipeline with input_fidelity "high" tested better
+    // suited to inserting one object convincingly into an otherwise
+    // untouched real photo than Gemini's full-image regeneration. Gemini is
+    // kept as the fallback for when OpenAI isn't configured on a
+    // deployment, not the other way around.
+    const openai = getOpenAI();
+    const useOpenAiFirst = Boolean(openai);
     let resultBuffer: Buffer;
 
     try {
-      if (useGemini) {
-        resultBuffer = await editImageWithGemini([{ buffer: normalizedInput }], prompt);
-      } else {
-        const openai = getOpenAI();
-        if (!openai) {
-          await releaseReservationIfNeeded();
-          return NextResponse.json(
-            { error: "L'IA n'est pas configurée sur ce déploiement." },
-            { status: 501 }
-          );
-        }
+      if (useOpenAiFirst && openai) {
         const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
         const result = await openai.images.edit({
           model: "gpt-image-1",
@@ -202,12 +200,20 @@ export async function POST(req: NextRequest) {
         const b64 = result.data?.[0]?.b64_json;
         if (!b64) throw new Error("OpenAI n'a renvoyé aucune image.");
         resultBuffer = Buffer.from(b64, "base64");
+      } else if (getGeminiKey()) {
+        resultBuffer = await editImageWithGemini([{ buffer: normalizedInput }], prompt);
+      } else {
+        await releaseReservationIfNeeded();
+        return NextResponse.json(
+          { error: "L'IA n'est pas configurée sur ce déploiement." },
+          { status: 501 }
+        );
       }
     } catch (err) {
       await releaseReservationIfNeeded();
-      console.error(useGemini ? "gemini impress error" : "openai impress error", err);
+      console.error(useOpenAiFirst ? "openai impress error" : "gemini impress error", err);
       return NextResponse.json(
-        { error: useGemini || err instanceof GeminiApiError ? describeGeminiError(err) : describeAiError(err) },
+        { error: !useOpenAiFirst || err instanceof GeminiApiError ? describeGeminiError(err) : describeAiError(err) },
         { status: 502 }
       );
     }
