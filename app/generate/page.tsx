@@ -211,6 +211,9 @@ export default function GeneratePage() {
   const [error, setError] = useState<string | null>(null);
   const [aiEnhance, setAiEnhance] = useState(false);
   const [aiDescription, setAiDescription] = useState("");
+  const [videoUrl, setVideoUrl] = useState("");
+  const [analyzingVideo, setAnalyzingVideo] = useState(false);
+  const [videoAnalysisError, setVideoAnalysisError] = useState<string | null>(null);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
   const [facePreserve, setFacePreserve] = useState<FacePreserveState | null>(null);
   const [editZone, setEditZone] = useState<EditZoneState | null>(null);
@@ -499,6 +502,32 @@ export default function GeneratePage() {
     willUseAi && aiBaseCache && currentAiCacheKey && aiBaseCache.key === currentAiCacheKey
   );
   const willDoTargetedEdit = Boolean(willUseAi && editZone && editInstruction.trim());
+
+  async function handleAnalyzeVideo() {
+    if (!session || !videoUrl.trim()) return;
+    setVideoAnalysisError(null);
+    setAnalyzingVideo(true);
+    try {
+      const res = await fetch("/api/analyze-video", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ url: videoUrl.trim(), presetId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setVideoAnalysisError(data.error ?? "Erreur inconnue.");
+        return;
+      }
+      setAiDescription(data.prompt);
+    } catch {
+      setVideoAnalysisError("Impossible de contacter le serveur.");
+    } finally {
+      setAnalyzingVideo(false);
+    }
+  }
 
   async function handleGenerate() {
     setError(null);
@@ -1143,6 +1172,35 @@ export default function GeneratePage() {
 
             {canUseAi && aiEnhance && (
               <div className="mt-3 space-y-4 border-t border-yellow-800/30 pt-3">
+                <div>
+                  <label className="mb-1 block text-xs font-semibold text-zinc-300">
+                    Coller le lien de ta vidéo YouTube (optionnel)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={videoUrl}
+                      onChange={(e) => setVideoUrl(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAnalyzeVideo}
+                      disabled={!videoUrl.trim() || analyzingVideo}
+                      className="shrink-0 rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
+                    >
+                      {analyzingVideo ? "..." : "Analyser"}
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    L&apos;IA lit le titre de ta vidéo et remplit automatiquement la description
+                    ci-dessous avec une scène adaptée au sujet.
+                  </p>
+                  {videoAnalysisError && (
+                    <p className="mt-1 text-xs text-red-400">{videoAnalysisError}</p>
+                  )}
+                </div>
                 <div>
                   <div className="mb-1 flex items-center justify-between">
                     <label className="block text-xs font-semibold text-zinc-300">
