@@ -212,6 +212,7 @@ export default function GeneratePage() {
   const [aiEnhance, setAiEnhance] = useState(false);
   const [aiDescription, setAiDescription] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
+  const [videoContext, setVideoContext] = useState("");
   const [analyzingVideo, setAnalyzingVideo] = useState(false);
   const [videoAnalysisError, setVideoAnalysisError] = useState<string | null>(null);
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([]);
@@ -514,7 +515,7 @@ export default function GeneratePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ url: videoUrl.trim(), presetId }),
+        body: JSON.stringify({ url: videoUrl.trim(), presetId, context: videoContext.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1197,6 +1198,14 @@ export default function GeneratePage() {
                     L&apos;IA lit le titre de ta vidéo et remplit automatiquement la description
                     ci-dessous avec une scène adaptée au sujet.
                   </p>
+                  <input
+                    type="text"
+                    value={videoContext}
+                    onChange={(e) => setVideoContext(e.target.value)}
+                    maxLength={300}
+                    placeholder="Précise ce qui se passe vraiment (ex : il y a du feu, de la boue, un combat au paintball) — fortement recommandé, le titre seul ne suffit pas à deviner le contenu réel"
+                    className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+                  />
                   {videoAnalysisError && (
                     <p className="mt-1 text-xs text-red-400">{videoAnalysisError}</p>
                   )}

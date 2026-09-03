@@ -22,13 +22,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Connexion requise." }, { status: 401 });
   }
 
-  const { url, presetId } = (await req.json().catch(() => ({}))) as {
+  const { url, presetId, context } = (await req.json().catch(() => ({}))) as {
     url?: string;
     presetId?: string;
+    context?: string;
   };
   if (!url || typeof url !== "string") {
     return NextResponse.json({ error: "Lien YouTube manquant." }, { status: 400 });
   }
+  const userContext =
+    typeof context === "string" ? context.trim().slice(0, 300) : "";
 
   const videoId = extractYoutubeId(url);
   if (!videoId) {
@@ -49,10 +52,17 @@ export async function POST(req: NextRequest) {
   const preset = getPreset(presetId ?? "bold-impact");
   const useGemini = Boolean(getGeminiKey());
 
+  // What the user actually types about their own video is ground truth —
+  // more reliable than the fetched description (which may be absent, or
+  // just a generic channel blurb), and the only signal that can ever
+  // capture something a title can't (there's no transcript access here).
+  // Combined rather than replacing the description, since both can help.
+  const combinedDescription = [userContext, info.description].filter(Boolean).join("\n\n") || null;
+
   try {
     const prompt = useGemini
-      ? await generateThumbnailPromptFromVideo(info.title, info.description, preset.name)
-      : await generateThumbnailPromptFromVideoOpenAI(info.title, info.description, preset.name);
+      ? await generateThumbnailPromptFromVideo(info.title, combinedDescription, preset.name)
+      : await generateThumbnailPromptFromVideoOpenAI(info.title, combinedDescription, preset.name);
     return NextResponse.json({ prompt, videoTitle: info.title });
   } catch (err) {
     console.error("analyze-video error", err);
