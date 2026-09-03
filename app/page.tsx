@@ -4,7 +4,6 @@ import { PRESETS } from "@/lib/presets";
 import { FORMATS } from "@/lib/formats";
 import FadeInSection from "@/components/motion/FadeInSection";
 import HeroTitle from "@/components/motion/HeroTitle";
-import FloatingShowcase from "@/components/motion/FloatingShowcase";
 import Marquee from "@/components/motion/Marquee";
 import TiltCard from "@/components/motion/TiltCard";
 import CountUp from "@/components/motion/CountUp";
@@ -135,11 +134,6 @@ export default function Home() {
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
             <span>IA générative <span className="font-bold text-white">Gemini 2.5 Flash</span></span>
           </div>
-
-          <FloatingShowcase
-            src="/examples/nature-vive.webp"
-            alt="Aperçu d'une miniature générée avec MIN IA"
-          />
         </div>
       </section>
 
