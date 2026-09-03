@@ -19,9 +19,9 @@ const geistMono = Geist_Mono({
 });
 
 const SITE_URL = "https://min-ia.fr";
-const TITLE = "MIN IA — Générateur de miniatures YouTube par IA";
+const TITLE = "MIN IA — Flex tes photos et crée tes miniatures YouTube par IA";
 const DESCRIPTION =
-  "Crée des miniatures YouTube, TikTok et Reels optimisées pour le clic en quelques secondes grâce à l'IA — garde ton vrai visage, choisis un style, ajoute ton titre.";
+  "Transforme n'importe quelle photo en flex bluffant (voiture, montre, style) ou crée tes miniatures YouTube, TikTok et Reels optimisées pour le clic — en quelques secondes grâce à l'IA.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

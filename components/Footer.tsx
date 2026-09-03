@@ -10,8 +10,9 @@ export default function Footer() {
             IA
           </div>
           <p className="mt-3 max-w-xs text-sm text-zinc-500">
-            Le générateur de miniatures pour créateurs YouTube, TikTok et
-            Reels qui n&apos;ont ni le temps ni les compétences design.
+            Transforme n&apos;importe quelle photo en flex bluffant, ou en
+            miniature YouTube qui capte le clic — la même IA, pour tout le
+            monde.
           </p>
         </div>
 
@@ -20,9 +21,9 @@ export default function Footer() {
             Navigation
           </h3>
           <ul className="mt-4 space-y-2 text-sm text-zinc-500">
-            <li><Link href="/#styles" className="transition hover:text-white">Styles</Link></li>
-            <li><Link href="/#resultats" className="transition hover:text-white">Nos résultats</Link></li>
             <li><Link href="/impress" className="transition hover:text-white">Impressionne tes potes</Link></li>
+            <li><Link href="/#styles" className="transition hover:text-white">Miniatures YouTube</Link></li>
+            <li><Link href="/#resultats" className="transition hover:text-white">Nos résultats</Link></li>
             <li><Link href="/#faq" className="transition hover:text-white">FAQ</Link></li>
           </ul>
         </div>

@@ -10,9 +10,9 @@ import { getSupabaseBrowser } from "@/lib/supabase";
 // /generate (the highest-intent moment), not as something to browse to
 // beforehand. /pricing itself still exists for account/plan management.
 const BASE_LINKS = [
-  { href: "/#styles", label: "Styles" },
-  { href: "/#resultats", label: "Nos résultats" },
   { href: "/impress", label: "✨ Impressionne tes potes" },
+  { href: "/#styles", label: "Miniatures YouTube" },
+  { href: "/#resultats", label: "Nos résultats" },
   { href: "/#faq", label: "FAQ" },
   { href: "/#contact", label: "Contact" },
 ];
@@ -69,19 +69,19 @@ export default function Navbar() {
             </Link>
           )}
           <Link
-            href="/generate"
+            href="/impress"
             className="rounded-full bg-yellow-400 px-4 py-2 font-bold text-black transition hover:bg-yellow-300"
           >
-            Créer une miniature
+            Essayer gratuitement
           </Link>
         </div>
 
         <div className="flex items-center gap-3 sm:hidden">
           <Link
-            href="/generate"
+            href="/impress"
             className="rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-300"
           >
-            Créer
+            Essayer
           </Link>
           <button
             type="button"

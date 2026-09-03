@@ -21,6 +21,22 @@ const RESULTS = [
   { id: "muay-thai-fight", niche: "Sport / combat" },
 ];
 
+const FLEX_TAGS = [
+  "🚗 Voiture de luxe",
+  "⌚ Montre",
+  "🧥 Nouvelle veste",
+  "🏠 Façade maison",
+  "🕶️ Nouveau look",
+  "🎬 Miniature YouTube",
+];
+
+const FLEX_EXAMPLES = [
+  { icon: "🚗", label: "Voiture", prompt: "Remplace ma voiture par une Porsche 911 rouge" },
+  { icon: "⌚", label: "Montre", prompt: "Ajoute une montre de luxe à mon poignet" },
+  { icon: "🏠", label: "Maison", prompt: "Change la façade en pierre blanche moderne" },
+  { icon: "🧥", label: "Style", prompt: "Remplace mon t-shirt par une veste en cuir" },
+];
+
 const FAQS = [
   {
     q: "Est-ce que ça marche avec n'importe quelle photo ?",
@@ -86,32 +102,31 @@ export default function Home() {
         />
         <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 pb-20 pt-24 text-center">
           <span className="mb-4 rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-            Fait pour les créateurs solo
+            ✨ Impressionne tes potes
           </span>
           <HeroTitle className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-            Plus de vues sur tes vidéos, avec{" "}
+            Transforme n&apos;importe quelle photo en{" "}
             <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-              zéro compétence design
+              flex bluffant
             </span>
           </HeroTitle>
           <p className="mt-6 max-w-xl text-lg text-zinc-400">
-            Upload une photo, choisis un style, ajoute ton titre. MIN IA
-            génère en 10 secondes une miniature optimisée pour le clic —
-            sans designer, sans Photoshop, sans passer 30 minutes sur
-            Canva.
+            Ta voiture, ta montre, ta maison... décris UN seul changement,
+            l&apos;IA l&apos;applique en 10 secondes sans toucher au reste de
+            la photo. Résultat ultra-réaliste, pas un effet IA qui se voit.
           </p>
           <div className="mt-8 flex flex-col gap-4 sm:flex-row">
             <Link
-              href="/generate"
+              href="/impress"
               className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
             >
-              Créer ma première miniature →
+              Essayer avec ma photo →
             </Link>
             <Link
-              href="/#resultats"
+              href="/generate"
               className="rounded-full border border-zinc-700 px-8 py-3 text-base font-semibold text-white transition hover:scale-105 hover:border-zinc-500"
             >
-              Voir des exemples
+              Je veux des miniatures YouTube
             </Link>
           </div>
 
@@ -128,9 +143,9 @@ export default function Home() {
           </div>
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
-            <span><CountUp value={10} className="font-bold text-white" /> styles prêts à l&apos;emploi</span>
+            <span>Résultat en <CountUp value={10} className="font-bold text-white" />s</span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
-            <span><CountUp value={5} className="font-bold text-white" /> calques de texte + formes</span>
+            <span>1 seul détail changé, <span className="font-bold text-white">zéro sur-retouche</span></span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
             <span>IA générative <span className="font-bold text-white">propriétaire</span></span>
           </div>
@@ -140,13 +155,53 @@ export default function Home() {
       <div className="border-y border-zinc-900 bg-zinc-950/60 py-4">
         <Marquee
           className="text-sm font-semibold uppercase tracking-wide text-zinc-600"
-          items={PRESETS.map((p) => (
-            <span key={p.id} className="flex items-center gap-2">
-              {p.name} <span className="text-yellow-400/50">✦</span>
+          items={FLEX_TAGS.map((t) => (
+            <span key={t} className="flex items-center gap-2">
+              {t} <span className="text-yellow-400/50">✦</span>
             </span>
           ))}
         />
       </div>
+
+      <FadeInSection className="relative mx-auto w-full max-w-5xl overflow-hidden px-6 py-16">
+        <GradientOrb color="rgba(250,204,21,0.14)" className="left-1/2 top-0 -translate-x-1/2 -z-10" />
+        <h2 className="text-center text-2xl font-bold sm:text-3xl">
+          Un détail change, la photo reste crédible
+        </h2>
+        <p className="mx-auto mt-3 max-w-xl text-center text-zinc-400">
+          Décris UN seul changement — l&apos;IA l&apos;applique sans toucher
+          au reste : même lumière, mêmes ombres, même cadrage. Pas de
+          sur-retouche, pas d&apos;effet « généré par IA ».
+        </p>
+        <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {FLEX_EXAMPLES.map((ex) => (
+            <TiltCard key={ex.label}>
+              <div className="flex h-full flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 text-center transition hover:border-yellow-400/40">
+                <span className="text-4xl">{ex.icon}</span>
+                <h3 className="font-bold">{ex.label}</h3>
+                <p className="text-xs text-zinc-500">&quot;{ex.prompt}&quot;</p>
+              </div>
+            </TiltCard>
+          ))}
+        </div>
+        <div className="mt-10 flex justify-center">
+          <Link
+            href="/impress"
+            className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
+          >
+            Essayer avec ma photo →
+          </Link>
+        </div>
+      </FadeInSection>
+
+      <FadeInSection className="mx-auto w-full max-w-3xl px-6 pt-4 text-center">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Tu es créateur de contenu ?
+        </p>
+        <h2 className="mt-2 text-xl font-bold sm:text-2xl">
+          MIN IA fait aussi tes miniatures YouTube
+        </h2>
+      </FadeInSection>
 
       <FadeInSection id="styles" className="mx-auto w-full max-w-6xl px-6 py-16">
         <h2 className="text-center text-2xl font-bold sm:text-3xl">

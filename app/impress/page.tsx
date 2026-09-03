@@ -53,6 +53,10 @@ export default function ImpressPage() {
 
   const isOwnerAccount = session?.user.email?.toLowerCase() === "mathis.ferry76@gmail.com";
   const isPaid = isOwnerAccount || (profile ? profile.plan !== "free" : false);
+  // Same account-wide trial counter as /generate — one free AI generation
+  // total, usable on either feature, not one freebie per feature.
+  const hasFreeTrialAvailable = !isPaid && (profile?.free_generations_used ?? 0) < 1;
+  const canTryTool = isPaid || hasFreeTrialAvailable;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -95,6 +99,19 @@ export default function ImpressPage() {
       }
       setResultUrl(data.image);
       setShowOriginal(false);
+
+      // Refresh the profile so free_generations_used reflects the trial
+      // just consumed — otherwise the free banner would stay visible after
+      // a successful trial generation until a full page reload.
+      if (session) {
+        const supabase = getSupabaseBrowser();
+        const { data: fresh } = await supabase!
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        if (fresh) setProfile(fresh as Profile);
+      }
     } catch {
       setError("Impossible de contacter le serveur. Réessaie.");
     } finally {
@@ -164,7 +181,7 @@ export default function ImpressPage() {
     );
   }
 
-  if (!isPaid) {
+  if (!canTryTool) {
     return (
       <div className="mx-auto w-full max-w-6xl px-6 py-16">
         <div className="mx-auto max-w-xl text-center">
@@ -174,7 +191,11 @@ export default function ImpressPage() {
             changement (&quot;remplace ma voiture par une Porsche&quot;,
             &quot;ajoute une montre à mon poignet&quot;...). L&apos;IA applique
             exactement ce changement, sans toucher au reste : résultat
-            crédible, pas sur-retouché. Réservé aux abonnés.
+            crédible, pas sur-retouché.
+          </p>
+          <p className="mt-3 text-sm text-zinc-500">
+            Ton essai gratuit a déjà été utilisé — choisis un plan pour
+            continuer.
           </p>
         </div>
 
@@ -224,11 +245,18 @@ export default function ImpressPage() {
 
   return (
     <div className="mx-auto w-full max-w-5xl px-6 py-16">
+      <ResultReveal src={resultUrl} revealKey={resultUrl} />
       <h1 className="text-3xl font-extrabold">✨ Impressionne tes potes</h1>
       <p className="mt-2 text-zinc-400">
         Prends une photo, décris un seul changement précis. L&apos;IA applique
         exactement ça — rien de plus — pour un résultat crédible.
       </p>
+      {!isPaid && hasFreeTrialAvailable && (
+        <p className="mt-3 rounded-lg border border-yellow-800/40 bg-yellow-400/5 px-4 py-2 text-sm text-yellow-300">
+          🎁 Ton essai gratuit — un vrai résultat, avec filigrane. Passe sur
+          un plan pour télécharger sans filigrane et continuer.
+        </p>
+      )}
 
       <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-2">
         <div className="space-y-6">
@@ -314,11 +342,34 @@ export default function ImpressPage() {
               </button>
             </div>
           )}
-          <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
+          <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
             {loading ? (
               <GeneratingCard label="Retouche en cours..." />
             ) : resultUrl ? (
-              <ResultReveal src={showOriginal ? previewUrl! : resultUrl} revealKey={showOriginal ? "before" : resultUrl} />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={showOriginal && previewUrl ? previewUrl : resultUrl}
+                  alt={showOriginal ? "Photo originale" : "Résultat généré"}
+                  className={`h-full w-full object-cover ${
+                    !isPaid && !showOriginal ? "scale-110 blur-xl" : ""
+                  }`}
+                />
+                {!isPaid && !showOriginal && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 p-6 text-center">
+                    <span className="text-3xl">🔒</span>
+                    <p className="text-sm font-semibold text-white">
+                      Ton résultat est prêt
+                    </p>
+                    <Link
+                      href="/pricing"
+                      className="rounded-full bg-yellow-400 px-5 py-2 text-sm font-bold text-black transition hover:scale-105 hover:bg-yellow-300"
+                    >
+                      🔓 Débloquer mon résultat
+                    </Link>
+                  </div>
+                )}
+              </>
             ) : previewUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={previewUrl} alt="Aperçu" className="h-full w-full object-contain opacity-40" />
@@ -328,7 +379,7 @@ export default function ImpressPage() {
               </p>
             )}
           </div>
-          {resultUrl && (
+          {resultUrl && (isPaid ? (
             <a
               href={resultUrl}
               download="impression.png"
@@ -336,7 +387,14 @@ export default function ImpressPage() {
             >
               Télécharger
             </a>
-          )}
+          ) : (
+            <Link
+              href="/pricing"
+              className="rounded-full bg-yellow-400 px-6 py-3 text-center font-bold text-black transition hover:bg-yellow-300"
+            >
+              Passe sur un plan pour télécharger sans filigrane
+            </Link>
+          ))}
         </div>
       </div>
     </div>

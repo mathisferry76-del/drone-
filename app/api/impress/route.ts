@@ -7,6 +7,7 @@ import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, GeminiApiError, describeGeminiError } from "@/lib/gemini";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
+import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
 
 export const runtime = "nodejs";
 
@@ -90,17 +91,6 @@ export async function POST(req: NextRequest) {
   }
 
   const isOwnerAccount = authUser.email?.toLowerCase() === "mathis.ferry76@gmail.com";
-  // No free trial here, unlike the thumbnail tool — this is a paid-plan
-  // perk from the start, gated the same way a locked feature would be.
-  if (!isOwnerAccount && profile.plan === "free") {
-    return NextResponse.json(
-      {
-        error: "« Impressionne tes potes » est réservé aux abonnés. Choisis un plan sur /pricing.",
-      },
-      { status: 403 }
-    );
-  }
-
   const monthKey = currentMonthId();
   let reservation: string | null = null;
 
@@ -139,16 +129,21 @@ export async function POST(req: NextRequest) {
     // Shares the same monthly AI quota as the thumbnail tool rather than a
     // separate pool — one "AI generations per month" budget usable on
     // either feature, simpler than a second quota system to track and bill.
+    // Free-plan users get exactly one trial use here too (mirroring
+    // /api/generate), watermarked below — this is the flagship feature's
+    // first taste, so it can't be paid-only from the very first try.
     const cap = isOwnerAccount
       ? 999999999
-      : PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
+      : profile.plan === "free"
+        ? 0
+        : PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
 
     const { data: reserved, error: reserveError } = await admin.rpc("reserve_generation", {
       p_user_id: authUser.id,
       p_ai_enhance: true,
       p_month_key: monthKey,
       p_ai_cap: cap,
-      p_force_paid: true,
+      p_force_paid: isOwnerAccount,
     });
 
     if (reserveError) {
@@ -160,7 +155,15 @@ export async function POST(req: NextRequest) {
     }
 
     reservation = reserved as string;
-    if (reservation === "quota_exceeded" || reservation === "trial_used") {
+    if (reservation === "trial_used") {
+      return NextResponse.json(
+        {
+          error: "Ton essai gratuit a déjà été utilisé. Choisis un plan sur /pricing pour continuer.",
+        },
+        { status: 403 }
+      );
+    }
+    if (reservation === "quota_exceeded") {
       return NextResponse.json(
         {
           error: `Quota IA du mois atteint (${cap}/mois sur ton plan). Passe sur un plan supérieur pour continuer.`,
@@ -168,6 +171,7 @@ export async function POST(req: NextRequest) {
         { status: 403 }
       );
     }
+    const effectiveWatermark = reservation === "ok_trial";
 
     const inputBuffer = Buffer.from(await file.arrayBuffer());
     let normalizedInput: Buffer;
@@ -217,6 +221,23 @@ export async function POST(req: NextRequest) {
         { error: useGemini || err instanceof GeminiApiError ? describeGeminiError(err) : describeAiError(err) },
         { status: 502 }
       );
+    }
+
+    if (effectiveWatermark) {
+      const meta = await sharp(resultBuffer).metadata();
+      const font = await loadFont();
+      resultBuffer = await sharp(resultBuffer)
+        .composite([
+          {
+            input: Buffer.from(
+              buildWatermarkSvg(font, "MIN IA — essai gratuit", meta.width ?? 1024, meta.height ?? 1024)
+            ),
+            top: 0,
+            left: 0,
+          },
+        ])
+        .png()
+        .toBuffer();
     }
 
     const base64 = resultBuffer.toString("base64");
