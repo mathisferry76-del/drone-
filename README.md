@@ -152,6 +152,12 @@ complet, pas une liste de features.
   bouton par style pré-remplit le champ description avec un prompt
   détaillé (décor, objets, angle de caméra, lumière) cohérent avec le
   style sélectionné, pour les utilisateurs qui ne savent pas quoi écrire.
+- **Génération du prompt à partir d'un lien YouTube** : coller le lien de
+  sa propre vidéo dans `/generate` récupère son titre (et sa description
+  si `YOUTUBE_API_KEY` est configurée) et demande à l'IA d'écrire une
+  description de scène adaptée au vrai sujet de la vidéo, dans le même
+  format détaillé que les suggestions par style (`lib/youtube.ts`,
+  `generateThumbnailPromptFromVideo` dans `lib/gemini.ts`/`lib/openai.ts`).
 
 ## Ce qui est volontairement absent (limites connues du MVP)
 
