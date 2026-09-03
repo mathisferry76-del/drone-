@@ -167,8 +167,8 @@ export default function Home() {
           Nos résultats
         </h2>
         <p className="mx-auto mt-3 max-w-xl text-center text-zinc-400">
-          Un aperçu de miniatures générées avec MIN IA, sur différentes
-          thématiques de chaîne.
+          Un aperçu de ce que MIN IA peut créer, sur différents styles et
+          thématiques.
         </p>
         <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-4 sm:auto-rows-[9rem]">
           {RESULTS.map((r, i) => {
@@ -180,7 +180,7 @@ export default function Home() {
               >
                 <Image
                   src={`/examples/${r.id}.webp`}
-                  alt={`Miniature générée avec MIN IA — style ${r.niche}`}
+                  alt={`Création générée avec MIN IA — style ${r.niche}`}
                   fill
                   sizes="(min-width: 640px) 25vw, 100vw"
                   className="object-cover transition duration-300 group-hover:scale-105"
@@ -195,7 +195,7 @@ export default function Home() {
           })}
         </div>
         <p className="mt-8 text-center text-sm text-zinc-500">
-          Envie du même résultat sur tes vidéos ?{" "}
+          Envie du même résultat sur tes propres photos ?{" "}
           <Link href="/pricing" className="font-semibold text-yellow-400 hover:text-yellow-300">
             Voir les plans →
           </Link>
