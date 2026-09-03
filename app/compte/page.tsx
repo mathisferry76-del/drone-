@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
+import { SUBSCRIPTION_TIERS } from "@/lib/presets";
 
 export default function ComptePage() {
   const { loading: authLoading, session } = useSupabaseUser();
@@ -104,13 +105,21 @@ export default function ComptePage() {
             <dd className="text-zinc-200">{session?.user.email}</dd>
           </div>
           <div className="flex justify-between">
+            <dt className="text-zinc-500">Abonnement</dt>
+            <dd className="text-zinc-200">
+              {profile?.plan
+                ? SUBSCRIPTION_TIERS.find((t) => t.id === profile.plan)?.name ?? profile.plan
+                : "Aucun"}
+            </dd>
+          </div>
+          <div className="flex justify-between">
             <dt className="text-zinc-500">Crédits</dt>
             <dd className="text-zinc-200">{profile?.credits_balance ?? "..."}</dd>
           </div>
         </dl>
         <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
           <Link href="/pricing" className="text-yellow-400 hover:underline">
-            Acheter des crédits →
+            {profile?.plan ? "Changer de palier / acheter des crédits →" : "Voir les abonnements et packs →"}
           </Link>
           <Link href="/historique" className="text-yellow-400 hover:underline">
             Mon historique →
@@ -126,7 +135,11 @@ export default function ComptePage() {
               disabled={portalLoading}
               className="rounded-full border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-60"
             >
-              {portalLoading ? "..." : "Voir mon historique de paiement"}
+              {portalLoading
+                ? "..."
+                : profile?.stripe_subscription_id
+                  ? "Changer de palier / résilier mon abonnement"
+                  : "Voir mon historique de paiement"}
             </button>
             {portalError && <p className="mt-2 text-sm text-red-400">{portalError}</p>}
           </div>

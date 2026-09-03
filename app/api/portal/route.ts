@@ -3,10 +3,13 @@ import { getStripe } from "@/lib/stripe";
 import { getUserFromAuthHeader, getSupabaseAdmin, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
-// Hands off payment method updates and invoice/receipt history to Stripe's
-// own hosted portal instead of us reimplementing it — credit purchases are
-// one-shot payments, not a subscription, so there's nothing to change plans
-// on here, just past purchases to review.
+// Hands off plan changes, payment method updates and cancellation to
+// Stripe's own hosted portal instead of us reimplementing proration and
+// invoicing — it operates directly on the user's existing subscription
+// (when there is one; a customer with only one-shot pack purchases and no
+// subscription still gets a portal session to review past invoices), which
+// is also what keeps a tier switch from ever creating a second,
+// separately-billed subscription (see the check in /api/checkout).
 export async function POST(req: NextRequest) {
   if (isRateLimited(`portal:${getClientIp(req)}`, 10, 10 * 60 * 1000)) {
     return NextResponse.json(
@@ -53,7 +56,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("billing portal error", err);
     return NextResponse.json(
-      { error: "Impossible d'ouvrir la gestion d'abonnement." },
+      { error: "Impossible d'ouvrir la gestion du compte." },
       { status: 500 }
     );
   }

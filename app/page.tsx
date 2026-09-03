@@ -68,7 +68,7 @@ const FAQS = [
   },
   {
     q: "Je peux annuler à tout moment ?",
-    a: "Il n'y a pas d'abonnement à annuler — tu achètes des crédits une fois, sans engagement ni renouvellement automatique.",
+    a: "Oui, les abonnements sont sans engagement et résiliables à tout moment depuis Stripe — les crédits déjà reçus restent utilisables. Les packs de crédits, eux, sont un achat unique sans rien à annuler.",
   },
   {
     q: "Mes photos sont-elles gardées ou utilisées pour autre chose ?",
@@ -132,7 +132,7 @@ export default function Home() {
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
             <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Aucun abonnement
+              <span className="text-emerald-400">✓</span> Résiliable en 1 clic
             </span>
             <span className="flex items-center gap-1.5">
               <span className="text-emerald-400">✓</span> Crédits sans date d&apos;expiration

@@ -40,7 +40,13 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 export interface Profile {
   id: string;
   email: string | null;
+  // Id du palier d'abonnement actif (voir SUBSCRIPTION_TIERS), ou null si
+  // aucun abonnement en cours — un abonnement ne fait que recharger
+  // credits_balance à chaque renouvellement, il ne le plafonne ni ne le
+  // remet jamais à zéro.
+  plan: string | null;
   stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
   free_generations_used: number;
   credits_balance: number;
   referral_code: string | null;

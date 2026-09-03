@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { getUserFromAuthHeader } from "@/lib/supabase";
-import { CREDIT_PACKS } from "@/lib/presets";
+import { getUserFromAuthHeader, getSupabaseAdmin, Profile } from "@/lib/supabase";
+import { CREDIT_PACKS, SUBSCRIPTION_TIERS } from "@/lib/presets";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -39,15 +39,57 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "priceId manquant." }, { status: 400 });
     }
     // Only ever create a checkout session for one of our own configured
-    // credit packs — never trust an arbitrary priceId string from the
-    // client, in case a differently-priced object ever exists in the same
-    // Stripe account (e.g. an internal test price).
+    // prices — never trust an arbitrary priceId string from the client, in
+    // case a differently-priced object ever exists in the same Stripe
+    // account (e.g. an internal test price).
     const pack = CREDIT_PACKS.find((p) => p.priceId === priceId);
-    if (!pack) {
-      return NextResponse.json({ error: "Pack de crédits inconnu." }, { status: 400 });
+    const tier = SUBSCRIPTION_TIERS.find((t) => t.priceId === priceId);
+    if (!pack && !tier) {
+      return NextResponse.json({ error: "Offre inconnue." }, { status: 400 });
     }
 
     const origin = req.headers.get("origin") ?? "http://localhost:3000";
+
+    if (tier) {
+      // A user who already has an active subscription must switch tiers
+      // through the Stripe portal (/api/portal), which prorates the change
+      // on the *existing* subscription — creating a second Checkout session
+      // here would start a second, separately-billed subscription. This
+      // check only applies to subscriptions: a one-shot credit pack (below)
+      // is always fine to buy regardless of subscription status.
+      const admin = getSupabaseAdmin();
+      if (admin) {
+        const { data } = await admin
+          .from("profiles")
+          .select("plan, stripe_subscription_id")
+          .eq("id", user.id)
+          .single();
+        const profile = data as Pick<Profile, "plan" | "stripe_subscription_id"> | null;
+        if (profile?.stripe_subscription_id && profile.plan) {
+          return NextResponse.json(
+            {
+              error: "changer_de_plan",
+              message:
+                "Tu as déjà un abonnement actif. Gère ton changement de palier depuis la page Mon compte.",
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${origin}/generate?success=true`,
+        cancel_url: `${origin}/pricing?canceled=true`,
+        allow_promotion_codes: true,
+        client_reference_id: user.id,
+        customer_email: user.email ?? undefined,
+        metadata: { user_id: user.id, plan: tier.id },
+      });
+
+      return NextResponse.json({ url: session.url });
+    }
 
     // One-shot payment, not a subscription — credits never expire and
     // there's nothing to renew, so a purchase never conflicts with a prior
@@ -60,7 +102,7 @@ export async function POST(req: NextRequest) {
       allow_promotion_codes: true,
       client_reference_id: user.id,
       customer_email: user.email ?? undefined,
-      metadata: { user_id: user.id, credits: String(pack.credits) },
+      metadata: { user_id: user.id, credits: String(pack!.credits) },
     });
 
     return NextResponse.json({ url: session.url });

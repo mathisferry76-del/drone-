@@ -270,3 +270,51 @@ export const CREDIT_PACKS: CreditPack[] = [
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_3000 ?? null,
   },
 ];
+
+// Abonnements mensuels : rechargent un nombre fixe de crédits à chaque
+// renouvellement, en plus du solde déjà là (les crédits ne sont jamais
+// perdus, ni remis à zéro). Tarif dégressif par rapport à l'achat au pack
+// (1000 crédits = 10€ à l'unité) pour récompenser l'engagement mensuel.
+// Un abonné peut aussi acheter un pack ponctuel s'il a besoin de plus de
+// crédits avant son prochain renouvellement.
+export interface SubscriptionTier {
+  id: string;
+  name: string;
+  price: string;
+  period: string;
+  credits: number;
+  tagline: string;
+  priceId: string | null;
+  highlighted?: boolean;
+}
+
+export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
+  {
+    id: "starter",
+    name: "Starter",
+    price: "15€",
+    period: "/mois",
+    credits: 2000,
+    tagline: "≈ 10 générations par mois",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SUB_STARTER ?? null,
+  },
+  {
+    id: "creator",
+    name: "Creator",
+    price: "40€",
+    period: "/mois",
+    credits: 6000,
+    tagline: "≈ 30 générations par mois",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SUB_CREATOR ?? null,
+    highlighted: true,
+  },
+  {
+    id: "pro",
+    name: "Pro",
+    price: "90€",
+    period: "/mois",
+    credits: 15000,
+    tagline: "≈ 75 générations par mois",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SUB_PRO ?? null,
+  },
+];

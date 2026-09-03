@@ -4,7 +4,9 @@
 create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
   email text,
+  plan text,
   stripe_customer_id text,
+  stripe_subscription_id text,
   free_generations_used int not null default 0,
   credits_balance int not null default 0,
   referral_code text unique,
@@ -13,23 +15,26 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
--- Si la table existait déjà (déploiement précédent), ajoute les nouvelles
--- colonnes de parrainage sans tout recréer.
+-- Si la table existait déjà (déploiement précédent), ajoute les colonnes
+-- manquantes sans tout recréer.
 alter table public.profiles add column if not exists referral_code text unique;
 alter table public.profiles add column if not exists referred_by uuid references public.profiles(id);
 alter table public.profiles add column if not exists bonus_generations int not null default 0;
-
--- Passage d'un modèle par abonnement (plan mensuel + quota qui se
--- réinitialise) à un modèle prépayé par crédits, dépensés à la génération et
--- rechargeables à tout moment, sans date de renouvellement. plan/
--- ai_uses_this_month/ai_uses_month_key/stripe_subscription_id ne sont plus
--- lus par le code applicatif ; laissés en base tels quels (pas de perte de
--- données) pour un déploiement déjà existant plutôt que de les supprimer.
 alter table public.profiles add column if not exists credits_balance int not null default 0;
+alter table public.profiles add column if not exists stripe_subscription_id text;
 
--- plan n'existe que sur un déploiement précédent au modèle par abonnement —
--- absent sur une toute nouvelle installation, d'où la garde explicite avant
--- ces ALTER (qui n'ont pas de variante "if exists" pour une colonne).
+-- Modèle hybride : abonnement mensuel (recharge credits_balance à chaque
+-- renouvellement, ne le plafonne ni ne le remet jamais à zéro) + achat
+-- ponctuel de packs. plan n'est plus une des 4 valeurs fixes de l'ancien
+-- modèle par quota mensuel — c'est maintenant simplement l'id du palier
+-- d'abonnement actif (voir SUBSCRIPTION_TIERS), ou null sans abonnement.
+-- Retire donc la contrainte NOT NULL/DEFAULT/CHECK de l'ancien modèle si
+-- elle existe encore (DROP NOT NULL/DEFAULT sont des no-op sans erreur si
+-- déjà absents, donc ce bloc est sûr à rejouer sur n'importe quel état
+-- antérieur du schéma). Absent sur une toute nouvelle installation (déjà
+-- créée sans contrainte par le CREATE TABLE ci-dessus), d'où la garde
+-- explicite avant des ALTER qui n'ont pas de variante "if exists" pour une
+-- colonne.
 do $$
 begin
   if exists (
