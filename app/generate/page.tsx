@@ -4,15 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   PRESETS,
-  PLAN_AI_CAPS,
-  PaidPlan,
+  GENERATION_CREDIT_COST,
+  CREDIT_PACKS,
   FACE_ZONE_BASE_RX,
   FACE_ZONE_BASE_RY,
   EDIT_ZONE_BASE_RX,
   EDIT_ZONE_BASE_RY,
   PresetId,
   getPreset,
-  PRICING_TIERS,
 } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
@@ -61,7 +60,6 @@ const PRESET_PROMPT_SUGGESTIONS: Record<PresetId, string> = {
     "Miniature YouTube 16:9, cadrage buste net et bien exposé, je suis centré, caméra au niveau des yeux. Garde mon visage et mon environnement exactement comme sur la photo de référence, sans aucun décor ni objet ajouté. Expression naturelle et engageante (sourire ou regard confiant), clairement lisible même en petit format. Amélioration purement technique : netteté accrue, exposition et balance des blancs corrigées, couleurs fidèles, texture de peau naturelle préservée, rendu proche d'une vraie photo prise en studio avec un bon éclairage frontal doux.",
 };
 
-type Plan = "free" | PaidPlan;
 type BackgroundStyle = "panel" | "shadow" | "none";
 type ShapeType = "arrow" | "circle" | "rectangle";
 
@@ -216,6 +214,7 @@ export default function GeneratePage() {
   const [shapes, setShapes] = useState<ShapeState[]>([]);
 
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [resultWasTrial, setResultWasTrial] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -257,32 +256,18 @@ export default function GeneratePage() {
     if (data) setProfile(data as Profile);
   }
 
-  // Vrai paywall : aucune génération sans compte connecté et abonné. Le plan
-  // et le quota affichés viennent uniquement du profil Supabase réel — plus
-  // de simulation locale pour les visiteurs non connectés.
-  // TEMPORAIRE — accès Pro pour un test manuel, à retirer sur demande.
-  // Ne modifie rien en base, juste ce qui est affiché dans ce navigateur.
-  const TEMP_PRO_TEST_EMAILS = ["leane.lotellier@icloud.com", "mathis.ferry76@gmail.com"];
-  const isTempProTest = Boolean(
-    session?.user.email && TEMP_PRO_TEST_EMAILS.includes(session.user.email.toLowerCase())
-  );
-  const effectivePlan: Plan = isTempProTest ? "pro" : (profile?.plan ?? "free");
-  const isPaid = effectivePlan !== "free";
-  // Un seul essai gratuit par compte, réservé à l'IA — au-delà, un
-  // abonnement est nécessaire (vérifié aussi côté serveur).
+  // Modèle prépayé : les styles filtres sont gratuits et illimités pour tout
+  // compte connecté (coût serveur négligeable). L'IA générative coûte
+  // GENERATION_CREDIT_COST crédits par génération, sauf le tout premier
+  // essai du compte (gratuit, filigrané). Le solde affiché vient uniquement
+  // du profil Supabase réel — plus de simulation locale pour les visiteurs
+  // non connectés.
+  const isOwnerAccount = session?.user.email?.toLowerCase() === "mathis.ferry76@gmail.com";
+  const creditsBalance = profile?.credits_balance ?? 0;
   const hasFreeTrialAvailable =
-    !isPaid && (profile?.free_generations_used ?? 0) < 1;
-  const aiCap = isPaid
-    ? PLAN_AI_CAPS[effectivePlan as PaidPlan] + (profile?.bonus_generations ?? 0)
-    : 0;
-  const effectiveAiUsesThisMonth = profile
-    ? profile.ai_uses_month_key === currentMonthId()
-      ? profile.ai_uses_this_month
-      : 0
-    : 0;
-  const aiLimitReached = isPaid && effectiveAiUsesThisMonth >= aiCap;
-  const canUseAi = loggedIn && (isPaid ? !aiLimitReached : hasFreeTrialAvailable);
-  const aiRemaining = Math.max(aiCap - effectiveAiUsesThisMonth, 0);
+    !isOwnerAccount && (profile?.free_generations_used ?? 0) < 1;
+  const hasCredits = isOwnerAccount || creditsBalance >= GENERATION_CREDIT_COST;
+  const canUseAi = loggedIn && (hasFreeTrialAvailable || hasCredits);
 
   // Once logged in, the account's real profile (plan + quota) takes over
   // from the localStorage simulation above. Right after a Stripe checkout
@@ -301,6 +286,7 @@ export default function GeneratePage() {
       const supabase = getSupabaseBrowser();
       if (!supabase) return;
       const attempts = justUpgraded ? 5 : 1;
+      let initialBalance: number | null = null;
       for (let i = 0; i < attempts; i++) {
         const { data } = await supabase
           .from("profiles")
@@ -309,8 +295,10 @@ export default function GeneratePage() {
           .single();
         if (cancelled) return;
         if (data) {
-          setProfile(data as Profile);
-          if (!justUpgraded || (data as Profile).plan !== "free") return;
+          const p = data as Profile;
+          if (initialBalance === null) initialBalance = p.credits_balance;
+          setProfile(p);
+          if (!justUpgraded || p.credits_balance !== initialBalance) return;
         }
         if (i < attempts - 1) await new Promise((r) => setTimeout(r, 1500));
       }
@@ -333,15 +321,15 @@ export default function GeneratePage() {
   }, [canUseAi, aiEnhance, naturalImgSize, facePreserve]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // The free trial is IA-only (no plain-filter freebie) — the server
-  // rejects anything else, so force the toggle on and lock it instead of
-  // letting the user uncheck it into a confusing 403.
+  // Nudges the toggle on by default when a free trial is available, so a
+  // first-time visitor actually sees the AI feature instead of missing it —
+  // no longer locked, since a plain filter generation never gets rejected.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!isPaid && hasFreeTrialAvailable && !aiEnhance) {
+    if (hasFreeTrialAvailable && !aiEnhance) {
       setAiEnhance(true);
     }
-  }, [isPaid, hasFreeTrialAvailable, aiEnhance]);
+  }, [hasFreeTrialAvailable, aiEnhance]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -520,21 +508,21 @@ export default function GeneratePage() {
   );
   const willDoTargetedEdit = Boolean(willUseAi && editZone && editInstruction.trim());
 
-  // Lets the user upgrade right from the moment they hit the free-trial
-  // wall — the highest-intent point in the whole funnel, right after seeing
-  // a result — instead of sending them off to /pricing and hoping they come
-  // back. Mirrors app/pricing/page.tsx's handleCheckout.
-  async function handleUpgrade(tierId: string, priceId: string | null) {
+  // Lets the user buy credits right from the moment they run out — the
+  // highest-intent point in the whole funnel, right after seeing a result —
+  // instead of sending them off to /pricing and hoping they come back.
+  // Mirrors app/pricing/page.tsx's handleCheckout.
+  async function handleBuyCredits(packId: string, priceId: string | null) {
     setUpgradeError(null);
     if (!priceId) {
       setUpgradeError(
-        "Ce plan n'est pas encore configuré (variable Stripe manquante)."
+        "Ce pack n'est pas encore configuré (variable Stripe manquante)."
       );
       return;
     }
     if (!session) return;
 
-    setUpgradeLoadingTier(tierId);
+    setUpgradeLoadingTier(packId);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
@@ -542,23 +530,9 @@ export default function GeneratePage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ priceId, tier: tierId }),
+        body: JSON.stringify({ priceId }),
       });
       const data = await res.json();
-
-      if (res.status === 409 && data.error === "changer_de_plan") {
-        const portalRes = await fetch("/api/portal", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const portalData = await portalRes.json();
-        if (!portalRes.ok || !portalData.url) {
-          setUpgradeError(portalData.error ?? "Impossible d'ouvrir la gestion d'abonnement.");
-          return;
-        }
-        window.location.assign(portalData.url);
-        return;
-      }
 
       if (!res.ok || !data.url) {
         setUpgradeError(data.error ?? "Erreur inconnue.");
@@ -609,6 +583,12 @@ export default function GeneratePage() {
     const reuseCache = Boolean(
       willUseAi && aiBaseCache && cacheKey && aiBaseCache.key === cacheKey
     );
+    // Captured before the request: reserve_credits always spends the trial
+    // first when it's available, so this is what determines whether the
+    // result we're about to get is watermarked — reading
+    // hasFreeTrialAvailable again after refetchProfile() below would already
+    // reflect the trial as consumed.
+    const usingTrial = willUseAi && hasFreeTrialAvailable;
 
     setLoading(true);
     try {
@@ -669,6 +649,7 @@ export default function GeneratePage() {
       }
 
       setResultUrl(data.image);
+      setResultWasTrial(usingTrial);
       setShowOriginal(false);
       if (typeof data.aiBase === "string" && cacheKey) {
         setAiBaseCache({ key: cacheKey, dataUrl: data.aiBase });
@@ -690,8 +671,9 @@ export default function GeneratePage() {
     }
   }
 
-  // Vrai paywall : pas de compte, ou compte sans abonnement actif -> on ne
-  // montre même pas l'éditeur, juste l'invite à se connecter/s'abonner.
+  // Pas de compte -> on ne montre même pas l'éditeur, juste l'invite à se
+  // connecter (l'éditeur lui-même est accessible à tout compte connecté,
+  // seule l'IA générative consomme des crédits).
   if (authLoading || (loggedIn && !profile)) {
     return <div className="mx-auto w-full max-w-6xl px-6 py-16 text-zinc-500">Chargement...</div>;
   }
@@ -714,85 +696,26 @@ export default function GeneratePage() {
     );
   }
 
-  if (loggedIn && profile && !isPaid && !hasFreeTrialAvailable) {
-    return (
-      <div className="mx-auto w-full max-w-6xl px-6 py-16">
-        <div className="mx-auto max-w-xl text-center">
-          <h1 className="text-2xl font-extrabold">Ton essai gratuit est terminé</h1>
-          <p className="mt-3 text-zinc-400">
-            Tu as vu ce que l&apos;IA générative peut faire sur ta propre
-            photo — choisis un plan pour continuer, sans filigrane et avec un
-            vrai quota mensuel.
-          </p>
-        </div>
-
-        {upgradeError && (
-          <p className="mx-auto mt-6 max-w-lg rounded-lg border border-red-800 bg-red-950/50 p-3 text-center text-sm text-red-300">
-            {upgradeError}
-          </p>
-        )}
-
-        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {PRICING_TIERS.map((tier) => (
-            <div
-              key={tier.id}
-              className={`flex flex-col rounded-2xl border p-6 ${
-                tier.highlighted
-                  ? "border-yellow-400 bg-yellow-400/5"
-                  : "border-zinc-800 bg-zinc-900/40"
-              }`}
-            >
-              {tier.highlighted && (
-                <span className="mb-3 w-fit rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
-                  Le plus choisi
-                </span>
-              )}
-              <h2 className="text-lg font-bold">{tier.name}</h2>
-              <p className="mt-1 text-sm text-zinc-400">{tier.tagline}</p>
-              <div className="mt-3 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold">{tier.price}</span>
-                <span className="text-zinc-400">{tier.period}</span>
-              </div>
-              <div className="flex-1" />
-              <button
-                onClick={() => handleUpgrade(tier.id, tier.priceId)}
-                disabled={upgradeLoadingTier === tier.id}
-                className={`mt-6 rounded-full px-6 py-3 text-center font-bold transition disabled:opacity-60 ${
-                  tier.highlighted
-                    ? "bg-yellow-400 text-black hover:bg-yellow-300"
-                    : "border border-zinc-600 text-white hover:border-zinc-400"
-                }`}
-              >
-                {upgradeLoadingTier === tier.id ? "Redirection..." : tier.cta}
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <p className="mt-8 text-center text-xs text-zinc-500">
-          <Link href="/pricing" className="underline hover:text-zinc-300">
-            Voir le détail complet des plans
-          </Link>{" "}
-          · Résiliable en 1 clic · Paiement sécurisé par Stripe
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-16">
       <ResultReveal src={resultUrl} revealKey={resultUrl} />
       <h1 className="text-3xl font-extrabold">Créer une miniature</h1>
       <p className="mt-2 text-zinc-400">
-        {isPaid &&
-          `Plan ${
-            effectivePlan.charAt(0).toUpperCase() + effectivePlan.slice(1)
-          } actif — miniatures illimitées, sans filigrane. Il te reste ${aiRemaining}/${aiCap} génération(s) IA ce mois-ci.`}
-        {!isPaid && hasFreeTrialAvailable &&
-          "🎁 Ton essai gratuit avec IA générative — avec filigrane, et le téléchargement HD nécessite un abonnement."}
+        {hasFreeTrialAvailable &&
+          "🎁 Ton essai gratuit avec IA générative — avec filigrane, et le téléchargement HD nécessite d'acheter des crédits."}
+        {!hasFreeTrialAvailable && hasCredits &&
+          `Styles filtres illimités et gratuits. Il te reste ${creditsBalance} crédits (${Math.floor(creditsBalance / GENERATION_CREDIT_COST)} génération(s) IA).`}
+        {!hasFreeTrialAvailable && !hasCredits &&
+          "Styles filtres illimités et gratuits. Achète des crédits pour utiliser l'IA générative."}
       </p>
 
-      {!isPaid && hasFreeTrialAvailable && !resultUrl && (
+      {upgradeError && (
+        <p className="mt-4 rounded-lg border border-red-800 bg-red-950/50 p-3 text-sm text-red-300">
+          {upgradeError}
+        </p>
+      )}
+
+      {hasFreeTrialAvailable && !resultUrl && (
         <div className="mt-4 rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-4 text-sm">
           <p className="font-semibold text-yellow-300">Première fois ici ? Voici comment ça marche :</p>
           <ol className="mt-2 list-decimal space-y-1 pl-4 text-zinc-400">
@@ -1323,26 +1246,26 @@ export default function GeneratePage() {
               <input
                 type="checkbox"
                 checked={canUseAi && aiEnhance}
-                disabled={!canUseAi || (!isPaid && hasFreeTrialAvailable)}
+                disabled={!canUseAi}
                 onChange={(e) => setAiEnhance(e.target.checked)}
                 className="mt-1 h-4 w-4 accent-yellow-400 disabled:opacity-40"
               />
               <span>
                 <span className="block text-sm font-bold">✨ Amélioration IA générative</span>
                 <span className="mt-1 block text-xs text-zinc-400">
-                  {!isPaid && hasFreeTrialAvailable &&
-                    "Ton essai gratuit — une vraie génération IA, avec filigrane. Le téléchargement HD nécessite un abonnement."}
-                  {isPaid && !aiLimitReached &&
-                    `Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative. Il te reste ${aiRemaining}/${aiCap} génération(s) IA ce mois-ci.`}
-                  {isPaid && aiLimitReached &&
-                    `Tu as utilisé tes ${aiCap} générations IA incluses ce mois-ci. Reviens le mois prochain, ou passe sur un plan supérieur pour plus de générations.`}
+                  {hasFreeTrialAvailable &&
+                    "Ton essai gratuit — une vraie génération IA, avec filigrane. Le téléchargement HD nécessite d'acheter des crédits."}
+                  {!hasFreeTrialAvailable && hasCredits &&
+                    `Retravaille réellement l'éclairage et l'ambiance de ta photo avec une IA générative. Il te reste ${creditsBalance} crédits (${Math.floor(creditsBalance / GENERATION_CREDIT_COST)} génération(s)).`}
+                  {!hasFreeTrialAvailable && !hasCredits &&
+                    `Il faut ${GENERATION_CREDIT_COST} crédits pour une génération IA. Achète un pack pour continuer.`}
                 </span>
-                {aiLimitReached && (
+                {!hasFreeTrialAvailable && !hasCredits && (
                   <Link
                     href="/pricing"
                     className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
                   >
-                    Voir les plans →
+                    Acheter des crédits →
                   </Link>
                 )}
               </span>
@@ -1779,7 +1702,7 @@ export default function GeneratePage() {
                 </p>
               </div>
 
-              {isPaid ? (
+              {!resultWasTrial ? (
                 <a
                   href={resultUrl}
                   download="thumbnail.png"
@@ -1792,7 +1715,7 @@ export default function GeneratePage() {
                   href="/pricing"
                   className="mt-4 block w-full rounded-full bg-yellow-400 px-6 py-3 text-center font-bold text-black transition hover:bg-yellow-300"
                 >
-                  Passe sur un plan pour télécharger en HD
+                  Achète des crédits pour télécharger en HD
                 </Link>
               )}
             </>

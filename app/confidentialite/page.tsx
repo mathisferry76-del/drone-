@@ -26,7 +26,7 @@ export default function ConfidentialitePage() {
           <li>Adresse email (création de compte, connexion)</li>
           <li>Mot de passe, si tu choisis d&apos;en définir un (stocké de façon chiffrée, jamais en clair)</li>
           <li>Photos que tu envoies pour générer une miniature, et les miniatures générées (conservées dans ton historique)</li>
-          <li>Informations d&apos;abonnement (plan choisi, quota utilisé) — les coordonnées bancaires ne sont jamais collectées ni stockées par MIN IA, elles sont traitées exclusivement par Stripe</li>
+          <li>Informations de compte (solde de crédits, packs achetés) — les coordonnées bancaires ne sont jamais collectées ni stockées par MIN IA, elles sont traitées exclusivement par Stripe</li>
         </ul>
       </section>
 
@@ -35,14 +35,14 @@ export default function ConfidentialitePage() {
         <p>Tes données sont utilisées pour :</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>Fournir le service (génération de miniatures, gestion de ton compte et de ton historique)</li>
-          <li>Gérer la facturation de ton abonnement</li>
+          <li>Gérer tes achats de crédits</li>
           <li>Prévenir les abus (par exemple, limiter l&apos;essai gratuit à une utilisation par compte)</li>
           <li>Répondre à tes demandes envoyées à contact@min-ia.fr</li>
         </ul>
         <p>
           La base légale de ces traitements est l&apos;exécution du contrat
-          qui te lie à MIN IA lorsque tu crées un compte ou souscris à un
-          abonnement.
+          qui te lie à MIN IA lorsque tu crées un compte ou achètes des
+          crédits.
         </p>
       </section>
 

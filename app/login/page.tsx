@@ -219,7 +219,7 @@ function LoginForm() {
         {mode === "magic"
           ? "Reçois un lien magique par email — pas de mot de passe à retenir."
           : "Un mot de passe protège ton compte même si ta boîte mail est compromise."}{" "}
-        Ton historique de miniatures et ton abonnement sont liés à ce compte,
+        Ton historique de miniatures et tes crédits sont liés à ce compte,
         accessibles depuis n&apos;importe quel appareil.
       </p>
 

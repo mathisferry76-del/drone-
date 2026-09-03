@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { getUserFromAuthHeader, getSupabaseAdmin, Profile } from "@/lib/supabase";
-import { PAID_PLAN_IDS, PRICING_TIERS } from "@/lib/presets";
+import { getUserFromAuthHeader } from "@/lib/supabase";
+import { CREDIT_PACKS } from "@/lib/presets";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
@@ -23,70 +23,44 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // A subscription has to be linked to an account so the webhook knows
-  // whose profile to upgrade — no anonymous checkout once accounts exist.
+  // A purchase has to be linked to an account so the webhook knows whose
+  // balance to credit — no anonymous checkout once accounts exist.
   const user = await getUserFromAuthHeader(req.headers.get("authorization"));
   if (!user) {
     return NextResponse.json(
-      { error: "Connecte-toi avant de passer sur un plan payant." },
+      { error: "Connecte-toi avant d'acheter des crédits." },
       { status: 401 }
     );
   }
 
   try {
-    const { priceId, tier } = (await req.json()) as {
-      priceId?: string;
-      tier?: string;
-    };
+    const { priceId } = (await req.json()) as { priceId?: string };
     if (!priceId) {
       return NextResponse.json({ error: "priceId manquant." }, { status: 400 });
     }
     // Only ever create a checkout session for one of our own configured
-    // plan prices — never trust an arbitrary priceId string from the
+    // credit packs — never trust an arbitrary priceId string from the
     // client, in case a differently-priced object ever exists in the same
     // Stripe account (e.g. an internal test price).
-    const knownPriceIds = PRICING_TIERS.map((t) => t.priceId).filter(Boolean);
-    if (!knownPriceIds.includes(priceId)) {
-      return NextResponse.json({ error: "Plan inconnu." }, { status: 400 });
-    }
-
-    // A user who already has an active subscription must switch plans
-    // through the Stripe portal (/api/portal), which prorates the change
-    // on the *existing* subscription — creating a second Checkout session
-    // here would start a second, separate subscription and double-bill them.
-    const admin = getSupabaseAdmin();
-    if (admin) {
-      const { data } = await admin
-        .from("profiles")
-        .select("plan, stripe_subscription_id")
-        .eq("id", user.id)
-        .single();
-      const profile = data as Pick<Profile, "plan" | "stripe_subscription_id"> | null;
-      if (profile?.stripe_subscription_id && profile.plan !== "free") {
-        return NextResponse.json(
-          {
-            error: "changer_de_plan",
-            message:
-              "Tu as déjà un abonnement actif. Gère ton changement de plan depuis la page Mon compte.",
-          },
-          { status: 409 }
-        );
-      }
+    const pack = CREDIT_PACKS.find((p) => p.priceId === priceId);
+    if (!pack) {
+      return NextResponse.json({ error: "Pack de crédits inconnu." }, { status: 400 });
     }
 
     const origin = req.headers.get("origin") ?? "http://localhost:3000";
-    const safeTier = PAID_PLAN_IDS.includes(tier as (typeof PAID_PLAN_IDS)[number])
-      ? tier
-      : "creator";
 
+    // One-shot payment, not a subscription — credits never expire and
+    // there's nothing to renew, so a purchase never conflicts with a prior
+    // one the way starting a second subscription would.
     const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
+      mode: "payment",
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${origin}/generate?success=true&tier=${safeTier}`,
+      success_url: `${origin}/generate?success=true`,
       cancel_url: `${origin}/pricing?canceled=true`,
       allow_promotion_codes: true,
       client_reference_id: user.id,
       customer_email: user.email ?? undefined,
+      metadata: { user_id: user.id, credits: String(pack.credits) },
     });
 
     return NextResponse.json({ url: session.url });

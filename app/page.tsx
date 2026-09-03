@@ -44,7 +44,7 @@ const FAQS = [
   },
   {
     q: "Quelle différence avec Canva ou Photoshop ?",
-    a: "Pas de mise en page à faire à la main : tu choisis un style, tu tapes ton titre, c'est généré en quelques secondes. Tous les plans incluent aussi une IA générative qui retravaille l'image elle-même, pas seulement le texte par-dessus.",
+    a: "Pas de mise en page à faire à la main : tu choisis un style, tu tapes ton titre, c'est généré en quelques secondes. Une IA générative retravaille aussi l'image elle-même, pas seulement le texte par-dessus.",
   },
   {
     q: "Comment fonctionne la génération par IA ?",
@@ -56,7 +56,7 @@ const FAQS = [
   },
   {
     q: "Y a-t-il un essai gratuit ?",
-    a: "Oui — 1 génération IA gratuite par compte, avec un léger filigrane (le téléchargement HD nécessite un abonnement). Au-delà, chaque génération IA a un vrai coût de calcul, donc un abonnement est nécessaire pour continuer.",
+    a: "Oui — 1 génération IA gratuite par compte, avec un léger filigrane (le téléchargement HD nécessite des crédits). Au-delà, chaque génération IA a un vrai coût de calcul, donc des crédits sont nécessaires pour continuer (200 crédits par génération, à partir de 2€).",
   },
   {
     q: "Je peux ajouter plusieurs textes, flèches ou cercles sur ma miniature ?",
@@ -68,7 +68,7 @@ const FAQS = [
   },
   {
     q: "Je peux annuler à tout moment ?",
-    a: "Oui, tous les abonnements sont sans engagement, résiliables à tout moment depuis Stripe.",
+    a: "Il n'y a pas d'abonnement à annuler — tu achètes des crédits une fois, sans engagement ni renouvellement automatique.",
   },
   {
     q: "Mes photos sont-elles gardées ou utilisées pour autre chose ?",
@@ -132,10 +132,10 @@ export default function Home() {
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
             <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Résiliable en 1 clic
+              <span className="text-emerald-400">✓</span> Aucun abonnement
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Sans engagement de durée
+              <span className="text-emerald-400">✓</span> Crédits sans date d&apos;expiration
             </span>
             <span className="flex items-center gap-1.5">
               <span className="text-emerald-400">✓</span> Paiement sécurisé (Stripe)

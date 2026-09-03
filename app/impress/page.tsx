@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { PRICING_TIERS } from "@/lib/presets";
+import { CREDIT_PACKS, GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { useEffect } from "react";
@@ -30,6 +30,7 @@ export default function ImpressPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [resultWasTrial, setResultWasTrial] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -52,11 +53,12 @@ export default function ImpressPage() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const isOwnerAccount = session?.user.email?.toLowerCase() === "mathis.ferry76@gmail.com";
-  const isPaid = isOwnerAccount || (profile ? profile.plan !== "free" : false);
+  const creditsBalance = profile?.credits_balance ?? 0;
   // Same account-wide trial counter as /generate — one free AI generation
   // total, usable on either feature, not one freebie per feature.
-  const hasFreeTrialAvailable = !isPaid && (profile?.free_generations_used ?? 0) < 1;
-  const canTryTool = isPaid || hasFreeTrialAvailable;
+  const hasFreeTrialAvailable = !isOwnerAccount && (profile?.free_generations_used ?? 0) < 1;
+  const hasCredits = isOwnerAccount || creditsBalance >= GENERATION_CREDIT_COST;
+  const canTryTool = hasFreeTrialAvailable || hasCredits;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -80,6 +82,13 @@ export default function ImpressPage() {
       return;
     }
 
+    // Captured before the request: reserve_credits always spends the trial
+    // first when it's available, regardless of credit balance, so this is
+    // what determines whether the result we're about to get is watermarked
+    // — reading hasFreeTrialAvailable again after the profile refetch below
+    // would already reflect the trial as consumed.
+    const usingTrial = hasFreeTrialAvailable;
+
     setLoading(true);
     try {
       const formData = new FormData();
@@ -98,11 +107,12 @@ export default function ImpressPage() {
         return;
       }
       setResultUrl(data.image);
+      setResultWasTrial(usingTrial);
       setShowOriginal(false);
 
-      // Refresh the profile so free_generations_used reflects the trial
-      // just consumed — otherwise the free banner would stay visible after
-      // a successful trial generation until a full page reload.
+      // Refresh the profile so free_generations_used/credits_balance reflect
+      // what was just spent — otherwise the free banner or credit count
+      // would stay stale until a full page reload.
       if (session) {
         const supabase = getSupabaseBrowser();
         const { data: fresh } = await supabase!
@@ -119,34 +129,21 @@ export default function ImpressPage() {
     }
   }
 
-  async function handleUpgrade(tierId: string, priceId: string | null) {
+  async function handleBuyCredits(packId: string, priceId: string | null) {
     setUpgradeError(null);
     if (!priceId) {
-      setUpgradeError("Ce plan n'est pas encore configuré (variable Stripe manquante).");
+      setUpgradeError("Ce pack n'est pas encore configuré (variable Stripe manquante).");
       return;
     }
     if (!session) return;
-    setUpgradeLoadingTier(tierId);
+    setUpgradeLoadingTier(packId);
     try {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ priceId, tier: tierId }),
+        body: JSON.stringify({ priceId, packId }),
       });
       const data = await res.json();
-      if (res.status === 409 && data.error === "changer_de_plan") {
-        const portalRes = await fetch("/api/portal", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        });
-        const portalData = await portalRes.json();
-        if (!portalRes.ok || !portalData.url) {
-          setUpgradeError(portalData.error ?? "Impossible d'ouvrir la gestion d'abonnement.");
-          return;
-        }
-        window.location.assign(portalData.url);
-        return;
-      }
       if (!res.ok || !data.url) {
         setUpgradeError(data.error ?? "Erreur inconnue.");
         return;
@@ -194,8 +191,8 @@ export default function ImpressPage() {
             crédible, pas sur-retouché.
           </p>
           <p className="mt-3 text-sm text-zinc-500">
-            Ton essai gratuit a déjà été utilisé — choisis un plan pour
-            continuer.
+            Ton essai gratuit a déjà été utilisé — achète des crédits pour
+            continuer ({GENERATION_CREDIT_COST} crédits par génération).
           </p>
         </div>
 
@@ -205,36 +202,35 @@ export default function ImpressPage() {
           </p>
         )}
 
-        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {PRICING_TIERS.map((tier) => (
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
+          {CREDIT_PACKS.map((pack) => (
             <div
-              key={tier.id}
+              key={pack.id}
               className={`flex flex-col rounded-2xl border p-6 ${
-                tier.highlighted ? "border-yellow-400 bg-yellow-400/5" : "border-zinc-800 bg-zinc-900/40"
+                pack.highlighted ? "border-yellow-400 bg-yellow-400/5" : "border-zinc-800 bg-zinc-900/40"
               }`}
             >
-              {tier.highlighted && (
+              {pack.highlighted && (
                 <span className="mb-3 w-fit rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
                   Le plus choisi
                 </span>
               )}
-              <h2 className="text-lg font-bold">{tier.name}</h2>
-              <p className="mt-1 text-sm text-zinc-400">{tier.tagline}</p>
+              <h2 className="text-lg font-bold">{pack.credits} crédits</h2>
+              <p className="mt-1 text-sm text-zinc-400">{pack.tagline}</p>
               <div className="mt-3 flex items-baseline gap-1">
-                <span className="text-3xl font-extrabold">{tier.price}</span>
-                <span className="text-zinc-400">{tier.period}</span>
+                <span className="text-3xl font-extrabold">{pack.price}</span>
               </div>
               <div className="flex-1" />
               <button
-                onClick={() => handleUpgrade(tier.id, tier.priceId)}
-                disabled={upgradeLoadingTier === tier.id}
+                onClick={() => handleBuyCredits(pack.id, pack.priceId)}
+                disabled={upgradeLoadingTier === pack.id}
                 className={`mt-6 rounded-full px-6 py-3 text-center font-bold transition disabled:opacity-60 ${
-                  tier.highlighted
+                  pack.highlighted
                     ? "bg-yellow-400 text-black hover:bg-yellow-300"
                     : "border border-zinc-600 text-white hover:border-zinc-400"
                 }`}
               >
-                {upgradeLoadingTier === tier.id ? "Redirection..." : tier.cta}
+                {upgradeLoadingTier === pack.id ? "Redirection..." : "Acheter"}
               </button>
             </div>
           ))}
@@ -251,10 +247,15 @@ export default function ImpressPage() {
         Prends une photo, décris un seul changement précis. L&apos;IA applique
         exactement ça — rien de plus — pour un résultat crédible.
       </p>
-      {!isPaid && hasFreeTrialAvailable && (
+      {hasFreeTrialAvailable && (
         <p className="mt-3 rounded-lg border border-yellow-800/40 bg-yellow-400/5 px-4 py-2 text-sm text-yellow-300">
-          🎁 Ton essai gratuit — un vrai résultat, avec filigrane. Passe sur
-          un plan pour télécharger sans filigrane et continuer.
+          🎁 Ton essai gratuit — un vrai résultat, avec filigrane. Achète des
+          crédits pour débloquer sans filigrane et continuer.
+        </p>
+      )}
+      {!hasFreeTrialAvailable && !isOwnerAccount && (
+        <p className="mt-3 text-sm text-zinc-500">
+          {creditsBalance} crédits disponibles ({Math.floor(creditsBalance / GENERATION_CREDIT_COST)} génération(s)).
         </p>
       )}
 
@@ -352,10 +353,10 @@ export default function ImpressPage() {
                   src={showOriginal && previewUrl ? previewUrl : resultUrl}
                   alt={showOriginal ? "Photo originale" : "Résultat généré"}
                   className={`h-full w-full object-cover ${
-                    !isPaid && !showOriginal ? "scale-110 blur-xl" : ""
+                    resultWasTrial && !showOriginal ? "scale-110 blur-xl" : ""
                   }`}
                 />
-                {!isPaid && !showOriginal && (
+                {resultWasTrial && !showOriginal && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 p-6 text-center">
                     <span className="text-3xl">🔒</span>
                     <p className="text-sm font-semibold text-white">
@@ -379,7 +380,7 @@ export default function ImpressPage() {
               </p>
             )}
           </div>
-          {resultUrl && (isPaid ? (
+          {resultUrl && (!resultWasTrial ? (
             <a
               href={resultUrl}
               download="impression.png"

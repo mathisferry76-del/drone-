@@ -4,12 +4,9 @@
 create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
   email text,
-  plan text not null default 'free' check (plan in ('free', 'starter', 'creator', 'pro', 'studio')),
   stripe_customer_id text,
-  stripe_subscription_id text,
   free_generations_used int not null default 0,
-  ai_uses_this_month int not null default 0,
-  ai_uses_month_key text,
+  credits_balance int not null default 0,
   referral_code text unique,
   referred_by uuid references public.profiles(id),
   bonus_generations int not null default 0,
@@ -22,11 +19,37 @@ alter table public.profiles add column if not exists referral_code text unique;
 alter table public.profiles add column if not exists referred_by uuid references public.profiles(id);
 alter table public.profiles add column if not exists bonus_generations int not null default 0;
 
--- Nouveau modèle : 4 paliers payants (starter/creator/pro/studio), plus
--- d'offre gratuite. Élargit la contrainte pour un déploiement existant.
-alter table public.profiles drop constraint if exists profiles_plan_check;
-alter table public.profiles add constraint profiles_plan_check
-  check (plan in ('free', 'starter', 'creator', 'pro', 'studio'));
+-- Passage d'un modèle par abonnement (plan mensuel + quota qui se
+-- réinitialise) à un modèle prépayé par crédits, dépensés à la génération et
+-- rechargeables à tout moment, sans date de renouvellement. plan/
+-- ai_uses_this_month/ai_uses_month_key/stripe_subscription_id ne sont plus
+-- lus par le code applicatif ; laissés en base tels quels (pas de perte de
+-- données) pour un déploiement déjà existant plutôt que de les supprimer.
+alter table public.profiles add column if not exists credits_balance int not null default 0;
+
+-- plan n'existe que sur un déploiement précédent au modèle par abonnement —
+-- absent sur une toute nouvelle installation, d'où la garde explicite avant
+-- ces ALTER (qui n'ont pas de variante "if exists" pour une colonne).
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'profiles' and column_name = 'plan'
+  ) then
+    alter table public.profiles alter column plan drop not null;
+    alter table public.profiles alter column plan drop default;
+    alter table public.profiles drop constraint if exists profiles_plan_check;
+  end if;
+end $$;
+
+-- Conversion unique des anciens bonus de parrainage (ancien modèle) en
+-- crédits, au même tarif que GENERATION_CREDIT_COST (200/génération) —
+-- idempotent : bonus_generations passe à 0, donc un second passage n'ajoute
+-- rien de plus.
+update public.profiles
+set credits_balance = credits_balance + bonus_generations * 200,
+    bonus_generations = 0
+where bonus_generations > 0;
 
 create table if not exists public.generations (
   id uuid primary key default gen_random_uuid(),
@@ -66,8 +89,11 @@ create policy "Users can delete own generations" on public.generations
 -- Crée automatiquement une ligne de profil à chaque inscription, avec un
 -- code de parrainage unique dérivé de son id (pas de risque de collision).
 -- Si l'inscription vient d'un lien de parrainage (?ref=CODE passé en
--- metadata à signInWithOtp), les deux comptes reçoivent des générations
--- bonus immédiatement.
+-- metadata à signInWithOtp), les deux comptes reçoivent directement des
+-- crédits bonus (2 générations pour le filleul, 3 pour le parrain — au tarif
+-- de 200 crédits/génération). bonus_generations reste en base pour un
+-- déploiement existant mais n'est plus incrémenté : les bonus vont
+-- désormais droit dans credits_balance, seul solde lu par l'application.
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
@@ -79,12 +105,12 @@ begin
     select id into referrer_id from public.profiles where referral_code = ref_code;
   end if;
 
-  insert into public.profiles (id, email, referral_code, referred_by, bonus_generations)
-  values (new.id, new.email, new_code, referrer_id, case when referrer_id is not null then 2 else 0 end);
+  insert into public.profiles (id, email, referral_code, referred_by, credits_balance)
+  values (new.id, new.email, new_code, referrer_id, case when referrer_id is not null then 400 else 0 end);
 
   if referrer_id is not null then
     update public.profiles
-    set bonus_generations = bonus_generations + 3
+    set credits_balance = credits_balance + 600
     where id = referrer_id;
   end if;
 
@@ -113,23 +139,22 @@ drop policy if exists "Service role manages thumbnails" on storage.objects;
 create policy "Service role manages thumbnails" on storage.objects
   for all using (bucket_id = 'thumbnails' and auth.role() = 'service_role');
 
--- Réservation atomique d'un quota de génération (essai gratuit ou quota IA
--- mensuel). "for update" verrouille la ligne du profil le temps de la
--- transaction : si deux requêtes du même utilisateur arrivent en même temps,
--- la deuxième attend que la première ait fini avant de lire le compteur —
--- élimine la race condition d'un simple "lire puis écrire" en deux temps
--- séparés côté application, qui laissait dépasser le quota par des appels
--- concurrents. Retourne un statut texte que le serveur interprète :
--- 'no_profile', 'needs_plan', 'trial_used', 'ok_trial', 'quota_exceeded',
--- 'ok_ai', 'ok_filter'.
-create or replace function public.reserve_generation(
+drop function if exists public.reserve_generation(uuid, boolean, text, int, boolean);
+drop function if exists public.release_generation_reservation(uuid, text, text);
+
+-- Réservation atomique d'une génération IA (essai gratuit unique, sinon
+-- débit de crédits prépayés). "for update" verrouille la ligne du profil le
+-- temps de la transaction : si deux requêtes du même utilisateur arrivent en
+-- même temps, la deuxième attend que la première ait fini avant de lire le
+-- solde — élimine la race condition d'un simple "lire puis écrire" en deux
+-- temps séparés côté application, qui laissait dépasser le solde par des
+-- appels concurrents. Retourne un statut texte que le serveur interprète :
+-- 'no_profile', 'ok_owner', 'ok_trial', 'ok_credits', 'insufficient_credits'.
+create or replace function public.reserve_credits(
   p_user_id uuid,
-  p_ai_enhance boolean,
-  p_month_key text,
-  p_ai_cap int,
-  -- Lets the caller force the paid/capped path even for a "free" plan row
-  -- (used for the app's temporary manual Pro test accounts) instead of the
-  -- single free-trial path, while staying on the same atomic reservation.
+  p_cost int,
+  -- Bypass total (compte propriétaire) : ne touche ni l'essai gratuit ni le
+  -- solde de crédits, toujours accepté.
   p_force_paid boolean default false
 )
 returns text
@@ -137,13 +162,15 @@ language plpgsql
 security definer
 as $$
 declare
-  v_plan text;
   v_free_used int;
-  v_ai_used int;
-  v_ai_key text;
+  v_credits int;
 begin
-  select plan, free_generations_used, ai_uses_this_month, ai_uses_month_key
-  into v_plan, v_free_used, v_ai_used, v_ai_key
+  if p_force_paid then
+    return 'ok_owner';
+  end if;
+
+  select free_generations_used, credits_balance
+  into v_free_used, v_credits
   from public.profiles
   where id = p_user_id
   for update;
@@ -152,46 +179,32 @@ begin
     return 'no_profile';
   end if;
 
-  if v_plan = 'free' and not p_force_paid then
-    if not p_ai_enhance then
-      return 'needs_plan';
-    end if;
-    if v_free_used >= 1 then
-      return 'trial_used';
-    end if;
+  if v_free_used < 1 then
     update public.profiles set free_generations_used = free_generations_used + 1
       where id = p_user_id;
     return 'ok_trial';
   end if;
 
-  if not p_ai_enhance then
-    return 'ok_filter';
-  end if;
-
-  if v_ai_key is distinct from p_month_key then
-    v_ai_used := 0;
-  end if;
-
-  if v_ai_used >= p_ai_cap then
-    return 'quota_exceeded';
+  if v_credits < p_cost then
+    return 'insufficient_credits';
   end if;
 
   update public.profiles
-  set ai_uses_this_month = v_ai_used + 1,
-      ai_uses_month_key = p_month_key
+  set credits_balance = credits_balance - p_cost
   where id = p_user_id;
 
-  return 'ok_ai';
+  return 'ok_credits';
 end;
 $$;
 
--- Compense une réservation faite par reserve_generation quand la génération
--- échoue ensuite (erreur OpenAI, etc.) — sans ça, un utilisateur dont la
--- génération plante perdrait quand même une unité de son quota pour rien.
-create or replace function public.release_generation_reservation(
+-- Compense une réservation faite par reserve_credits quand la génération
+-- échoue ensuite (erreur IA, etc.) — sans ça, un utilisateur dont la
+-- génération plante perdrait quand même son essai gratuit ou ses crédits
+-- pour rien. 'ok_owner' n'a jamais rien débité, donc rien à rembourser.
+create or replace function public.release_credits_reservation(
   p_user_id uuid,
   p_reservation text,
-  p_month_key text
+  p_cost int
 )
 returns void
 language plpgsql
@@ -202,10 +215,26 @@ begin
     update public.profiles
     set free_generations_used = greatest(0, free_generations_used - 1)
     where id = p_user_id;
-  elsif p_reservation = 'ok_ai' then
+  elsif p_reservation = 'ok_credits' then
     update public.profiles
-    set ai_uses_this_month = greatest(0, ai_uses_this_month - 1)
-    where id = p_user_id and ai_uses_month_key = p_month_key;
+    set credits_balance = credits_balance + p_cost
+    where id = p_user_id;
   end if;
 end;
+$$;
+
+-- Ajoute des crédits après un achat confirmé par le webhook Stripe
+-- (checkout.session.completed, paiement one-shot) — incrément atomique,
+-- jamais un "lire le solde puis réécrire" côté application.
+create or replace function public.add_credits(
+  p_user_id uuid,
+  p_amount int
+)
+returns void
+language sql
+security definer
+as $$
+  update public.profiles
+  set credits_balance = credits_balance + p_amount
+  where id = p_user_id;
 $$;

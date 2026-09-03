@@ -66,7 +66,7 @@ export default function ComptePage() {
       });
       const data = await res.json();
       if (!res.ok || !data.url) {
-        setPortalError(data.error ?? "Impossible d'ouvrir la gestion d'abonnement.");
+        setPortalError(data.error ?? "Impossible d'ouvrir l'historique de paiement.");
         return;
       }
       window.location.assign(data.url);
@@ -92,10 +92,6 @@ export default function ComptePage() {
     );
   }
 
-  const planLabel = profile
-    ? profile.plan.charAt(0).toUpperCase() + profile.plan.slice(1)
-    : null;
-
   return (
     <div className="mx-auto w-full max-w-2xl px-6 py-16">
       <h1 className="text-3xl font-extrabold">Mon compte</h1>
@@ -108,15 +104,13 @@ export default function ComptePage() {
             <dd className="text-zinc-200">{session?.user.email}</dd>
           </div>
           <div className="flex justify-between">
-            <dt className="text-zinc-500">Plan</dt>
-            <dd className="text-zinc-200">
-              {planLabel && planLabel !== "Free" ? planLabel : "Aucun abonnement"}
-            </dd>
+            <dt className="text-zinc-500">Crédits</dt>
+            <dd className="text-zinc-200">{profile?.credits_balance ?? "..."}</dd>
           </div>
         </dl>
         <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
           <Link href="/pricing" className="text-yellow-400 hover:underline">
-            Voir les plans →
+            Acheter des crédits →
           </Link>
           <Link href="/historique" className="text-yellow-400 hover:underline">
             Mon historique →
@@ -125,14 +119,14 @@ export default function ComptePage() {
             Mon parrainage →
           </Link>
         </div>
-        {profile && profile.plan !== "free" && (
+        {profile?.stripe_customer_id && (
           <div className="mt-4 border-t border-zinc-800 pt-4">
             <button
               onClick={handleManageSubscription}
               disabled={portalLoading}
               className="rounded-full border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-60"
             >
-              {portalLoading ? "..." : "Changer de plan / résilier mon abonnement"}
+              {portalLoading ? "..." : "Voir mon historique de paiement"}
             </button>
             {portalError && <p className="mt-2 text-sm text-red-400">{portalError}</p>}
           </div>

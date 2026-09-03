@@ -3,11 +3,10 @@ import { getStripe } from "@/lib/stripe";
 import { getUserFromAuthHeader, getSupabaseAdmin, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
-// Hands off plan changes, payment method updates and cancellation to
-// Stripe's own hosted portal instead of us reimplementing proration and
-// invoicing — it operates directly on the user's existing subscription,
-// which is also what keeps a plan switch from ever creating a second,
-// separately-billed subscription (see the check in /api/checkout).
+// Hands off payment method updates and invoice/receipt history to Stripe's
+// own hosted portal instead of us reimplementing it — credit purchases are
+// one-shot payments, not a subscription, so there's nothing to change plans
+// on here, just past purchases to review.
 export async function POST(req: NextRequest) {
   if (isRateLimited(`portal:${getClientIp(req)}`, 10, 10 * 60 * 1000)) {
     return NextResponse.json(
@@ -39,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   if (!profile?.stripe_customer_id) {
     return NextResponse.json(
-      { error: "Aucun abonnement actif. Choisis un plan sur /pricing." },
+      { error: "Aucun historique de paiement. Achète des crédits sur /pricing." },
       { status: 404 }
     );
   }

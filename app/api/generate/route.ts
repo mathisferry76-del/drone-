@@ -11,8 +11,7 @@ import {
   FACE_ZONE_BASE_RY,
   EDIT_ZONE_BASE_RX,
   EDIT_ZONE_BASE_RY,
-  PLAN_AI_CAPS,
-  PaidPlan,
+  GENERATION_CREDIT_COST,
 } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, GeminiApiError, describeGeminiError } from "@/lib/gemini";
@@ -59,11 +58,6 @@ function isValidHexColor(value: unknown): value is string {
 function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
   const n = Number(value);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
-}
-
-function currentMonthId(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
 interface FacePreserve {
@@ -976,22 +970,21 @@ export async function POST(req: NextRequest) {
   const admin = getSupabaseAdmin();
   let authUser: { id: string; email: string | null } | null = null;
   let reservation: string | null = null;
-  const monthKey = currentMonthId();
 
-  // Releases an atomically-reserved quota slot if the generation ends up
-  // failing after the reservation was made — otherwise a failed OpenAI call
-  // would still cost the user part of their quota for nothing.
+  // Releases an atomically-reserved credits spend if the generation ends up
+  // failing after the reservation was made — otherwise a failed AI call
+  // would still cost the user their trial or credits for nothing.
   async function releaseReservationIfNeeded() {
     if (!reservation || !admin || !authUser) return;
-    if (reservation !== "ok_trial" && reservation !== "ok_ai") return;
+    if (reservation !== "ok_trial" && reservation !== "ok_credits") return;
     try {
-      await admin.rpc("release_generation_reservation", {
+      await admin.rpc("release_credits_reservation", {
         p_user_id: authUser.id,
         p_reservation: reservation,
-        p_month_key: monthKey,
+        p_cost: GENERATION_CREDIT_COST,
       });
     } catch (err) {
-      console.error("release_generation_reservation error", err);
+      console.error("release_credits_reservation error", err);
     }
   }
 
@@ -1100,55 +1093,36 @@ export async function POST(req: NextRequest) {
       }
 
       // Compte propriétaire du site — accès illimité, sans passer par
-      // Stripe. Ne modifie pas la ligne réelle en base (toujours son vrai
-      // plan) : seul le plafond appliqué à la réservation ci-dessous
-      // change, en forçant le chemin payant Studio.
+      // Stripe. Ne modifie pas la ligne réelle en base : seul le comptage
+      // de la réservation ci-dessous change, en bypassant complètement le
+      // débit de crédits.
       const isOwnerAccount = authUser.email?.toLowerCase() === "mathis.ferry76@gmail.com";
 
-      if (!isOwnerAccount && profile.plan === "free" && !willCallOpenAi) {
-        return NextResponse.json(
-          {
-            error: "Un abonnement est nécessaire pour créer une miniature. Choisis un plan sur /pricing.",
-          },
-          { status: 403 }
-        );
-      } else {
-        const cap = isOwnerAccount
-          ? 999999999 // effectively unlimited, but still fits Postgres' `int` (p_ai_cap)
-          : profile.plan === "free"
-            ? 0
-            : PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
-
-        const { data: reserved, error: reserveError } = await admin.rpc("reserve_generation", {
+      // Les styles filtres (sans IA) sont gratuits et illimités pour tout
+      // compte connecté — coût serveur négligeable, et ça sert de porte
+      // d'entrée vers l'achat de crédits pour l'IA générative, qui elle
+      // coûte réellement à chaque appel et débite donc le solde prépayé.
+      if (willCallOpenAi) {
+        const { data: reserved, error: reserveError } = await admin.rpc("reserve_credits", {
           p_user_id: authUser.id,
-          p_ai_enhance: willCallOpenAi,
-          p_month_key: monthKey,
-          p_ai_cap: cap,
+          p_cost: GENERATION_CREDIT_COST,
           p_force_paid: isOwnerAccount,
         });
 
         if (reserveError) {
-          console.error("reserve_generation error", reserveError);
+          console.error("reserve_credits error", reserveError);
           return NextResponse.json(
-            { error: "Erreur pendant la vérification du quota." },
+            { error: "Erreur pendant la vérification des crédits." },
             { status: 500 }
           );
         }
 
         reservation = reserved as string;
 
-        if (reservation === "trial_used") {
+        if (reservation === "insufficient_credits") {
           return NextResponse.json(
             {
-              error: "Ton essai gratuit IA a déjà été utilisé. Choisis un plan sur /pricing pour continuer.",
-            },
-            { status: 403 }
-          );
-        }
-        if (reservation === "quota_exceeded") {
-          return NextResponse.json(
-            {
-              error: `Quota IA du mois atteint (${cap}/mois sur ton plan). Passe sur un plan supérieur pour continuer.`,
+              error: `Crédits insuffisants (il faut ${GENERATION_CREDIT_COST} crédits). Achète un pack sur /pricing pour continuer.`,
             },
             { status: 403 }
           );

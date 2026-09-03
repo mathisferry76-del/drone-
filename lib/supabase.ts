@@ -40,15 +40,11 @@ export function getSupabaseAdmin(): SupabaseClient | null {
 export interface Profile {
   id: string;
   email: string | null;
-  plan: "free" | "starter" | "creator" | "pro" | "studio";
   stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
   free_generations_used: number;
-  ai_uses_this_month: number;
-  ai_uses_month_key: string | null;
+  credits_balance: number;
   referral_code: string | null;
   referred_by: string | null;
-  bonus_generations: number;
 }
 
 /** Resolves the authenticated user (if any) from a request's bearer token. */

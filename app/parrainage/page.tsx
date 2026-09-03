@@ -6,7 +6,7 @@ import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
 interface ReferralData {
   code: string | null;
-  bonusGenerations: number;
+  creditsBalance: number;
   referredCount: number;
 }
 
@@ -69,10 +69,10 @@ export default function ParrainagePage() {
       <h1 className="text-3xl font-extrabold">Parraine tes amis créateurs</h1>
       <p className="mt-2 text-zinc-400">
         Chaque ami qui s&apos;inscrit avec ton lien reçoit{" "}
-        <span className="font-semibold text-white">2 miniatures gratuites bonus</span>,
-        et toi tu reçois{" "}
-        <span className="font-semibold text-white">3 miniatures gratuites bonus</span> —
-        cumulables sans limite.
+        <span className="font-semibold text-white">400 crédits offerts</span> (2
+        générations), et toi tu reçois{" "}
+        <span className="font-semibold text-white">600 crédits offerts</span> (3
+        générations) — cumulables sans limite.
       </p>
 
       {error && (
@@ -109,8 +109,8 @@ export default function ParrainagePage() {
             <div className="mt-1 text-sm text-zinc-400">ami(s) inscrit(s)</div>
           </div>
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 text-center">
-            <div className="text-3xl font-extrabold text-yellow-400">{data.bonusGenerations}</div>
-            <div className="mt-1 text-sm text-zinc-400">miniature(s) bonus gagnée(s)</div>
+            <div className="text-3xl font-extrabold text-yellow-400">{data.creditsBalance}</div>
+            <div className="mt-1 text-sm text-zinc-400">crédits disponibles</div>
           </div>
         </div>
       )}

@@ -1,6 +1,6 @@
 export const metadata = {
   title: "Conditions Générales de Vente",
-  description: "Conditions générales de vente des abonnements MIN IA.",
+  description: "Conditions générales de vente des packs de crédits MIN IA.",
   alternates: { canonical: "/cgv" },
 };
 
@@ -13,10 +13,11 @@ export default function CgvPage() {
       <section className="mt-8 space-y-3">
         <h2 className="text-lg font-bold text-white">1. Objet</h2>
         <p>
-          Les présentes Conditions Générales de Vente (CGV) régissent la
-          souscription aux abonnements payants du service MIN IA, un
-          générateur de miniatures pour créateurs de contenu (YouTube, TikTok,
-          Reels), édité par Mathis Ferry (voir{" "}
+          Les présentes Conditions Générales de Vente (CGV) régissent l&apos;achat
+          de packs de crédits sur le service MIN IA, un générateur d&apos;images
+          par intelligence artificielle (retouche photo et miniatures pour
+          créateurs de contenu YouTube, TikTok, Reels), édité par Mathis Ferry
+          (voir{" "}
           <a href="/mentions-legales" className="text-yellow-400 hover:underline">
             mentions légales
           </a>
@@ -27,29 +28,34 @@ export default function CgvPage() {
       <section className="mt-8 space-y-3">
         <h2 className="text-lg font-bold text-white">2. Description du service</h2>
         <p>
-          MIN IA permet de générer des miniatures à partir d&apos;une photo
-          fournie par l&apos;utilisateur, via des styles de filtres et une
-          amélioration par intelligence artificielle générative. L&apos;accès
-          au service nécessite un compte et, au-delà d&apos;un essai gratuit
-          unique, un abonnement payant actif.
+          MIN IA permet de transformer une photo fournie par l&apos;utilisateur
+          via des styles de filtres (gratuits et illimités pour tout compte
+          connecté) et une amélioration par intelligence artificielle
+          générative. Chaque génération par IA consomme des crédits prépayés
+          associés au compte. Un essai gratuit unique par compte donne accès à
+          une première génération IA sans achat de crédits.
         </p>
       </section>
 
       <section className="mt-8 space-y-3">
-        <h2 className="text-lg font-bold text-white">3. Abonnements et prix</h2>
-        <p>Quatre formules d&apos;abonnement mensuel sont proposées, sans engagement de durée :</p>
+        <h2 className="text-lg font-bold text-white">3. Packs de crédits et prix</h2>
+        <p>
+          Les crédits s&apos;achètent par pack, en paiement unique (pas
+          d&apos;abonnement ni de prélèvement récurrent) :
+        </p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>Starter — 9,99 € / mois</li>
-          <li>Creator — 19,99 € / mois</li>
-          <li>Pro — 34,99 € / mois</li>
-          <li>Studio — 59,99 € / mois</li>
+          <li>200 crédits — 2 €</li>
+          <li>1000 crédits — 10 €</li>
+          <li>3000 crédits — 30 €</li>
         </ul>
         <p>
           Les prix sont indiqués en euros, toutes taxes comprises. Chaque
-          formule donne accès aux miniatures illimitées via les styles filtres
-          et à un quota mensuel de générations par intelligence artificielle,
-          détaillé sur la page{" "}
+          génération par intelligence artificielle consomme un nombre fixe de
+          crédits, précisé sur la page{" "}
           <a href="/pricing" className="text-yellow-400 hover:underline">tarifs</a>.
+          Les crédits achetés restent acquis au compte sans date
+          d&apos;expiration et ne sont ni transférables à un autre compte, ni
+          convertibles en argent.
         </p>
       </section>
 
@@ -57,26 +63,24 @@ export default function CgvPage() {
         <h2 className="text-lg font-bold text-white">4. Paiement</h2>
         <p>
           Le paiement s&apos;effectue en ligne par carte bancaire (ou autre
-          moyen proposé), via notre prestataire de paiement sécurisé Stripe.
-          MIN IA ne stocke à aucun moment les coordonnées bancaires du client
-          — celles-ci sont traitées exclusivement par Stripe.
-        </p>
-        <p>
-          L&apos;abonnement est prélevé mensuellement, à date anniversaire de
-          la souscription, jusqu&apos;à résiliation.
+          moyen proposé), via notre prestataire de paiement sécurisé Stripe,
+          en un règlement unique au moment de l&apos;achat du pack. MIN IA ne
+          stocke à aucun moment les coordonnées bancaires du client — celles-ci
+          sont traitées exclusivement par Stripe.
         </p>
       </section>
 
       <section className="mt-8 space-y-3">
-        <h2 className="text-lg font-bold text-white">5. Résiliation</h2>
+        <h2 className="text-lg font-bold text-white">5. Remboursement</h2>
         <p>
-          Le client peut résilier son abonnement à tout moment, sans frais ni
-          justification, depuis son espace client Stripe ou en contactant{" "}
+          Un pack de crédits acheté n&apos;est pas remboursable dès lors
+          qu&apos;au moins une génération a consommé des crédits de ce pack,
+          conformément à la renonciation au droit de rétractation décrite à
+          l&apos;article 6. En cas d&apos;achat par erreur non encore utilisé,
+          contacte{" "}
           <a href="mailto:contact@min-ia.fr" className="text-yellow-400 hover:underline">
             contact@min-ia.fr
-          </a>. La résiliation prend effet à la fin de la période déjà payée
-          ; aucun remboursement au prorata n&apos;est effectué pour la période
-          en cours, sauf disposition légale contraire.
+          </a>.
         </p>
       </section>
 
@@ -87,8 +91,8 @@ export default function CgvPage() {
           droit de rétractation ne s&apos;applique pas aux contenus numériques
           fournis sur un support immatériel dont l&apos;exécution a commencé
           avec l&apos;accord du consommateur, qui a expressément renoncé à son
-          droit de rétractation. En souscrivant à un abonnement et en
-          accédant immédiatement au service, le client reconnaît et accepte
+          droit de rétractation. En achetant un pack de crédits et en
+          l&apos;utilisant pour une génération, le client reconnaît et accepte
           cette renonciation.
         </p>
       </section>

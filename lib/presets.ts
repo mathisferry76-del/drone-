@@ -228,114 +228,45 @@ export function getPreset(id: string): Preset {
   return PRESETS.find((p) => p.id === id) ?? PRESETS[0];
 }
 
-// Pas d'offre gratuite : "free" désigne uniquement un compte pas (ou plus)
-// abonné, qui n'a accès à aucune génération (ni filtre, ni IA).
-export type PaidPlan = "starter" | "creator" | "pro" | "studio";
-export type Plan = "free" | PaidPlan;
+// Modèle prépayé : chaque génération IA (miniature ou "Impressionne tes
+// potes") coûte un nombre fixe de crédits, débités du solde du compte. Une
+// génération IA coûte environ 0,25€ à 0,30€ à l'API sous-jacente — 200
+// crédits (~2€ au tarif de base) laisse une marge confortable une fois les
+// frais de paiement Stripe déduits. Les styles filtres (sans IA) restent
+// gratuits et illimités pour tout compte connecté : leur coût serveur est
+// négligeable, et ils servent de porte d'entrée vers l'achat de crédits.
+export const GENERATION_CREDIT_COST = 200;
 
-export const PAID_PLAN_IDS: PaidPlan[] = ["starter", "creator", "pro", "studio"];
-
-// Chaque génération IA (gpt-image-1, 1536x1024, qualité "high") coûte
-// environ 0,25€ à 0,30€ à l'API OpenAI (davantage si l'utilisateur fait
-// aussi une retouche ciblée, qui déclenche un second appel). Les caps et
-// prix ci-dessous sont calés sur ce coût réel avec une marge confortable
-// à chaque palier, la marge par génération augmentant avec le prix pour
-// récompenser les paliers supérieurs.
-export const PLAN_AI_CAPS: Record<PaidPlan, number> = {
-  starter: 8,
-  creator: 20,
-  pro: 50,
-  studio: 120,
-};
-
-export interface PricingTier {
-  id: Plan;
-  name: string;
+export interface CreditPack {
+  id: string;
+  credits: number;
   price: string;
-  period: string;
-  tagline: string;
-  description: string;
-  features: string[];
-  notIncluded: string[];
-  cta: string;
   priceId: string | null;
+  tagline: string;
   highlighted?: boolean;
 }
 
-export const PRICING_TIERS: PricingTier[] = [
+export const CREDIT_PACKS: CreditPack[] = [
   {
-    id: "starter",
-    name: "Starter",
-    price: "9,99€",
-    period: "/mois",
-    tagline: "Pour démarrer sérieusement",
-    description:
-      "Miniatures illimitées avec les styles filtres, sans filigrane, plus un premier quota d'IA générative chaque mois.",
-    features: [
-      "Miniatures illimitées (styles filtres)",
-      "Sans filigrane",
-      "10 styles filtres + nouveaux styles à venir",
-      `IA générative : ${PLAN_AI_CAPS.starter} générations par mois`,
-      "Export HD 1280x720",
-    ],
-    notIncluded: [`IA générative limitée à ${PLAN_AI_CAPS.starter}/mois`],
-    cta: "Choisir Starter",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER ?? null,
+    id: "pack-200",
+    credits: 200,
+    price: "2€",
+    tagline: "1 génération — pour essayer",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_200 ?? null,
   },
   {
-    id: "creator",
-    name: "Creator",
-    price: "19,99€",
-    period: "/mois",
-    tagline: "Pour publier régulièrement",
-    description:
-      "Le plan pour un créateur solo actif qui veut utiliser l'IA générative sur la majorité de ses vidéos.",
-    features: [
-      "Miniatures illimitées (styles filtres)",
-      "Sans filigrane",
-      "10 styles filtres + nouveaux styles à venir",
-      `IA générative : ${PLAN_AI_CAPS.creator} générations par mois`,
-      "Export HD 1280x720",
-    ],
-    notIncluded: [`IA générative limitée à ${PLAN_AI_CAPS.creator}/mois`],
-    cta: "Choisir Creator",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREATOR ?? null,
+    id: "pack-1000",
+    credits: 1000,
+    price: "10€",
+    tagline: "5 générations",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_1000 ?? null,
     highlighted: true,
   },
   {
-    id: "pro",
-    name: "Pro",
-    price: "34,99€",
-    period: "/mois",
-    tagline: "Pour un rendu qui se démarque vraiment",
-    description:
-      "Un gros volume d'IA générative pour retravailler l'image (lumière, ambiance, décor) sur quasiment toutes tes vidéos.",
-    features: [
-      "Tout Creator",
-      `IA générative : ${PLAN_AI_CAPS.pro} générations par mois`,
-      "Jusqu'à 3 chaînes",
-      "Support prioritaire",
-    ],
-    notIncluded: [`IA générative limitée à ${PLAN_AI_CAPS.pro}/mois`],
-    cta: "Choisir Pro",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO ?? null,
-  },
-  {
-    id: "studio",
-    name: "Studio",
-    price: "59,99€",
-    period: "/mois",
-    tagline: "Pour les chaînes très actives ou multi-chaînes",
-    description:
-      "Le plus gros quota d'IA générative, pour une chaîne à fort rythme de publication ou plusieurs chaînes gérées ensemble.",
-    features: [
-      "Tout Pro",
-      `IA générative : ${PLAN_AI_CAPS.studio} générations par mois`,
-      "Chaînes illimitées",
-      "Support prioritaire",
-    ],
-    notIncluded: [],
-    cta: "Choisir Studio",
-    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_STUDIO ?? null,
+    id: "pack-3000",
+    credits: 3000,
+    price: "30€",
+    tagline: "15 générations",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_3000 ?? null,
   },
 ];

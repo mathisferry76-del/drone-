@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, getUserFromAuthHeader } from "@/lib/supabase";
 
-// Returns the current user's referral code, accumulated bonus generations,
-// and how many people signed up through their link — via the admin client
-// so we can safely count referred rows without exposing their emails/data
-// to the referrer through RLS.
+// Returns the current user's referral code, current credits balance (which
+// includes any referral bonus credits already granted), and how many people
+// signed up through their link — via the admin client so we can safely
+// count referred rows without exposing their emails/data to the referrer
+// through RLS.
 export async function GET(req: NextRequest) {
   const admin = getSupabaseAdmin();
   if (!admin) {
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   const { data: profile, error } = await admin
     .from("profiles")
-    .select("referral_code, bonus_generations")
+    .select("referral_code, credits_balance")
     .eq("id", user.id)
     .single();
 
@@ -36,7 +37,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     code: profile.referral_code,
-    bonusGenerations: profile.bonus_generations,
+    creditsBalance: profile.credits_balance,
     referredCount: count ?? 0,
   });
 }

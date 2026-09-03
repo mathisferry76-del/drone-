@@ -2,22 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase";
-import type { PaidPlan } from "@/lib/presets";
 
 export const runtime = "nodejs";
 
-function planFromPriceId(priceId: string | null | undefined): PaidPlan | null {
-  if (!priceId) return null;
-  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_STARTER) return "starter";
-  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_CREATOR) return "creator";
-  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_PRO) return "pro";
-  if (priceId === process.env.NEXT_PUBLIC_STRIPE_PRICE_STUDIO) return "studio";
-  return null;
-}
-
-// Stripe subscription events keep the profiles table in sync with reality
-// server-side — this is what makes the plan/quota checks in /api/generate
-// trustworthy instead of a client-reported flag anyone could fake.
+// Stripe payment events keep the profiles table in sync with reality
+// server-side — this is what makes the credits balance checks in
+// /api/generate and /api/impress trustworthy instead of a client-reported
+// value anyone could fake.
 export async function POST(req: NextRequest) {
   const stripe = getStripe();
   const admin = getSupabaseAdmin();
@@ -51,67 +42,31 @@ export async function POST(req: NextRequest) {
         const userId = session.client_reference_id;
         const customerId =
           typeof session.customer === "string" ? session.customer : session.customer?.id;
-        const subscriptionId =
-          typeof session.subscription === "string"
-            ? session.subscription
-            : session.subscription?.id;
+        // Read the credit amount from the metadata set at checkout creation
+        // (see /api/checkout) rather than re-deriving it from the price —
+        // the price was already validated against CREDIT_PACKS server-side
+        // before the session was ever created.
+        const credits = Number(session.metadata?.credits);
 
-        if (!userId || !subscriptionId) {
-          console.error("stripe webhook: missing userId or subscriptionId", {
+        if (!userId || !Number.isFinite(credits) || credits <= 0) {
+          console.error("stripe webhook: missing userId or credits", {
             userId,
-            subscriptionId,
+            credits: session.metadata?.credits,
           });
           break;
         }
 
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const priceId = subscription.items.data[0]?.price.id;
-        const plan = planFromPriceId(priceId);
-        if (!plan) {
-          console.error("stripe webhook: unrecognized price id", { priceId });
-          break;
+        if (customerId) {
+          await admin.from("profiles").update({ stripe_customer_id: customerId }).eq("id", userId);
         }
 
-        const { error: updateError, data: updatedRows } = await admin
-          .from("profiles")
-          .update({
-            plan,
-            stripe_customer_id: customerId ?? null,
-            stripe_subscription_id: subscriptionId,
-          })
-          .eq("id", userId)
-          .select("id");
-        if (updateError) {
-          console.error("stripe webhook: profile update failed", updateError);
-        } else if (!updatedRows || updatedRows.length === 0) {
-          console.error("stripe webhook: no profile matched userId", { userId });
+        const { error: creditError } = await admin.rpc("add_credits", {
+          p_user_id: userId,
+          p_amount: credits,
+        });
+        if (creditError) {
+          console.error("stripe webhook: add_credits failed", creditError);
         }
-        break;
-      }
-
-      case "customer.subscription.updated": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const plan = planFromPriceId(subscription.items.data[0]?.price.id);
-        const customerId =
-          typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-        if (!plan) break;
-
-        await admin
-          .from("profiles")
-          .update({ plan, stripe_subscription_id: subscription.id })
-          .eq("stripe_customer_id", customerId);
-        break;
-      }
-
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const customerId =
-          typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-
-        await admin
-          .from("profiles")
-          .update({ plan: "free", stripe_subscription_id: null })
-          .eq("stripe_customer_id", customerId);
         break;
       }
 

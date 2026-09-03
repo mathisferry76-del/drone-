@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import OpenAI, { toFile } from "openai";
 import { randomUUID } from "crypto";
-import { PLAN_AI_CAPS, PaidPlan } from "@/lib/presets";
+import { GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, GeminiApiError, describeGeminiError } from "@/lib/gemini";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
@@ -13,11 +13,6 @@ export const runtime = "nodejs";
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_DESCRIPTION = 400;
-
-function currentMonthId(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-}
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
 // thumbnail presets: those push dramatic, stylized regeneration. Here the
@@ -91,20 +86,19 @@ export async function POST(req: NextRequest) {
   }
 
   const isOwnerAccount = authUser.email?.toLowerCase() === "mathis.ferry76@gmail.com";
-  const monthKey = currentMonthId();
   let reservation: string | null = null;
 
   async function releaseReservationIfNeeded() {
     if (!reservation || !admin) return;
-    if (reservation !== "ok_trial" && reservation !== "ok_ai") return;
+    if (reservation !== "ok_trial" && reservation !== "ok_credits") return;
     try {
-      await admin.rpc("release_generation_reservation", {
+      await admin.rpc("release_credits_reservation", {
         p_user_id: authUser!.id,
         p_reservation: reservation,
-        p_month_key: monthKey,
+        p_cost: GENERATION_CREDIT_COST,
       });
     } catch (err) {
-      console.error("release_generation_reservation error", err);
+      console.error("release_credits_reservation error", err);
     }
   }
 
@@ -126,47 +120,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Shares the same monthly AI quota as the thumbnail tool rather than a
-    // separate pool — one "AI generations per month" budget usable on
-    // either feature, simpler than a second quota system to track and bill.
-    // Free-plan users get exactly one trial use here too (mirroring
-    // /api/generate), watermarked below — this is the flagship feature's
-    // first taste, so it can't be paid-only from the very first try.
-    const cap = isOwnerAccount
-      ? 999999999
-      : profile.plan === "free"
-        ? 0
-        : PLAN_AI_CAPS[profile.plan as PaidPlan] + profile.bonus_generations;
-
-    const { data: reserved, error: reserveError } = await admin.rpc("reserve_generation", {
+    // Shares the same credits balance as the thumbnail tool rather than a
+    // separate pool — one prepaid budget usable on either feature. Free
+    // accounts get exactly one trial use here too (mirroring /api/generate),
+    // watermarked below — this is the flagship feature's first taste, so it
+    // can't be paid-only from the very first try.
+    const { data: reserved, error: reserveError } = await admin.rpc("reserve_credits", {
       p_user_id: authUser.id,
-      p_ai_enhance: true,
-      p_month_key: monthKey,
-      p_ai_cap: cap,
+      p_cost: GENERATION_CREDIT_COST,
       p_force_paid: isOwnerAccount,
     });
 
     if (reserveError) {
-      console.error("reserve_generation error", reserveError);
+      console.error("reserve_credits error", reserveError);
       return NextResponse.json(
-        { error: "Erreur pendant la vérification du quota." },
+        { error: "Erreur pendant la vérification des crédits." },
         { status: 500 }
       );
     }
 
     reservation = reserved as string;
-    if (reservation === "trial_used") {
+    if (reservation === "insufficient_credits") {
       return NextResponse.json(
         {
-          error: "Ton essai gratuit a déjà été utilisé. Choisis un plan sur /pricing pour continuer.",
-        },
-        { status: 403 }
-      );
-    }
-    if (reservation === "quota_exceeded") {
-      return NextResponse.json(
-        {
-          error: `Quota IA du mois atteint (${cap}/mois sur ton plan). Passe sur un plan supérieur pour continuer.`,
+          error: `Crédits insuffisants (il faut ${GENERATION_CREDIT_COST} crédits). Achète un pack sur /pricing pour continuer.`,
         },
         { status: 403 }
       );
