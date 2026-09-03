@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { buildVideoThumbnailInstruction } from "./youtube";
 
 let client: OpenAI | null = null;
 
@@ -23,21 +24,7 @@ export async function generateThumbnailPromptFromVideoOpenAI(
     throw new Error("Aucun fournisseur IA configuré (GEMINI_API_KEY ou OPENAI_API_KEY).");
   }
 
-  const instruction = `Tu aides à écrire une description pour générer une miniature YouTube par IA (photo de la personne + décor généré). Voici les infos d'une vraie vidéo YouTube :
-
-Titre : ${title}
-${description ? `Description : ${description}` : ""}
-
-Style de miniature choisi : ${presetName}
-
-Écris UNE SEULE description de scène en français, prête à coller dans un champ de génération IA, qui correspond au sujet réel de cette vidéo. Suis strictement ce format et ce niveau de détail :
-- Précise le cadrage (buste, position du sujet décalée pour laisser de l'espace pour un titre, angle de caméra)
-- Garde l'identité du visage reconnaissable mais laisse l'expression/pose/tenue s'adapter à la scène
-- Décris un décor concret avec des objets précis (pas vague), cohérent avec le sujet de la vidéo
-- Précise une source de lumière identifiable et l'ambiance générale
-- Ne mentionne aucun texte à afficher dans l'image (le titre est ajouté séparément)
-
-Réponds uniquement avec le texte de la description, sans introduction ni guillemets.`;
+  const instruction = buildVideoThumbnailInstruction(title, description, presetName);
 
   const result = await openai.chat.completions.create({
     model: "gpt-4o-mini",

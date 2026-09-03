@@ -1,3 +1,5 @@
+import { buildVideoThumbnailInstruction } from "./youtube";
+
 // Gemini's image model does real "conversational" editing — it takes the
 // reference photo(s) plus a text instruction and returns a new image, with
 // no separate alpha-mask parameter the way OpenAI's images.edit has. Its
@@ -75,12 +77,15 @@ export async function editImageWithGemini(
   throw new Error("Gemini n'a renvoyé aucune image (voir les logs pour la réponse texte).");
 }
 
-// A stable alias rather than a dated version — text model version numbers
-// on this API get retired for new API keys surprisingly fast (verified:
-// "gemini-2.5-flash" 404'd as "no longer available to new users" on a key
-// created just days earlier), so pointing at whatever's current avoids
-// this breaking again the same way.
-const GEMINI_TEXT_MODEL = "gemini-flash-latest";
+// Text model version numbers on this API get retired for new API keys
+// surprisingly fast (verified: "gemini-2.5-flash" and
+// "gemini-2.5-flash-lite" both 404'd as "no longer available to new
+// users" on a key created just days earlier). The "-latest" alias avoids
+// that specific failure mode but tested consistently overloaded (503) at
+// the time of writing, while this concrete version answered reliably —
+// pinned to a real currently-working model over a currently-broken
+// "stable" alias. Worth re-checking if this starts 404ing later.
+const GEMINI_TEXT_MODEL = "gemini-3.5-flash";
 
 // Turns a YouTube video's title (and description, when available — see
 // lib/youtube.ts) into a ready-to-use AI thumbnail description prompt,
@@ -97,21 +102,7 @@ export async function generateThumbnailPromptFromVideo(
     throw new Error("Gemini n'est pas configuré (GEMINI_API_KEY manquante).");
   }
 
-  const instruction = `Tu aides à écrire une description pour générer une miniature YouTube par IA (photo de la personne + décor généré). Voici les infos d'une vraie vidéo YouTube :
-
-Titre : ${title}
-${description ? `Description : ${description}` : ""}
-
-Style de miniature choisi : ${presetName}
-
-Écris UNE SEULE description de scène en français, prête à coller dans un champ de génération IA, qui correspond au sujet réel de cette vidéo. Suis strictement ce format et ce niveau de détail :
-- Précise le cadrage (buste, position du sujet décalée pour laisser de l'espace pour un titre, angle de caméra)
-- Garde l'identité du visage reconnaissable mais laisse l'expression/pose/tenue s'adapter à la scène
-- Décris un décor concret avec des objets précis (pas vague), cohérent avec le sujet de la vidéo
-- Précise une source de lumière identifiable et l'ambiance générale
-- Ne mentionne aucun texte à afficher dans l'image (le titre est ajouté séparément)
-
-Réponds uniquement avec le texte de la description, sans introduction ni guillemets.`;
+  const instruction = buildVideoThumbnailInstruction(title, description, presetName);
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_TEXT_MODEL}:generateContent?key=${key}`,
