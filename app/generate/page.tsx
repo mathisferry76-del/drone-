@@ -12,6 +12,7 @@ import {
   EDIT_ZONE_BASE_RY,
   PresetId,
   getPreset,
+  PRICING_TIERS,
 } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
@@ -231,6 +232,8 @@ export default function GeneratePage() {
   const [naturalImgSize, setNaturalImgSize] = useState<{ w: number; h: number } | null>(null);
   const [aiBaseCache, setAiBaseCache] = useState<{ key: string; dataUrl: string } | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [upgradeLoadingTier, setUpgradeLoadingTier] = useState<string | null>(null);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const referenceInputRef = useRef<HTMLInputElement | null>(null);
@@ -517,6 +520,58 @@ export default function GeneratePage() {
   );
   const willDoTargetedEdit = Boolean(willUseAi && editZone && editInstruction.trim());
 
+  // Lets the user upgrade right from the moment they hit the free-trial
+  // wall — the highest-intent point in the whole funnel, right after seeing
+  // a result — instead of sending them off to /pricing and hoping they come
+  // back. Mirrors app/pricing/page.tsx's handleCheckout.
+  async function handleUpgrade(tierId: string, priceId: string | null) {
+    setUpgradeError(null);
+    if (!priceId) {
+      setUpgradeError(
+        "Ce plan n'est pas encore configuré (variable Stripe manquante)."
+      );
+      return;
+    }
+    if (!session) return;
+
+    setUpgradeLoadingTier(tierId);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ priceId, tier: tierId }),
+      });
+      const data = await res.json();
+
+      if (res.status === 409 && data.error === "changer_de_plan") {
+        const portalRes = await fetch("/api/portal", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        const portalData = await portalRes.json();
+        if (!portalRes.ok || !portalData.url) {
+          setUpgradeError(portalData.error ?? "Impossible d'ouvrir la gestion d'abonnement.");
+          return;
+        }
+        window.location.assign(portalData.url);
+        return;
+      }
+
+      if (!res.ok || !data.url) {
+        setUpgradeError(data.error ?? "Erreur inconnue.");
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setUpgradeError("Impossible de contacter le serveur de paiement.");
+    } finally {
+      setUpgradeLoadingTier(null);
+    }
+  }
+
   async function handleAnalyzeVideo() {
     if (!session || !videoUrl.trim()) return;
     setVideoAnalysisError(null);
@@ -646,13 +701,14 @@ export default function GeneratePage() {
       <div className="mx-auto flex min-h-[50vh] w-full max-w-xl flex-col items-center justify-center px-6 py-20 text-center">
         <h1 className="text-2xl font-extrabold">Créer une miniature</h1>
         <p className="mt-3 text-zinc-400">
-          Connecte-toi puis choisis un plan pour créer ta première miniature.
+          Connecte-toi pour créer ta première miniature — ton premier essai
+          avec l&apos;IA générative est gratuit, aucune carte requise.
         </p>
         <Link
           href="/login"
           className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
         >
-          Se connecter
+          Se connecter et essayer gratuitement
         </Link>
       </div>
     );
@@ -660,18 +716,65 @@ export default function GeneratePage() {
 
   if (loggedIn && profile && !isPaid && !hasFreeTrialAvailable) {
     return (
-      <div className="mx-auto flex min-h-[50vh] w-full max-w-xl flex-col items-center justify-center px-6 py-20 text-center">
-        <h1 className="text-2xl font-extrabold">Créer une miniature</h1>
-        <p className="mt-3 text-zinc-400">
-          Un abonnement est nécessaire pour créer des miniatures — choisis le
-          plan qui te convient.
+      <div className="mx-auto w-full max-w-6xl px-6 py-16">
+        <div className="mx-auto max-w-xl text-center">
+          <h1 className="text-2xl font-extrabold">Ton essai gratuit est terminé</h1>
+          <p className="mt-3 text-zinc-400">
+            Tu as vu ce que l&apos;IA générative peut faire sur ta propre
+            photo — choisis un plan pour continuer, sans filigrane et avec un
+            vrai quota mensuel.
+          </p>
+        </div>
+
+        {upgradeError && (
+          <p className="mx-auto mt-6 max-w-lg rounded-lg border border-red-800 bg-red-950/50 p-3 text-center text-sm text-red-300">
+            {upgradeError}
+          </p>
+        )}
+
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {PRICING_TIERS.map((tier) => (
+            <div
+              key={tier.id}
+              className={`flex flex-col rounded-2xl border p-6 ${
+                tier.highlighted
+                  ? "border-yellow-400 bg-yellow-400/5"
+                  : "border-zinc-800 bg-zinc-900/40"
+              }`}
+            >
+              {tier.highlighted && (
+                <span className="mb-3 w-fit rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
+                  Le plus choisi
+                </span>
+              )}
+              <h2 className="text-lg font-bold">{tier.name}</h2>
+              <p className="mt-1 text-sm text-zinc-400">{tier.tagline}</p>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-3xl font-extrabold">{tier.price}</span>
+                <span className="text-zinc-400">{tier.period}</span>
+              </div>
+              <div className="flex-1" />
+              <button
+                onClick={() => handleUpgrade(tier.id, tier.priceId)}
+                disabled={upgradeLoadingTier === tier.id}
+                className={`mt-6 rounded-full px-6 py-3 text-center font-bold transition disabled:opacity-60 ${
+                  tier.highlighted
+                    ? "bg-yellow-400 text-black hover:bg-yellow-300"
+                    : "border border-zinc-600 text-white hover:border-zinc-400"
+                }`}
+              >
+                {upgradeLoadingTier === tier.id ? "Redirection..." : tier.cta}
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-8 text-center text-xs text-zinc-500">
+          <Link href="/pricing" className="underline hover:text-zinc-300">
+            Voir le détail complet des plans
+          </Link>{" "}
+          · Résiliable en 1 clic · Paiement sécurisé par Stripe
         </p>
-        <Link
-          href="/pricing"
-          className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
-        >
-          Voir les plans
-        </Link>
       </div>
     );
   }
@@ -688,6 +791,21 @@ export default function GeneratePage() {
         {!isPaid && hasFreeTrialAvailable &&
           "🎁 Ton essai gratuit avec IA générative — avec filigrane, et le téléchargement HD nécessite un abonnement."}
       </p>
+
+      {!isPaid && hasFreeTrialAvailable && !resultUrl && (
+        <div className="mt-4 rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-4 text-sm">
+          <p className="font-semibold text-yellow-300">Première fois ici ? Voici comment ça marche :</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-4 text-zinc-400">
+            <li>Ajoute une photo de toi (étape 1 ci-dessous)</li>
+            <li>Choisis le format de sortie et un style (étapes 2 et 3)</li>
+            <li>
+              Plus bas, active <span className="text-zinc-200">✨ Amélioration IA générative</span>{" "}
+              et décris la scène que tu veux
+            </li>
+            <li>Clique sur Générer — ton premier essai IA est offert</li>
+          </ol>
+        </div>
+      )}
 
       <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-2">
         <div className="space-y-6">
