@@ -1,12 +1,21 @@
 import Image from "next/image";
 import Link from "next/link";
 import { PRESETS } from "@/lib/presets";
+import { FORMATS } from "@/lib/formats";
 import FadeInSection from "@/components/motion/FadeInSection";
 import HeroTitle from "@/components/motion/HeroTitle";
 import FloatingShowcase from "@/components/motion/FloatingShowcase";
 import Marquee from "@/components/motion/Marquee";
 import TiltCard from "@/components/motion/TiltCard";
 import CountUp from "@/components/motion/CountUp";
+import GradientOrb from "@/components/motion/GradientOrb";
+import FaqAccordion from "@/components/FaqAccordion";
+
+const RESULT_ACCENTS = [
+  { border: "border-yellow-400/30 hover:border-yellow-400/60", tag: "bg-yellow-400 text-black" },
+  { border: "border-fuchsia-400/30 hover:border-fuchsia-400/60", tag: "bg-fuchsia-400 text-black" },
+  { border: "border-cyan-400/30 hover:border-cyan-400/60", tag: "bg-cyan-400 text-black" },
+];
 
 const RESULTS = [
   { id: "bold-impact", niche: "Argent / réussite", span: "sm:row-span-2" },
@@ -70,6 +79,17 @@ export default function Home() {
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 -top-20 h-[28rem] bg-[radial-gradient(ellipse_at_top,theme(colors.orange.500/12%),transparent_60%)] [animation:drift-glow-alt_18s_ease-in-out_infinite]"
+        />
+        <GradientOrb
+          color="rgba(217,70,239,0.14)"
+          className="right-0 top-40 -z-10"
+          size="h-[22rem] w-[22rem]"
+          variant="drift-glow-alt"
+        />
+        <GradientOrb
+          color="rgba(34,211,238,0.10)"
+          className="left-0 top-64 -z-10"
+          size="h-[20rem] w-[20rem]"
         />
         <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 pb-20 pt-24 text-center">
           <span className="mb-4 rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
@@ -171,7 +191,12 @@ export default function Home() {
         </div>
       </FadeInSection>
 
-      <FadeInSection className="mx-auto w-full max-w-5xl px-6 py-16">
+      <FadeInSection className="relative mx-auto w-full max-w-5xl overflow-hidden px-6 py-16">
+        <GradientOrb
+          color="rgba(217,70,239,0.14)"
+          className="-left-40 top-10 -z-10"
+          variant="drift-glow-alt"
+        />
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
           De la photo brute à la miniature qui capte le clic
         </h2>
@@ -181,29 +206,38 @@ export default function Home() {
           secondes.
         </p>
         <div className="mt-10 grid grid-cols-1 items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
-          <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
-            <div className="mx-auto flex aspect-video w-full items-center justify-center rounded-xl bg-zinc-800/60">
-              <span className="text-4xl">📷</span>
+          <TiltCard>
+            <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
+              <div className="mx-auto flex aspect-video w-full items-center justify-center rounded-xl bg-zinc-800/60">
+                <span className="text-4xl">📷</span>
+              </div>
+              <p className="mt-4 text-sm font-semibold text-zinc-500">
+                Ta photo, telle quelle
+              </p>
             </div>
-            <p className="mt-4 text-sm font-semibold text-zinc-500">
-              Ta photo, telle quelle
-            </p>
+          </TiltCard>
+          <div
+            className="text-3xl font-bold text-yellow-400 [animation:pulse-scale_1.8s_ease-in-out_infinite] sm:rotate-0"
+            aria-hidden
+          >
+            →
           </div>
-          <div className="text-2xl font-bold text-yellow-400 sm:rotate-0">→</div>
-          <div className="overflow-hidden rounded-2xl border border-yellow-400/40 bg-yellow-400/5">
-            <div className="relative aspect-video w-full">
-              <Image
-                src="/examples/bold-impact.webp"
-                alt="Exemple de miniature générée avec MIN IA"
-                fill
-                sizes="(min-width: 640px) 40vw, 100vw"
-                className="object-cover"
-              />
+          <TiltCard>
+            <div className="holo-border overflow-hidden rounded-2xl border border-yellow-400/40 bg-yellow-400/5">
+              <div className="relative aspect-video w-full">
+                <Image
+                  src="/examples/bold-impact.webp"
+                  alt="Exemple de miniature générée avec MIN IA"
+                  fill
+                  sizes="(min-width: 640px) 40vw, 100vw"
+                  className="object-cover"
+                />
+              </div>
+              <p className="py-3 text-center text-sm font-bold text-yellow-400">
+                Miniature prête en ~10 secondes
+              </p>
             </div>
-            <p className="py-3 text-center text-sm font-bold text-yellow-400">
-              Miniature prête en ~10 secondes
-            </p>
-          </div>
+          </TiltCard>
         </div>
       </FadeInSection>
 
@@ -216,23 +250,28 @@ export default function Home() {
           thématiques de chaîne.
         </p>
         <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-4 sm:auto-rows-[9rem]">
-          {RESULTS.map((r) => (
-            <div
-              key={r.id}
-              className={`group relative overflow-hidden rounded-2xl border border-zinc-800 ${r.span}`}
-            >
-              <Image
-                src={`/examples/${r.id}.webp`}
-                alt={`Miniature générée avec MIN IA — style ${r.niche}`}
-                fill
-                sizes="(min-width: 640px) 25vw, 100vw"
-                className="object-cover transition duration-300 group-hover:scale-105"
-              />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-3">
-                <span className="text-xs font-semibold text-white">{r.niche}</span>
+          {RESULTS.map((r, i) => {
+            const accent = RESULT_ACCENTS[i % RESULT_ACCENTS.length];
+            return (
+              <div
+                key={r.id}
+                className={`group relative overflow-hidden rounded-2xl border transition-colors ${accent.border} ${r.span}`}
+              >
+                <Image
+                  src={`/examples/${r.id}.webp`}
+                  alt={`Miniature générée avec MIN IA — style ${r.niche}`}
+                  fill
+                  sizes="(min-width: 640px) 25vw, 100vw"
+                  className="object-cover transition duration-300 group-hover:scale-105"
+                />
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${accent.tag}`}>
+                    {r.niche}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <p className="mt-8 text-center text-sm text-zinc-500">
           Envie du même résultat sur tes vidéos ?{" "}
@@ -242,37 +281,63 @@ export default function Home() {
         </p>
       </FadeInSection>
 
-      <FadeInSection className="mx-auto w-full max-w-5xl px-6 py-16">
+      <FadeInSection className="relative mx-auto w-full max-w-5xl overflow-hidden px-6 py-16">
+        <GradientOrb color="rgba(6,182,212,0.12)" className="right-0 top-0 -z-10" />
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-3">
-          <div className="rounded-2xl border border-zinc-800/60 p-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-400/40 text-lg font-extrabold text-yellow-400">
-              1
-            </div>
-            <h3 className="mt-4 font-bold">Upload ta photo</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              Une photo de toi, de ton setup ou de ton sujet — n&apos;importe
-              quelle image de départ.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-zinc-800/60 p-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-400/40 text-lg font-extrabold text-yellow-400">
-              2
-            </div>
-            <h3 className="mt-4 font-bold">Choisis un style + un titre</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              10 styles calibrés pour le CTR, tu ajoutes juste ton texte
-              d&apos;accroche.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-zinc-800/60 p-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-400/40 text-lg font-extrabold text-yellow-400">
-              3
-            </div>
-            <h3 className="mt-4 font-bold">Télécharge en HD</h3>
-            <p className="mt-1 text-sm text-zinc-400">
-              Export 1280x720 prêt pour YouTube, TikTok ou Reels en un clic.
-            </p>
-          </div>
+          {[
+            {
+              n: "1",
+              grad: "from-yellow-400 to-orange-500",
+              title: "Upload ta photo",
+              body: "Une photo de toi, de ton setup ou de ton sujet — n'importe quelle image de départ.",
+            },
+            {
+              n: "2",
+              grad: "from-orange-500 to-fuchsia-500",
+              title: "Choisis un format + un style",
+              body: "YouTube, Shorts, TikTok, Instagram... et un style calibré pour le CTR — tu ajoutes juste ton texte d'accroche.",
+            },
+            {
+              n: "3",
+              grad: "from-fuchsia-500 to-cyan-400",
+              title: "Télécharge en HD",
+              body: "Export dans le bon format et la bonne résolution, prêt à publier en un clic.",
+            },
+          ].map((step) => (
+            <TiltCard key={step.n}>
+              <div className="group h-full rounded-2xl border border-zinc-800/60 bg-zinc-900/30 p-6 transition hover:border-zinc-700">
+                <div
+                  className={`flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br text-lg font-extrabold text-black shadow-[0_0_25px_-6px_rgba(250,204,21,0.5)] ${step.grad}`}
+                >
+                  {step.n}
+                </div>
+                <h3 className="mt-4 font-bold">{step.title}</h3>
+                <p className="mt-1 text-sm text-zinc-400">{step.body}</p>
+              </div>
+            </TiltCard>
+          ))}
+        </div>
+      </FadeInSection>
+
+      <FadeInSection className="mx-auto w-full max-w-5xl px-6 py-10">
+        <p className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          Un seul outil, tous les formats
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+          {FORMATS.map((f, i) => (
+            <span
+              key={f.id}
+              className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition hover:scale-105 ${
+                i % 3 === 0
+                  ? "border-yellow-400/30 text-yellow-300"
+                  : i % 3 === 1
+                    ? "border-fuchsia-400/30 text-fuchsia-300"
+                    : "border-cyan-400/30 text-cyan-300"
+              }`}
+            >
+              {f.label}
+            </span>
+          ))}
         </div>
       </FadeInSection>
 
@@ -281,25 +346,35 @@ export default function Home() {
           Filtre ou IA générative : deux façons de traiter ta photo
         </h2>
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-            <h3 className="font-bold">🎨 Styles filtres (tous les plans)</h3>
-            <p className="mt-2 text-sm text-zinc-400">
-              Recadrage automatique, ajustement des couleurs et du contraste,
-              texte impactant avec fond lisible. Illimité et sans filigrane
-              sur tous les plans.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-yellow-800/40 bg-yellow-400/5 p-6">
-            <h3 className="font-bold">✨ IA générative (tous les plans)</h3>
-            <p className="mt-2 text-sm text-zinc-400">
-              Ta photo est envoyée à un modèle d&apos;IA générative qui
-              retravaille réellement l&apos;éclairage, l&apos;ambiance et le
-              décor — un rendu qu&apos;un simple filtre de couleur ne peut
-              pas produire, tout en gardant ton sujet reconnaissable. Un
-              quota mensuel de générations est inclus dans chaque plan, plus
-              grand sur les plans supérieurs.
-            </p>
-          </div>
+          <TiltCard>
+            <div className="h-full rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-6">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-400/10 text-2xl">
+                🎨
+              </div>
+              <h3 className="mt-4 font-bold">Styles filtres (tous les plans)</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Recadrage automatique, ajustement des couleurs et du
+                contraste, texte impactant avec fond lisible. Illimité et
+                sans filigrane sur tous les plans.
+              </p>
+            </div>
+          </TiltCard>
+          <TiltCard>
+            <div className="holo-border h-full rounded-2xl border border-yellow-800/40 bg-yellow-400/5 p-6">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-yellow-400/10 text-2xl">
+                ✨
+              </div>
+              <h3 className="mt-4 font-bold">IA générative (tous les plans)</h3>
+              <p className="mt-2 text-sm text-zinc-400">
+                Ta photo est envoyée à un modèle d&apos;IA générative qui
+                retravaille réellement l&apos;éclairage, l&apos;ambiance et le
+                décor — un rendu qu&apos;un simple filtre de couleur ne peut
+                pas produire, tout en gardant ton sujet reconnaissable. Un
+                quota mensuel de générations est inclus dans chaque plan, plus
+                grand sur les plans supérieurs.
+              </p>
+            </div>
+          </TiltCard>
         </div>
       </FadeInSection>
 
@@ -307,26 +382,25 @@ export default function Home() {
         <h2 className="text-center text-2xl font-bold sm:text-3xl">
           Questions fréquentes
         </h2>
-        <div className="mt-10 space-y-3">
-          {FAQS.map((item) => (
-            <div
-              key={item.q}
-              className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-5"
-            >
-              <h3 className="font-bold text-zinc-100">{item.q}</h3>
-              <p className="mt-2 text-sm text-zinc-400">{item.a}</p>
-            </div>
-          ))}
-        </div>
+        <FaqAccordion items={FAQS} />
       </FadeInSection>
 
-      <FadeInSection className="mx-auto w-full max-w-4xl px-6 py-20 text-center">
+      <FadeInSection className="relative mx-auto w-full max-w-4xl overflow-hidden px-6 py-20 text-center">
+        <GradientOrb
+          color="rgba(250,204,21,0.20)"
+          className="left-1/2 top-0 -translate-x-1/2 -z-10"
+        />
+        <GradientOrb
+          color="rgba(217,70,239,0.14)"
+          className="left-1/2 top-10 -translate-x-1/2 -z-10"
+          variant="drift-glow-alt"
+        />
         <h2 className="text-2xl font-bold sm:text-3xl">
           Prêt à arrêter de perdre 30 minutes par miniature ?
         </h2>
         <Link
           href="/pricing"
-          className="mt-6 inline-block rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:bg-yellow-300"
+          className="mt-6 inline-block rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
         >
           Voir les plans
         </Link>
