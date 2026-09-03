@@ -16,18 +16,30 @@ const MAX_DESCRIPTION = 400;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
 // thumbnail presets: those push dramatic, stylized regeneration. Here the
-// user described a real complaint from testing the thumbnail AI on regular
-// photos — over-eager edits that look "cramé" (torched/overcooked). So the
-// prompt's whole job is restraint: change exactly the one thing asked,
-// touch nothing else, stay believable.
+// user described two real complaints from testing on regular photos:
+// over-eager edits that look "cramé" (torched/overcooked), and — after that
+// was fixed — inserted objects that look pasted-in rather than physically
+// part of the scene (wrong light direction/color, no matching shadow,
+// mismatched sharpness). The generic "stay realistic, respect the
+// lighting" instruction wasn't specific enough for the model to actually
+// do that; this spells out the exact physical cues to match, mirroring the
+// more detailed AI_QUALITY_DIRECTIVE language already proven to work for
+// the thumbnail presets (see lib/presets.ts), adapted from "regenerate the
+// whole background" to "insert one object convincingly."
 function buildImpressPrompt(userDescription: string): string {
-  return `Tu es un retoucheur photo professionnel spécialisé dans les retouches ultra-réalistes et discrètes. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo.
+  return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.
 
-Règles strictes :
+Règles d'intégration physique (le plus important, cause principale de résultats ratés) :
+- Respecte EXACTEMENT la perspective, l'angle de caméra et l'échelle de la scène d'origine pour l'élément modifié — même point de fuite, même distance apparente que s'il avait été photographié sur place.
+- Fais correspondre précisément la direction, la couleur et la dureté de la lumière déjà visible dans la photo (heure du jour, source de lumière, ombres portées par les autres objets) — l'élément modifié doit projeter une ombre cohérente avec ces mêmes réglages, au sol ou sur les surfaces autour de lui.
+- Fais correspondre le grain, la netteté et la balance des couleurs du reste de la photo — l'élément modifié ne doit jamais paraître plus net, plus flou, plus saturé ou plus lisse que le reste de l'image, sous peine de sauter aux yeux comme un ajout.
+- Si l'élément est réfléchissant (carrosserie, vitre, métal, eau), reflète l'environnement réel visible sur la photo (ciel, bâtiments, végétation), jamais un décor générique ou un studio.
+- Résultat attendu : une photo qui a l'air d'avoir été prise en une seule fois, jamais un montage, un collage ou un objet "posé" par-dessus l'image.
+
+Règles de portée :
 - Applique exactement le changement demandé, rien d'autre.
 - Ne change ni l'éclairage général, ni les couleurs, ni le style, ni le cadrage, ni aucun élément de la photo qui n'est pas mentionné.
-- Le résultat doit rester parfaitement photoréaliste et crédible, comme si l'élément modifié avait toujours fait partie de la photo — respecte la perspective, l'échelle, l'éclairage et les ombres déjà présents dans la scène.
-- N'en fais pas trop : pas de sur-retouche, pas de saturation excessive, pas d'effet "généré par IA" visible. Le but est que la photo ait l'air vraie, pas transformée.
+- N'en fais pas trop : pas de sur-retouche, pas de saturation excessive, pas d'effet "généré par IA" visible.
 - N'ajoute aucun texte, lettre ou chiffre à l'image.
 
 Changement demandé : ${userDescription}`;
