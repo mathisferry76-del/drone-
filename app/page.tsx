@@ -18,14 +18,8 @@ const RESULT_ACCENTS = [
 ];
 
 const RESULTS = [
-  { id: "bold-impact", niche: "Argent / réussite", span: "sm:row-span-2" },
-  { id: "neon-pop", niche: "Musique / clip", span: "" },
-  { id: "high-contrast-drama", niche: "Business / SaaS", span: "" },
-  { id: "golden-vacation", niche: "Luxe / lifestyle", span: "" },
-  { id: "cyberpunk", niche: "Tech / gadgets", span: "sm:row-span-2" },
-  { id: "nature-vive", niche: "Outdoor / vlog", span: "" },
-  { id: "clean-minimal", niche: "Podcast / interview", span: "" },
-  { id: "muay-thai-fight", niche: "Sport / combat", span: "" },
+  { id: "high-contrast-drama", niche: "Business / SaaS" },
+  { id: "muay-thai-fight", niche: "Sport / combat" },
 ];
 
 const FAQS = [
@@ -249,22 +243,22 @@ export default function Home() {
           Un aperçu de ce que MIN IA peut créer, sur différents styles et
           thématiques.
         </p>
-        <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-4 sm:auto-rows-[9rem]">
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
           {RESULTS.map((r, i) => {
             const accent = RESULT_ACCENTS[i % RESULT_ACCENTS.length];
             return (
               <div
                 key={r.id}
-                className={`group relative overflow-hidden rounded-2xl border transition-colors ${accent.border} ${r.span}`}
+                className={`group relative aspect-video overflow-hidden rounded-2xl border transition-colors ${accent.border}`}
               >
                 <Image
                   src={`/examples/${r.id}.webp`}
                   alt={`Création générée avec MIN IA — style ${r.niche}`}
                   fill
-                  sizes="(min-width: 640px) 25vw, 100vw"
+                  sizes="(min-width: 640px) 50vw, 100vw"
                   className="object-cover transition duration-300 group-hover:scale-105"
                 />
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-3">
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-4">
                   <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${accent.tag}`}>
                     {r.niche}
                   </span>
