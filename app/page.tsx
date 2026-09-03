@@ -193,40 +193,6 @@ export default function Home() {
           retouche, de mise en page et de texte à ta place, en quelques
           secondes.
         </p>
-        <div className="mt-10 grid grid-cols-1 items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
-          <TiltCard>
-            <div className="rounded-2xl border border-dashed border-zinc-700 bg-zinc-900/40 p-6 text-center">
-              <div className="mx-auto flex aspect-video w-full items-center justify-center rounded-xl bg-zinc-800/60">
-                <span className="text-4xl">📷</span>
-              </div>
-              <p className="mt-4 text-sm font-semibold text-zinc-500">
-                Ta photo, telle quelle
-              </p>
-            </div>
-          </TiltCard>
-          <div
-            className="text-3xl font-bold text-yellow-400 [animation:pulse-scale_1.8s_ease-in-out_infinite] sm:rotate-0"
-            aria-hidden
-          >
-            →
-          </div>
-          <TiltCard>
-            <div className="holo-border overflow-hidden rounded-2xl border border-yellow-400/40 bg-yellow-400/5">
-              <div className="relative aspect-video w-full">
-                <Image
-                  src="/examples/bold-impact.webp"
-                  alt="Exemple de miniature générée avec MIN IA"
-                  fill
-                  sizes="(min-width: 640px) 40vw, 100vw"
-                  className="object-cover"
-                />
-              </div>
-              <p className="py-3 text-center text-sm font-bold text-yellow-400">
-                Miniature prête en ~10 secondes
-              </p>
-            </div>
-          </TiltCard>
-        </div>
       </FadeInSection>
 
       <FadeInSection id="resultats" className="mx-auto w-full max-w-6xl px-6 py-16">
