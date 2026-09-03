@@ -5,17 +5,24 @@ import Link from "next/link";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { getSupabaseBrowser } from "@/lib/supabase";
 
-const LINKS = [
+const BASE_LINKS = [
   { href: "/#styles", label: "Styles" },
   { href: "/#resultats", label: "Nos résultats" },
-  { href: "/pricing", label: "Tarifs" },
+  { href: "/impress", label: "✨ Impressionne tes potes" },
   { href: "/#faq", label: "FAQ" },
   { href: "/#contact", label: "Contact" },
 ];
 
+// Tarifs is only shown once logged in — a visitor who hasn't tried the
+// product yet sees the price before anything else, which loses more people
+// than it qualifies. It's still reachable from inside /generate's own
+// paywall/upgrade screens regardless of this link's visibility.
+const PRICING_LINK = { href: "/pricing", label: "Tarifs" };
+
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const { session } = useSupabaseUser();
+  const links = session ? [...BASE_LINKS, PRICING_LINK] : BASE_LINKS;
 
   async function handleLogout() {
     const supabase = getSupabaseBrowser();
@@ -36,7 +43,7 @@ export default function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-6 text-sm font-medium text-zinc-300 lg:flex">
-          {LINKS.map((link) => (
+          {links.map((link) => (
             <Link key={link.href} href={link.href} className="transition hover:text-white">
               {link.label}
             </Link>
@@ -100,7 +107,7 @@ export default function Navbar() {
       {open && (
         <div className="border-t border-zinc-800 bg-black px-6 py-4 sm:hidden">
           <div className="flex flex-col gap-1 text-sm font-medium text-zinc-300">
-            {LINKS.map((link) => (
+            {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
