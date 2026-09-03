@@ -19,16 +19,27 @@ export default function CountUp({
   const motionValue = useMotionValue(0);
   const rounded = useTransform(motionValue, (v) => Math.round(v));
   const [display, setDisplay] = useState(0);
+  // Safety net: on some layouts (e.g. a reflow from an async-mounted sibling
+  // shifting this element right as the observer attaches) the IntersectionObserver
+  // can miss its one shot at firing, leaving the counter stuck at 0 forever
+  // since `once: true` never gets a second chance. Force it after a short
+  // delay so a missed observer callback never means a permanently wrong stat.
+  const [forceView, setForceView] = useState(false);
 
   useEffect(() => {
-    if (!inView) return;
+    const timer = setTimeout(() => setForceView(true), 1200);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!inView && !forceView) return;
     const controls = animate(motionValue, value, { duration: 1.2, ease: "easeOut" });
     const unsubscribe = rounded.on("change", (v) => setDisplay(v));
     return () => {
       controls.stop();
       unsubscribe();
     };
-  }, [inView, value, motionValue, rounded]);
+  }, [inView, forceView, value, motionValue, rounded]);
 
   return (
     <motion.span ref={ref} className={className}>

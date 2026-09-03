@@ -4,7 +4,7 @@ import { PRESETS } from "@/lib/presets";
 import { FORMATS } from "@/lib/formats";
 import FadeInSection from "@/components/motion/FadeInSection";
 import HeroTitle from "@/components/motion/HeroTitle";
-import FloatingShowcase from "@/components/motion/FloatingShowcase";
+import HeroSceneLoader from "@/components/three/HeroSceneLoader";
 import Marquee from "@/components/motion/Marquee";
 import TiltCard from "@/components/motion/TiltCard";
 import CountUp from "@/components/motion/CountUp";
@@ -91,7 +91,7 @@ export default function Home() {
           className="left-0 top-64 -z-10"
           size="h-[20rem] w-[20rem]"
         />
-        <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 pb-20 pt-24 text-center">
+        <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 pb-10 pt-20 text-center">
           <span className="mb-4 rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
             Fait pour les créateurs solo
           </span>
@@ -134,7 +134,7 @@ export default function Home() {
             </span>
           </div>
 
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
             <span><CountUp value={10} className="font-bold text-white" /> styles prêts à l&apos;emploi</span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
             <span><CountUp value={5} className="font-bold text-white" /> calques de texte + formes</span>
@@ -142,10 +142,10 @@ export default function Home() {
             <span>IA générative <span className="font-bold text-white">Gemini 2.5 Flash</span></span>
           </div>
 
-          <FloatingShowcase
-            src="/examples/nature-vive.webp"
-            alt="Aperçu d'une miniature générée avec MIN IA"
-          />
+          <HeroSceneLoader />
+          <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-zinc-600">
+            <span className="animate-bounce">↓</span> Continue à scroller
+          </p>
         </div>
       </section>
 
