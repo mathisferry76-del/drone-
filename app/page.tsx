@@ -25,7 +25,7 @@ const RESULTS = [
   { id: "cyberpunk", niche: "Tech / gadgets", span: "sm:row-span-2" },
   { id: "nature-vive", niche: "Outdoor / vlog", span: "" },
   { id: "clean-minimal", niche: "Podcast / interview", span: "" },
-  { id: "retro-vintage", niche: "Culture / rétro", span: "" },
+  { id: "muay-thai-fight", niche: "Sport / combat", span: "" },
 ];
 
 const FAQS = [
