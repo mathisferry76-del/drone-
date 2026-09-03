@@ -15,6 +15,13 @@ import {
 } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
+import {
+  FORMATS,
+  DEFAULT_FORMAT_ID,
+  DEFAULT_RESOLUTION,
+  getFormat,
+  ResolutionTier,
+} from "@/lib/formats";
 import GeneratingCard from "@/components/motion/GeneratingCard";
 import ResultReveal from "@/components/motion/ResultReveal";
 
@@ -103,33 +110,33 @@ interface EditZoneState {
 
 const DEFAULT_EDIT_ZONE: EditZoneState = { x: 0.72, y: 0.5, sizeX: 1, sizeY: 1 };
 
-const BOX_ASPECT = 16 / 9;
-
-// The preview box is a fixed 16:9 (aspect-video) rectangle, but the uploaded
-// photo can be any aspect ratio and is shown inside it with object-contain —
-// i.e. letterboxed. The face-zone marker must be positioned relative to the
-// actual photo pixels (that's what the server masks), not the 16:9 box, so
-// these two helpers convert between "fraction of the box" (what pointer
-// events give us) and "fraction of the real photo" (what we send the API).
-function letterboxFractions(imgAspect: number) {
-  if (imgAspect > BOX_ASPECT) {
-    const visH = BOX_ASPECT / imgAspect;
+// The preview box's aspect ratio matches the selected output format (see
+// FORMATS in lib/formats.ts) — 16:9 by default (YouTube), but 9:16, 1:1 etc.
+// once the user picks another format. The uploaded photo can be any aspect
+// ratio and is shown inside it with object-contain — i.e. letterboxed. The
+// face-zone marker must be positioned relative to the actual photo pixels
+// (that's what the server masks), not the box, so these two helpers convert
+// between "fraction of the box" (what pointer events give us) and "fraction
+// of the real photo" (what we send the API).
+function letterboxFractions(imgAspect: number, boxAspect: number) {
+  if (imgAspect > boxAspect) {
+    const visH = boxAspect / imgAspect;
     return { visW: 1, visH, offX: 0, offY: (1 - visH) / 2 };
   }
-  const visW = imgAspect / BOX_ASPECT;
+  const visW = imgAspect / boxAspect;
   return { visW, visH: 1, offX: (1 - visW) / 2, offY: 0 };
 }
 
-function boxFractionToImageFraction(bx: number, by: number, imgAspect: number) {
-  const { visW, visH, offX, offY } = letterboxFractions(imgAspect);
+function boxFractionToImageFraction(bx: number, by: number, imgAspect: number, boxAspect: number) {
+  const { visW, visH, offX, offY } = letterboxFractions(imgAspect, boxAspect);
   return {
     x: Math.min(1, Math.max(0, (bx - offX) / visW)),
     y: Math.min(1, Math.max(0, (by - offY) / visH)),
   };
 }
 
-function imageFractionToBoxFraction(ix: number, iy: number, imgAspect: number) {
-  const { visW, visH, offX, offY } = letterboxFractions(imgAspect);
+function imageFractionToBoxFraction(ix: number, iy: number, imgAspect: number, boxAspect: number) {
+  const { visW, visH, offX, offY } = letterboxFractions(imgAspect, boxAspect);
   return { bx: offX + ix * visW, by: offY + iy * visH };
 }
 
@@ -191,6 +198,8 @@ export default function GeneratePage() {
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [presetId, setPresetId] = useState<PresetId>("bold-impact");
+  const [formatId, setFormatId] = useState<string>(DEFAULT_FORMAT_ID);
+  const [resolution, setResolution] = useState<ResolutionTier>(DEFAULT_RESOLUTION);
   const [intensity, setIntensity] = useState(100);
   const [showAdvanced, setShowAdvanced] = useState(true);
   const [fineBrightness, setFineBrightness] = useState(0);
@@ -230,6 +239,9 @@ export default function GeneratePage() {
 
   const { loading: authLoading, session } = useSupabaseUser();
   const loggedIn = Boolean(session);
+
+  const selectedFormat = getFormat(formatId);
+  const boxAspect = selectedFormat.width / selectedFormat.height;
 
   async function refetchProfile() {
     const supabase = getSupabaseBrowser();
@@ -460,7 +472,7 @@ export default function GeneratePage() {
       const bx = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
       const by = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
       const imgAspect = naturalImgSize.w / naturalImgSize.h;
-      const pos = boxFractionToImageFraction(bx, by, imgAspect);
+      const pos = boxFractionToImageFraction(bx, by, imgAspect, boxAspect);
       if (active.kind === "face") {
         setFacePreserve((prev) => (prev ? { ...prev, ...pos } : prev));
       } else {
@@ -491,6 +503,7 @@ export default function GeneratePage() {
     return [
       fileFingerprint(file),
       presetId,
+      formatId,
       aiDescription,
       referenceImages.map((r) => fileFingerprint(r.file)).join(","),
       JSON.stringify(facePreserve),
@@ -551,6 +564,8 @@ export default function GeneratePage() {
         reuseCache ? "placeholder.png" : file.name
       );
       formData.append("presetId", presetId);
+      formData.append("format", formatId);
+      formData.append("resolution", resolution);
       formData.append("aiEnhance", willUseAi ? "true" : "false");
       formData.append("aiDescription", aiDescription);
       formData.append("intensity", String(intensity));
@@ -684,7 +699,8 @@ export default function GeneratePage() {
               ref={previewBoxRef}
               onPointerMove={handlePreviewPointerMove}
               onPointerUp={handlePreviewPointerUp}
-              className="relative aspect-video w-full touch-none overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950"
+              style={{ aspectRatio: `${selectedFormat.width} / ${selectedFormat.height}` }}
+              className="relative w-full touch-none overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950"
             >
               {previewUrl ? (
                 <>
@@ -705,9 +721,10 @@ export default function GeneratePage() {
                     const { bx, by } = imageFractionToBoxFraction(
                       facePreserve.x,
                       facePreserve.y,
-                      imgAspect
+                      imgAspect,
+                      boxAspect
                     );
-                    const { visW, visH } = letterboxFractions(imgAspect);
+                    const { visW, visH } = letterboxFractions(imgAspect, boxAspect);
                     const widthPct = 2 * FACE_ZONE_BASE_RX * facePreserve.sizeX * visW * 100;
                     const heightPct = 2 * FACE_ZONE_BASE_RY * facePreserve.sizeY * visH * 100;
                     return (
@@ -732,9 +749,10 @@ export default function GeneratePage() {
                     const { bx, by } = imageFractionToBoxFraction(
                       editZone.x,
                       editZone.y,
-                      imgAspect
+                      imgAspect,
+                      boxAspect
                     );
-                    const { visW, visH } = letterboxFractions(imgAspect);
+                    const { visW, visH } = letterboxFractions(imgAspect, boxAspect);
                     const widthPct = 2 * EDIT_ZONE_BASE_RX * editZone.sizeX * visW * 100;
                     const heightPct = 2 * EDIT_ZONE_BASE_RY * editZone.sizeY * visH * 100;
                     return (
@@ -806,7 +824,48 @@ export default function GeneratePage() {
 
           <div>
             <label className="mb-2 block text-sm font-semibold text-zinc-300">
-              2. Style
+              2. Format de sortie
+            </label>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <select
+                value={formatId}
+                onChange={(e) => setFormatId(e.target.value)}
+                className="col-span-2 rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-white sm:col-span-3"
+              >
+                {FORMATS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-2 flex overflow-hidden rounded-xl border border-zinc-800 text-xs font-semibold">
+              {(["1k", "2k", "4k"] as ResolutionTier[]).map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  onClick={() => setResolution(tier)}
+                  className={`flex-1 px-3 py-2 uppercase transition ${
+                    resolution === tier
+                      ? "bg-yellow-400 text-black"
+                      : "bg-zinc-900 text-zinc-400 hover:text-white"
+                  }`}
+                >
+                  {tier}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              2K/4K agrandissent l&apos;image aux bonnes dimensions pour la plateforme
+              choisie — ça n&apos;ajoute pas de détail que l&apos;IA n&apos;a pas
+              généré, c&apos;est utile surtout si la plateforme exige un fichier plus
+              grand.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-zinc-300">
+              3. Style
             </label>
             <div className="grid grid-cols-2 gap-3">
               {PRESETS.map((preset) => (
@@ -923,7 +982,7 @@ export default function GeneratePage() {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label className="text-sm font-semibold text-zinc-300">
-                3. Textes ({textLayers.length}/{MAX_TEXT_LAYERS}) — optionnel
+                4. Textes ({textLayers.length}/{MAX_TEXT_LAYERS}) — optionnel
               </label>
               <button
                 type="button"
@@ -1052,7 +1111,7 @@ export default function GeneratePage() {
           <div>
             <div className="mb-2 flex items-center justify-between">
               <label className="text-sm font-semibold text-zinc-300">
-                4. Formes / annotations ({shapes.length}/{MAX_SHAPES})
+                5. Formes / annotations ({shapes.length}/{MAX_SHAPES})
               </label>
             </div>
             <div className="flex gap-2">
@@ -1535,7 +1594,10 @@ export default function GeneratePage() {
               </div>
             )}
           </div>
-          <div className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
+          <div
+            style={{ aspectRatio: `${selectedFormat.width} / ${selectedFormat.height}` }}
+            className="flex w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50"
+          >
             {loading ? (
               <GeneratingCard
                 label={

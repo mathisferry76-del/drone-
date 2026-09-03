@@ -21,11 +21,10 @@ import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, GeminiApiError, describeGeminiError } from "@/lib/gemini";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
+import { getFormat, RESOLUTION_MULTIPLIERS, isResolutionTier } from "@/lib/formats";
 
 export const runtime = "nodejs";
 
-const CANVAS_WIDTH = 1280;
-const CANVAS_HEIGHT = 720;
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_CURVE_ANGLE = 0.8; // radians of total arc sweep at curve = ±100
 const MAX_TEXT_LAYERS = 5;
@@ -244,12 +243,19 @@ async function applyTargetedEdit(
 
   const prompt = `Apply this specific local edit only within the editable (unmasked) region, blending it seamlessly with the surrounding lighting, colors and style: ${instruction.trim()}. Everything outside that region — including the subject and the rest of the background — must remain exactly as it is in the input image.`;
 
+  // baseBuffer's own aspect decides which fixed size to declare — it's
+  // already sized to one of the three buckets when it came out of
+  // applyAiEnhancement, but bucketing here from its real dimensions (rather
+  // than assuming landscape) keeps this correct for portrait/square target
+  // formats too.
+  const { size: editSize } = pickOpenAiSize(width, height);
+
   const result = await openai.images.edit({
     model: "gpt-image-1",
     image: uploadable,
     mask: maskUploadable,
     prompt,
-    size: "1536x1024",
+    size: editSize,
     quality: "high",
     input_fidelity: "high",
   });
@@ -399,7 +405,9 @@ function layoutLine(
 function buildTextLayerFragment(
   font: opentype.Font,
   layer: TextLayerInput,
-  layerIndex: number
+  layerIndex: number,
+  canvasWidth: number,
+  canvasHeight: number
 ): { defs: string; markup: string } {
   const fontSize = layer.fontSize;
   const lineHeight = fontSize * 1.08;
@@ -408,16 +416,16 @@ function buildTextLayerFragment(
   // that instead of a fixed width, or a title near the edge would render
   // partly outside the frame.
   const edgeMargin = 40;
-  const safeHalfWidth = Math.min(layer.x, 1 - layer.x) * CANVAS_WIDTH - edgeMargin;
-  const maxWidth = Math.max(160, Math.min(CANVAS_WIDTH * 0.86, safeHalfWidth * 2));
+  const safeHalfWidth = Math.min(layer.x, 1 - layer.x) * canvasWidth - edgeMargin;
+  const maxWidth = Math.max(160, Math.min(canvasWidth * 0.86, safeHalfWidth * 2));
   const lines = wrapTextByWidth(font, layer.text, fontSize, maxWidth, 3);
   const totalHeight = lines.length * lineHeight;
 
-  const centerX = layer.x * CANVAS_WIDTH;
-  const rawBlockTop = layer.y * CANVAS_HEIGHT - totalHeight / 2;
+  const centerX = layer.x * canvasWidth;
+  const rawBlockTop = layer.y * canvasHeight - totalHeight / 2;
   const blockTop = Math.max(
     edgeMargin,
-    Math.min(CANVAS_HEIGHT - edgeMargin - totalHeight, rawBlockTop)
+    Math.min(canvasHeight - edgeMargin - totalHeight, rawBlockTop)
   );
 
   const bbox: Bbox = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
@@ -459,10 +467,10 @@ function buildTextLayerFragment(
 // an SVG fragment centered at its own point and rotated in place — the
 // kind of "point at this" or "circle this" markup real thumbnail
 // designers add on top of the photo.
-function buildShapeFragment(shape: ShapeInput): string {
-  const cx = shape.x * CANVAS_WIDTH;
-  const cy = shape.y * CANVAS_HEIGHT;
-  const size = shape.size * CANVAS_WIDTH;
+function buildShapeFragment(shape: ShapeInput, canvasWidth: number, canvasHeight: number): string {
+  const cx = shape.x * canvasWidth;
+  const cy = shape.y * canvasHeight;
+  const size = shape.size * canvasWidth;
   const transform = `translate(${cx.toFixed(2)},${cy.toFixed(2)}) rotate(${shape.rotation.toFixed(2)})`;
 
   if (shape.type === "arrow") {
@@ -500,20 +508,20 @@ function buildShapeFragment(shape: ShapeInput): string {
   )}" /></g>`;
 }
 
-function buildVignetteFragment(): string {
+function buildVignetteFragment(canvasWidth: number, canvasHeight: number): string {
   return `<defs>
     <radialGradient id="vignette" cx="50%" cy="50%" r="75%">
       <stop offset="55%" stop-color="#000000" stop-opacity="0" />
       <stop offset="100%" stop-color="#000000" stop-opacity="0.55" />
     </radialGradient>
   </defs>
-  <rect x="0" y="0" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" fill="url(#vignette)" />`;
+  <rect x="0" y="0" width="${canvasWidth}" height="${canvasHeight}" fill="url(#vignette)" />`;
 }
 
-function buildBorderFragment(color: string): string {
+function buildBorderFragment(color: string, canvasWidth: number, canvasHeight: number): string {
   const width = 14;
-  return `<rect x="${width / 2}" y="${width / 2}" width="${CANVAS_WIDTH - width}" height="${
-    CANVAS_HEIGHT - width
+  return `<rect x="${width / 2}" y="${width / 2}" width="${canvasWidth - width}" height="${
+    canvasHeight - width
   }" fill="none" stroke="${color}" stroke-width="${width}" />`;
 }
 
@@ -524,40 +532,44 @@ function buildContentSvg(
   font: opentype.Font,
   textLayers: TextLayerInput[],
   shapes: ShapeInput[],
-  vignette: boolean
+  vignette: boolean,
+  canvasWidth: number,
+  canvasHeight: number
 ): string {
-  const shapeMarkup = shapes.map(buildShapeFragment).join("");
+  const shapeMarkup = shapes.map((s) => buildShapeFragment(s, canvasWidth, canvasHeight)).join("");
   let defs = "";
   let textMarkup = "";
   textLayers.forEach((layer, i) => {
-    const { defs: layerDefs, markup } = buildTextLayerFragment(font, layer, i);
+    const { defs: layerDefs, markup } = buildTextLayerFragment(font, layer, i, canvasWidth, canvasHeight);
     defs += layerDefs;
     textMarkup += markup;
   });
 
-  return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
     <defs>${defs}</defs>
-    ${vignette ? buildVignetteFragment() : ""}
+    ${vignette ? buildVignetteFragment(canvasWidth, canvasHeight) : ""}
     ${shapeMarkup}
     ${textMarkup}
   </svg>`;
 }
 
-function buildWatermarkSvg(font: opentype.Font, text: string): string {
+function buildWatermarkSvg(font: opentype.Font, text: string, canvasWidth: number, canvasHeight: number): string {
   const fontSize = 20;
   const width = font.getAdvanceWidth(text, fontSize);
-  const x = CANVAS_WIDTH - 24 - width;
-  const y = CANVAS_HEIGHT - 24;
+  const x = canvasWidth - 24 - width;
+  const y = canvasHeight - 24;
   const glyphPath = font.getPath(text, x, y, fontSize);
 
-  return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
+  return `<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">
     <path d="${glyphPath.toPathData(2)}" fill="#ffffff" fill-opacity="0.55" />
   </svg>`;
 }
 
-function buildBorderSvg(color: string): string {
-  return `<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">${buildBorderFragment(
-    color
+function buildBorderSvg(color: string, canvasWidth: number, canvasHeight: number): string {
+  return `<svg width="${canvasWidth}" height="${canvasHeight}" xmlns="http://www.w3.org/2000/svg">${buildBorderFragment(
+    color,
+    canvasWidth,
+    canvasHeight
   )}</svg>`;
 }
 
@@ -588,30 +600,51 @@ function scalePresetIntensity(
 }
 
 // gpt-image-1 only accepts 1024x1024, 1024x1536 or 1536x1024 as an output
-// size — never the 16:9 our thumbnail actually is, and (crucially) never
-// whatever arbitrary aspect ratio the user's uploaded photo happens to be
-// (4:3, 9:16 phone photos are the common case). When input and requested
-// output aspect ratios differ, OpenAI has to reconcile them somehow before
-// generating — and our face mask, built in the *original* photo's pixel
-// coordinates, has no guarantee of landing in the same place once OpenAI
-// does that. Cropping and resizing to the exact target size ourselves,
-// centered on the face the user marked, removes that ambiguity entirely:
-// the image we send already matches `size`, so nothing needs reconciling,
-// and we can remap the face zone into the new frame with simple pixel math
-// instead of hoping OpenAI's internal handling matches our assumptions.
-const AI_OUTPUT_WIDTH = 1536;
-const AI_OUTPUT_HEIGHT = 1024;
+// size — never our thumbnail's actual target dimensions, and (crucially)
+// never whatever arbitrary aspect ratio the user's uploaded photo happens
+// to be (4:3, 9:16 phone photos are the common case). When input and
+// requested output aspect ratios differ, OpenAI has to reconcile them
+// somehow before generating — and our face mask, built in the *original*
+// photo's pixel coordinates, has no guarantee of landing in the same place
+// once OpenAI does that. Cropping and resizing to the exact target size
+// ourselves, centered on the face the user marked, removes that ambiguity
+// entirely: the image we send already matches `size`, so nothing needs
+// reconciling, and we can remap the face zone into the new frame with
+// simple pixel math instead of hoping OpenAI's internal handling matches
+// our assumptions.
+//
+// Which of the three fixed sizes to request depends on the *target output
+// format* the user picked (16:9 YouTube vs. 9:16 Shorts/TikTok/Stories vs.
+// 1:1 Instagram, etc.) — landscape formats get the landscape bucket,
+// portrait formats the portrait bucket, everything close to square gets
+// the square bucket. This keeps the final face-centered crop (down to the
+// exact target canvas) as tight as possible instead of always cropping a
+// fixed 3:2 image regardless of what shape was actually requested.
+interface OpenAiImageSize {
+  width: number;
+  height: number;
+  size: "1024x1024" | "1024x1536" | "1536x1024";
+}
+
+function pickOpenAiSize(targetWidth: number, targetHeight: number): OpenAiImageSize {
+  const aspect = targetWidth / targetHeight;
+  if (aspect > 1.15) return { width: 1536, height: 1024, size: "1536x1024" };
+  if (aspect < 0.87) return { width: 1024, height: 1536, size: "1024x1536" };
+  return { width: 1024, height: 1024, size: "1024x1024" };
+}
 
 async function prepareAiInput(
   input: Buffer,
-  facePreserve: FacePreserve | null
+  facePreserve: FacePreserve | null,
+  aiOutputWidth: number,
+  aiOutputHeight: number
 ): Promise<{ buffer: Buffer; face: FacePreserve | null }> {
   const meta = await sharp(input).metadata();
   const width = meta.width ?? 0;
   const height = meta.height ?? 0;
   if (!width || !height) return { buffer: input, face: facePreserve };
 
-  const targetAspect = AI_OUTPUT_WIDTH / AI_OUTPUT_HEIGHT;
+  const targetAspect = aiOutputWidth / aiOutputHeight;
   const currentAspect = width / height;
 
   let cropWidth = width;
@@ -634,31 +667,32 @@ async function prepareAiInput(
     ? sharp(input).extract({ left: cropX, top: cropY, width: cropWidth, height: cropHeight })
     : sharp(input);
   const buffer = await pipeline
-    .resize(AI_OUTPUT_WIDTH, AI_OUTPUT_HEIGHT, { fit: "fill" })
+    .resize(aiOutputWidth, aiOutputHeight, { fit: "fill" })
     .png()
     .toBuffer();
 
   if (!facePreserve) return { buffer, face: null };
 
-  const scaleX = AI_OUTPUT_WIDTH / cropWidth;
-  const scaleY = AI_OUTPUT_HEIGHT / cropHeight;
+  const scaleX = aiOutputWidth / cropWidth;
+  const scaleY = aiOutputHeight / cropHeight;
   const cxOrig = facePreserve.x * width;
   const cyOrig = facePreserve.y * height;
   const rxOrig = FACE_ZONE_BASE_RX * facePreserve.sizeX * width;
   const ryOrig = FACE_ZONE_BASE_RY * facePreserve.sizeY * height;
 
   const face: FacePreserve = {
-    x: ((cxOrig - cropX) * scaleX) / AI_OUTPUT_WIDTH,
-    y: ((cyOrig - cropY) * scaleY) / AI_OUTPUT_HEIGHT,
-    sizeX: (rxOrig * scaleX) / (FACE_ZONE_BASE_RX * AI_OUTPUT_WIDTH),
-    sizeY: (ryOrig * scaleY) / (FACE_ZONE_BASE_RY * AI_OUTPUT_HEIGHT),
+    x: ((cxOrig - cropX) * scaleX) / aiOutputWidth,
+    y: ((cyOrig - cropY) * scaleY) / aiOutputHeight,
+    sizeX: (rxOrig * scaleX) / (FACE_ZONE_BASE_RX * aiOutputWidth),
+    sizeY: (ryOrig * scaleY) / (FACE_ZONE_BASE_RY * aiOutputHeight),
   };
   return { buffer, face };
 }
 
-// The AI output (1536x1024, aspect 3:2) has to be cropped down to the
-// thumbnail's actual 16:9 canvas — a real crop, not just a resize, since
-// the aspect ratios differ. Sharp's `position: "attention"` (content-based
+// The AI output (one of OpenAI's three fixed sizes, see pickOpenAiSize) has
+// to be cropped down to the thumbnail's actual target canvas — a real crop,
+// not just a resize, since the aspect ratios can differ. Sharp's
+// `position: "attention"` (content-based
 // auto-crop) has no idea where the face mask we sent OpenAI actually was,
 // so it can just as easily crop the subject's face itself off-frame or
 // push it awkwardly off-center — this was a real, reproducible cause of
@@ -713,7 +747,9 @@ async function applyAiEnhancement(
   preset: Preset,
   userDescription: string,
   references: { buffer: Buffer }[],
-  facePreserve: FacePreserve | null
+  facePreserve: FacePreserve | null,
+  targetWidth: number,
+  targetHeight: number
 ): Promise<{ buffer: Buffer; face: FacePreserve | null }> {
   const openai = getOpenAI();
   if (!openai) {
@@ -737,6 +773,10 @@ async function applyAiEnhancement(
     );
   }
 
+  // Which fixed OpenAI size to request depends on the target output format
+  // (landscape/portrait/square) — see pickOpenAiSize.
+  const aiSize = pickOpenAiSize(targetWidth, targetHeight);
+
   // Crop/resize to exactly match the size we're about to request from
   // OpenAI (see prepareAiInput above) — the face zone comes back remapped
   // into this same frame, so the mask we build from it is guaranteed to
@@ -744,7 +784,9 @@ async function applyAiEnhancement(
   // original aspect ratio.
   const { buffer: aiReadyInput, face: mappedFace } = await prepareAiInput(
     normalizedInput,
-    facePreserve
+    facePreserve,
+    aiSize.width,
+    aiSize.height
   );
 
   const uploadable = await toFile(aiReadyInput, "photo.png", { type: "image/png" });
@@ -772,7 +814,7 @@ async function applyAiEnhancement(
   // — see prepareAiInput for why that distinction matters.
   let maskUploadable: Awaited<ReturnType<typeof toFile>> | undefined;
   if (mappedFace) {
-    const maskBuffer = await buildFaceMask(AI_OUTPUT_WIDTH, AI_OUTPUT_HEIGHT, mappedFace);
+    const maskBuffer = await buildFaceMask(aiSize.width, aiSize.height, mappedFace);
     maskUploadable = await toFile(maskBuffer, "face-mask.png", { type: "image/png" });
   }
 
@@ -790,7 +832,7 @@ async function applyAiEnhancement(
     image: images.length > 1 ? images : images[0],
     ...(maskUploadable ? { mask: maskUploadable } : {}),
     prompt,
-    size: "1536x1024",
+    size: aiSize.size,
     quality: "high",
     // Defaults to "low" — tells the model to spend real effort matching the
     // input's facial features instead of loosely reinterpreting them. Kept
@@ -1008,6 +1050,12 @@ export async function POST(req: NextRequest) {
     const borderColor = isValidHexColor(borderColorRaw) ? borderColorRaw : "#FFE000";
 
     const preset = getPreset(presetId);
+    const format = getFormat(String(formData.get("format") ?? ""));
+    const canvasWidth = format.width;
+    const canvasHeight = format.height;
+    const resolutionRaw = formData.get("resolution");
+    const resolutionTier = isResolutionTier(resolutionRaw) ? resolutionRaw : "1k";
+    const resolutionMultiplier = RESOLUTION_MULTIPLIERS[resolutionTier];
     const textLayers = parseTextLayers(String(formData.get("textLayers") ?? "[]"), preset);
     const shapes = parseShapes(String(formData.get("shapes") ?? "[]"));
     const facePreserve = parseFacePreserve(formData.get("facePreserve"));
@@ -1203,7 +1251,9 @@ export async function POST(req: NextRequest) {
               preset,
               aiDescription,
               references,
-              facePreserve
+              facePreserve,
+              canvasWidth,
+              canvasHeight
             );
             aiBuffer = enhanced.buffer;
             faceForEdits = enhanced.face;
@@ -1251,7 +1301,7 @@ export async function POST(req: NextRequest) {
       // comment above `faceForEdits`), so it would crop the wrong region.
       const knownFaceForCrop = hasCachedAiBase ? null : faceForEdits;
       base = (
-        await resizeCoverCenteredOnFace(aiBuffer, CANVAS_WIDTH, CANVAS_HEIGHT, knownFaceForCrop)
+        await resizeCoverCenteredOnFace(aiBuffer, canvasWidth, canvasHeight, knownFaceForCrop)
       )
         .modulate({ brightness: fine.brightness, saturation: fine.saturation })
         .linear(fine.contrastA, fine.contrastB)
@@ -1270,7 +1320,7 @@ export async function POST(req: NextRequest) {
       );
       base = sharp(inputBuffer)
         .rotate()
-        .resize(CANVAS_WIDTH, CANVAS_HEIGHT, { fit: "cover", position: "attention" })
+        .resize(canvasWidth, canvasHeight, { fit: "cover", position: "attention" })
         .modulate({ brightness: scaled.brightness, saturation: scaled.saturation })
         .linear(scaled.contrastA, scaled.contrastB)
         .sharpen();
@@ -1278,25 +1328,43 @@ export async function POST(req: NextRequest) {
 
     const overlays: OverlayOptions[] = [
       {
-        input: Buffer.from(buildContentSvg(font, textLayers, shapes, vignette)),
+        input: Buffer.from(buildContentSvg(font, textLayers, shapes, vignette, canvasWidth, canvasHeight)),
         top: 0,
         left: 0,
       },
     ];
 
     if (borderEnabled) {
-      overlays.push({ input: Buffer.from(buildBorderSvg(borderColor)), top: 0, left: 0 });
-    }
-
-    if (effectiveWatermark) {
       overlays.push({
-        input: Buffer.from(buildWatermarkSvg(font, "MIN IA — essai gratuit")),
+        input: Buffer.from(buildBorderSvg(borderColor, canvasWidth, canvasHeight)),
         top: 0,
         left: 0,
       });
     }
 
-    const outputBuffer = await base.composite(overlays).png().toBuffer();
+    if (effectiveWatermark) {
+      overlays.push({
+        input: Buffer.from(buildWatermarkSvg(font, "MIN IA — essai gratuit", canvasWidth, canvasHeight)),
+        top: 0,
+        left: 0,
+      });
+    }
+
+    let outputBuffer = await base.composite(overlays).png().toBuffer();
+
+    // The resolution tier is a final upscale on top of the finished
+    // thumbnail (composited at the format's base "1K" dimensions above),
+    // not a second, higher-detail AI generation — neither Gemini nor
+    // gpt-image-1 natively renders anywhere near 4K. This delivers the
+    // correct pixel dimensions platforms expect at that tier, using a
+    // high-quality resize, but it cannot add real detail the AI never
+    // generated in the first place.
+    if (resolutionMultiplier !== 1) {
+      const finalWidth = Math.round(canvasWidth * resolutionMultiplier);
+      const finalHeight = Math.round(canvasHeight * resolutionMultiplier);
+      outputBuffer = await sharp(outputBuffer).resize(finalWidth, finalHeight, { fit: "fill" }).png().toBuffer();
+    }
+
     const base64 = outputBuffer.toString("base64");
 
     // Best-effort: save to the user's history. Quota counters were already
