@@ -115,10 +115,10 @@ export default function Home() {
               Créer ma première miniature →
             </Link>
             <Link
-              href="/pricing"
+              href="/#resultats"
               className="rounded-full border border-zinc-700 px-8 py-3 text-base font-semibold text-white transition hover:scale-105 hover:border-zinc-500"
             >
-              Voir les tarifs
+              Voir des exemples
             </Link>
           </div>
 
@@ -275,8 +275,8 @@ export default function Home() {
         </div>
         <p className="mt-8 text-center text-sm text-zinc-500">
           Envie du même résultat sur tes propres photos ?{" "}
-          <Link href="/pricing" className="font-semibold text-yellow-400 hover:text-yellow-300">
-            Voir les plans →
+          <Link href="/generate" className="font-semibold text-yellow-400 hover:text-yellow-300">
+            Essayer maintenant →
           </Link>
         </p>
       </FadeInSection>
@@ -399,10 +399,10 @@ export default function Home() {
           Prêt à arrêter de perdre 30 minutes par miniature ?
         </h2>
         <Link
-          href="/pricing"
+          href="/generate"
           className="mt-6 inline-block rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
         >
-          Voir les plans
+          Créer ma miniature
         </Link>
       </FadeInSection>
     </div>

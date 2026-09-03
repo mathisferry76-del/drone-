@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { getSupabaseBrowser } from "@/lib/supabase";
 
+// Tarifs deliberately has no nav entry at all, logged in or not — the
+// price only shows up inline once someone hits the paywall inside
+// /generate (the highest-intent moment), not as something to browse to
+// beforehand. /pricing itself still exists for account/plan management.
 const BASE_LINKS = [
   { href: "/#styles", label: "Styles" },
   { href: "/#resultats", label: "Nos résultats" },
@@ -13,16 +17,9 @@ const BASE_LINKS = [
   { href: "/#contact", label: "Contact" },
 ];
 
-// Tarifs is only shown once logged in — a visitor who hasn't tried the
-// product yet sees the price before anything else, which loses more people
-// than it qualifies. It's still reachable from inside /generate's own
-// paywall/upgrade screens regardless of this link's visibility.
-const PRICING_LINK = { href: "/pricing", label: "Tarifs" };
-
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const { session } = useSupabaseUser();
-  const links = session ? [...BASE_LINKS, PRICING_LINK] : BASE_LINKS;
 
   async function handleLogout() {
     const supabase = getSupabaseBrowser();
@@ -43,7 +40,7 @@ export default function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-6 text-sm font-medium text-zinc-300 lg:flex">
-          {links.map((link) => (
+          {BASE_LINKS.map((link) => (
             <Link key={link.href} href={link.href} className="transition hover:text-white">
               {link.label}
             </Link>
@@ -107,7 +104,7 @@ export default function Navbar() {
       {open && (
         <div className="border-t border-zinc-800 bg-black px-6 py-4 sm:hidden">
           <div className="flex flex-col gap-1 text-sm font-medium text-zinc-300">
-            {links.map((link) => (
+            {BASE_LINKS.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}

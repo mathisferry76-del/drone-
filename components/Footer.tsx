@@ -22,7 +22,7 @@ export default function Footer() {
           <ul className="mt-4 space-y-2 text-sm text-zinc-500">
             <li><Link href="/#styles" className="transition hover:text-white">Styles</Link></li>
             <li><Link href="/#resultats" className="transition hover:text-white">Nos résultats</Link></li>
-            <li><Link href="/pricing" className="transition hover:text-white">Tarifs</Link></li>
+            <li><Link href="/impress" className="transition hover:text-white">Impressionne tes potes</Link></li>
             <li><Link href="/#faq" className="transition hover:text-white">FAQ</Link></li>
           </ul>
         </div>
