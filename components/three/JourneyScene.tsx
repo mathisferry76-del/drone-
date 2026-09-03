@@ -25,7 +25,7 @@ const MODEL_URLS = {
   bedroom: "/models/bedroom.glb",
   pc: "/models/pc.glb",
 };
-const HDRI_SKY_URL = "/models/sky.hdr";
+const HDRI_SKY_URL = "/models/sky.exr";
 
 function windowOpacity(
   t: number,
@@ -283,13 +283,17 @@ function PrimitiveHouse() {
   );
 }
 
-// Best-guess placement — real .glb models vary wildly in export scale and
-// origin, so this will very likely need adjusting once the actual file is
-// visible. Centering at the same spot the primitive occupies as a start.
+// Real model's own bbox: -6.24,-5.02,-0.73 to 9.75,6.13,10.03 (a ~16x11x11
+// unit town-house block, off-center in its own file). Scaled down to land
+// around the same ~4-5 unit width the primitive occupied, and offset by
+// -center*scale to bring its middle to the local origin. Orientation is a
+// guess until we can actually see it rendered — may need a rotation once
+// we know which side is the front facade.
 function GLTFHouse() {
   const { scene } = useGLTF(MODEL_URLS.house);
   const cloned = useMemo(() => scene.clone(), [scene]);
-  return <primitive object={cloned} position={[0, 0, 0]} scale={1} />;
+  const scale = 0.05;
+  return <primitive object={cloned} position={[-0.49 * (scale / 0.28), -0.16 * (scale / 0.28), -1.3 * (scale / 0.28)]} scale={scale} />;
 }
 
 function HouseExterior({ progressRef }: { progressRef: React.MutableRefObject<number> }) {
