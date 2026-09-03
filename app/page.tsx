@@ -31,8 +31,8 @@ const FAQS = [
     a: "Pas de mise en page à faire à la main : tu choisis un style, tu tapes ton titre, c'est généré en quelques secondes. Tous les plans incluent aussi une IA générative qui retravaille l'image elle-même, pas seulement le texte par-dessus.",
   },
   {
-    q: "Quelle IA utilisez-vous pour générer les images ?",
-    a: "On utilise Gemini 2.5 Flash Image (Google), avec gpt-image-1 d'OpenAI en secours. Le modèle retravaille l'éclairage, l'ambiance et le décor de ta photo tout en préservant tes traits, pour que tu restes reconnaissable.",
+    q: "Comment fonctionne la génération par IA ?",
+    a: "Notre moteur d'IA générative propriétaire retravaille l'éclairage, l'ambiance et le décor de ta photo tout en préservant tes traits, pour que tu restes reconnaissable.",
   },
   {
     q: "Combien de temps prend une génération ?",
@@ -56,7 +56,7 @@ const FAQS = [
   },
   {
     q: "Mes photos sont-elles gardées ou utilisées pour autre chose ?",
-    a: "Tes photos servent uniquement à générer ta miniature. Pour le mode IA, l'image transite par l'API d'OpenAI le temps du traitement, conformément à leur politique — on ne les revend ni ne les réutilise pour autre chose.",
+    a: "Tes photos servent uniquement à générer ton image. Pour le mode IA, l'image transite le temps du traitement par notre infrastructure et nos prestataires techniques — on ne les revend ni ne les réutilise pour autre chose.",
   },
 ];
 
@@ -132,7 +132,7 @@ export default function Home() {
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
             <span><CountUp value={5} className="font-bold text-white" /> calques de texte + formes</span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
-            <span>IA générative <span className="font-bold text-white">Gemini 2.5 Flash</span></span>
+            <span>IA générative <span className="font-bold text-white">propriétaire</span></span>
           </div>
         </div>
       </section>
