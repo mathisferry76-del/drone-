@@ -3,11 +3,9 @@ import Link from "next/link";
 import { PRESETS } from "@/lib/presets";
 import { FORMATS } from "@/lib/formats";
 import FadeInSection from "@/components/motion/FadeInSection";
-import HeroTitle from "@/components/motion/HeroTitle";
-import HeroSceneLoader from "@/components/three/HeroSceneLoader";
+import HeroJourney from "@/components/three/HeroJourney";
 import Marquee from "@/components/motion/Marquee";
 import TiltCard from "@/components/motion/TiltCard";
-import CountUp from "@/components/motion/CountUp";
 import GradientOrb from "@/components/motion/GradientOrb";
 import FaqAccordion from "@/components/FaqAccordion";
 
@@ -70,84 +68,7 @@ const FAQS = [
 export default function Home() {
   return (
     <div className="flex flex-col">
-      <section className="relative overflow-hidden">
-        <div aria-hidden className="sci-grid pointer-events-none absolute inset-x-0 top-0 h-[36rem]" />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-40 h-[32rem] bg-[radial-gradient(ellipse_at_top,theme(colors.yellow.400/18%),transparent_65%)] [animation:drift-glow_14s_ease-in-out_infinite]"
-        />
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-20 h-[28rem] bg-[radial-gradient(ellipse_at_top,theme(colors.orange.500/12%),transparent_60%)] [animation:drift-glow-alt_18s_ease-in-out_infinite]"
-        />
-        <GradientOrb
-          color="rgba(217,70,239,0.14)"
-          className="right-0 top-40 -z-10"
-          size="h-[22rem] w-[22rem]"
-          variant="drift-glow-alt"
-        />
-        <GradientOrb
-          color="rgba(34,211,238,0.10)"
-          className="left-0 top-64 -z-10"
-          size="h-[20rem] w-[20rem]"
-        />
-        <div className="relative mx-auto flex max-w-5xl flex-col items-center px-6 pb-10 pt-20 text-center">
-          <span className="mb-4 rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-            Fait pour les créateurs solo
-          </span>
-          <HeroTitle className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-            Plus de vues sur tes vidéos, avec{" "}
-            <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-              zéro compétence design
-            </span>
-          </HeroTitle>
-          <p className="mt-6 max-w-xl text-lg text-zinc-400">
-            Upload une photo, choisis un style, ajoute ton titre. MIN IA
-            génère en 10 secondes une miniature optimisée pour le clic —
-            sans designer, sans Photoshop, sans passer 30 minutes sur
-            Canva.
-          </p>
-          <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-            <Link
-              href="/generate"
-              className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
-            >
-              Créer ma première miniature →
-            </Link>
-            <Link
-              href="/pricing"
-              className="rounded-full border border-zinc-700 px-8 py-3 text-base font-semibold text-white transition hover:scale-105 hover:border-zinc-500"
-            >
-              Voir les tarifs
-            </Link>
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
-            <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Résiliable en 1 clic
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Sans engagement de durée
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Paiement sécurisé (Stripe)
-            </span>
-          </div>
-
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
-            <span><CountUp value={10} className="font-bold text-white" /> styles prêts à l&apos;emploi</span>
-            <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
-            <span><CountUp value={5} className="font-bold text-white" /> calques de texte + formes</span>
-            <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
-            <span>IA générative <span className="font-bold text-white">Gemini 2.5 Flash</span></span>
-          </div>
-
-          <HeroSceneLoader />
-          <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-zinc-600">
-            <span className="animate-bounce">↓</span> Continue à scroller
-          </p>
-        </div>
-      </section>
+      <HeroJourney />
 
       <div className="border-y border-zinc-900 bg-zinc-950/60 py-4">
         <Marquee
