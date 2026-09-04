@@ -58,8 +58,8 @@ export default function CgvPage() {
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>200 crédits — 2 €</li>
-          <li>1000 crédits — 9 €</li>
-          <li>3000 crédits — 25 €</li>
+          <li>1000 crédits — 8,99 €</li>
+          <li>3000 crédits — 24,99 €</li>
         </ul>
         <p>
           Les prix sont indiqués en euros, toutes taxes comprises. Chaque
