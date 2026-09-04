@@ -4,7 +4,8 @@ import OpenAI, { toFile } from "openai";
 import { randomUUID } from "crypto";
 import { GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
-import { getGeminiKey, editImageWithGemini, GeminiApiError, describeGeminiError } from "@/lib/gemini";
+import { getGeminiKey, editImageWithGemini, describeGeminiError } from "@/lib/gemini";
+import { getFalKey, editImageWithFlux, describeFalError } from "@/lib/fal";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
@@ -187,19 +188,29 @@ export async function POST(req: NextRequest) {
       inputAspect > 1.15 ? "1536x1024" : inputAspect < 0.87 ? "1024x1536" : "1024x1024";
 
     const prompt = buildImpressPrompt(description);
-    // Unlike /api/generate (thumbnails, where Gemini's stylized regeneration
-    // is preferred), this route prioritizes OpenAI's gpt-image-1 first —
-    // its masked-editing pipeline with input_fidelity "high" tested better
-    // suited to inserting one object convincingly into an otherwise
-    // untouched real photo than Gemini's full-image regeneration. Gemini is
-    // kept as the fallback for when OpenAI isn't configured on a
-    // deployment, not the other way around.
+    // Provider priority for this route, most-to-least realistic for "insert
+    // one real-world object into an existing photo without touching the
+    // rest": FLUX.1 Kontext [Max] via fal.ai first (best-in-class for this
+    // exact task — see lib/fal.ts), then OpenAI's gpt-image-1 (its
+    // input_fidelity "high" edit pipeline, still solid but boxed into 3
+    // fixed canvases), then Gemini as a last-resort fallback. Each is only
+    // used when the one(s) before it aren't configured on this deployment —
+    // not a runtime retry chain, so a mid-request failure surfaces as an
+    // error rather than silently billing a second provider.
     const openai = getOpenAI();
-    const useOpenAiFirst = Boolean(openai);
+    const provider: "flux" | "openai" | "gemini" | null = getFalKey()
+      ? "flux"
+      : openai
+      ? "openai"
+      : getGeminiKey()
+      ? "gemini"
+      : null;
     let resultBuffer: Buffer;
 
     try {
-      if (useOpenAiFirst && openai) {
+      if (provider === "flux") {
+        resultBuffer = await editImageWithFlux(normalizedInput, prompt);
+      } else if (provider === "openai" && openai) {
         const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
         const result = await openai.images.edit({
           model: "gpt-image-1",
@@ -212,7 +223,7 @@ export async function POST(req: NextRequest) {
         const b64 = result.data?.[0]?.b64_json;
         if (!b64) throw new Error("OpenAI n'a renvoyé aucune image.");
         resultBuffer = Buffer.from(b64, "base64");
-      } else if (getGeminiKey()) {
+      } else if (provider === "gemini") {
         resultBuffer = await editImageWithGemini([{ buffer: normalizedInput }], prompt);
       } else {
         await releaseReservationIfNeeded();
@@ -223,11 +234,14 @@ export async function POST(req: NextRequest) {
       }
     } catch (err) {
       await releaseReservationIfNeeded();
-      console.error(useOpenAiFirst ? "openai impress error" : "gemini impress error", err);
-      return NextResponse.json(
-        { error: !useOpenAiFirst || err instanceof GeminiApiError ? describeGeminiError(err) : describeAiError(err) },
-        { status: 502 }
-      );
+      console.error(`${provider} impress error`, err);
+      const message =
+        provider === "flux"
+          ? describeFalError(err)
+          : provider === "gemini"
+          ? describeGeminiError(err)
+          : describeAiError(err);
+      return NextResponse.json({ error: message }, { status: 502 });
     }
 
     if (effectiveWatermark) {

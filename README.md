@@ -202,6 +202,7 @@ NEXT_PUBLIC_STRIPE_PRICE_CREATOR=price_...
 NEXT_PUBLIC_STRIPE_PRICE_PRO=price_...
 NEXT_PUBLIC_STRIPE_PRICE_STUDIO=price_...
 OPENAI_API_KEY=sk-...
+FAL_KEY=...
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
@@ -285,6 +286,18 @@ clé IA principale) :
    et assure-toi que le compte a accès au modèle `gpt-image-1`.
 2. Colle-la dans `OPENAI_API_KEY`.
 3. Redémarre `npm run dev`.
+
+**fal.ai / FLUX.1 Kontext [Max]** (`/impress`, "Impressionne tes potes"
+uniquement — insertion d'un objet réel dans une photo existante ; utilisé en
+priorité sur ce point d'entrée précis dès que `FAL_KEY` est configurée,
+avant OpenAI et Gemini, voir `lib/fal.ts`) :
+1. Crée un compte sur [fal.ai](https://fal.ai) et active la facturation
+   (pay-as-you-go, aucun abonnement) sur
+   [fal.ai/dashboard/billing](https://fal.ai/dashboard/billing).
+2. Génère une clé sur
+   [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys).
+3. Colle-la dans `FAL_KEY`, redémarre `npm run dev` (ou ajoute-la sur
+   Vercel et redéploie).
 
 Sans aucune des deux clés, l'appel renvoie une erreur claire (501) au
 lieu de planter — le reste du produit (styles filtres) continue de
