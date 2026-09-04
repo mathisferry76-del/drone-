@@ -257,7 +257,7 @@ export const CREDIT_PACKS: CreditPack[] = [
   {
     id: "pack-1000",
     credits: 1000,
-    price: "10€",
+    price: "9€",
     tagline: "5 générations",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_1000 ?? null,
     highlighted: true,
@@ -265,7 +265,7 @@ export const CREDIT_PACKS: CreditPack[] = [
   {
     id: "pack-3000",
     credits: 3000,
-    price: "30€",
+    price: "25€",
     tagline: "15 générations",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_3000 ?? null,
   },
