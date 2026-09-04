@@ -137,7 +137,7 @@ export default function Home() {
               <span className="text-emerald-400">✓</span> Crédits sans date d&apos;expiration
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="text-emerald-400">✓</span> Paiement sécurisé (Stripe)
+              <span className="text-blue-400">✓</span> Paiement sécurisé (Stripe)
             </span>
           </div>
 

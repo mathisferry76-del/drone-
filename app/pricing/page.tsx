@@ -83,7 +83,7 @@ export default function PricingPage() {
             <span className="text-emerald-400">✓</span> Crédits jamais perdus
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="text-emerald-400">✓</span> Paiement sécurisé par Stripe
+            <span className="text-blue-400">✓</span> Paiement sécurisé par Stripe
           </span>
         </div>
       </div>

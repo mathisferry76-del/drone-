@@ -149,7 +149,7 @@ function HeroContent() {
           <span className="text-emerald-400">✓</span> Sans engagement de durée
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="text-emerald-400">✓</span> Paiement sécurisé (Stripe)
+          <span className="text-blue-400">✓</span> Paiement sécurisé (Stripe)
         </span>
       </div>
       <div className="mt-8 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-300 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]">
