@@ -18,7 +18,6 @@ const RESULT_ACCENTS = [
 
 const RESULTS = [
   { id: "high-contrast-drama", niche: "Business / SaaS" },
-  { id: "muay-thai-fight", niche: "Sport / combat" },
 ];
 
 const FLEX_TAGS = [
@@ -258,7 +257,7 @@ export default function Home() {
           Un aperçu de ce que MIN IA peut créer, sur différents styles et
           thématiques.
         </p>
-        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div className="mx-auto mt-10 grid max-w-xl grid-cols-1 gap-6">
           {RESULTS.map((r, i) => {
             const accent = RESULT_ACCENTS[i % RESULT_ACCENTS.length];
             return (
