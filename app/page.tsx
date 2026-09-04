@@ -214,15 +214,6 @@ export default function Home() {
           {PRESETS.map((preset) => (
             <TiltCard key={preset.id} className="group">
               <div className="holo-border overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 transition hover:border-zinc-700 hover:shadow-[0_0_30px_-12px_theme(colors.emerald.400/40%)]">
-                <div className="relative aspect-video w-full overflow-hidden">
-                  <Image
-                    src={`/examples/${preset.id}.webp`}
-                    alt={`Exemple de miniature générée avec le style ${preset.name}`}
-                    fill
-                    sizes="(min-width: 1024px) 25vw, (min-width: 640px) 50vw, 100vw"
-                    className="object-cover transition duration-300 group-hover:scale-105"
-                  />
-                </div>
                 <div className="p-6">
                   <h3 className="font-bold">{preset.name}</h3>
                   <p className="mt-1 text-sm text-zinc-400">{preset.description}</p>
