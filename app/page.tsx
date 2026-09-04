@@ -105,9 +105,9 @@ export default function Home() {
             ✨ Impressionne tes potes
           </span>
           <HeroTitle className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-            Fais semblant jusqu&apos;à ce que tu aies l&apos;air{" "}
+            Pretend until you look{" "}
             <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-              vrai
+              real
             </span>
           </HeroTitle>
           <p className="mt-6 max-w-xl text-lg text-zinc-400">
