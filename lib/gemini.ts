@@ -34,7 +34,8 @@ interface GeminiImageInput {
 // (the model can also just reply with text, e.g. refusing the request).
 export async function editImageWithGemini(
   images: GeminiImageInput[],
-  prompt: string
+  prompt: string,
+  signal?: AbortSignal
 ): Promise<Buffer> {
   const key = getGeminiKey();
   if (!key) {
@@ -54,6 +55,7 @@ export async function editImageWithGemini(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts }] }),
+      signal,
     }
   );
 

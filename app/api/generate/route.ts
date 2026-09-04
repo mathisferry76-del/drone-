@@ -191,7 +191,8 @@ async function applyTargetedEdit(
   baseBuffer: Buffer,
   instruction: string,
   zone: EditZone,
-  face: FacePreserve | null
+  face: FacePreserve | null,
+  signal?: AbortSignal
 ): Promise<Buffer> {
   const openai = getOpenAI();
   if (!openai) {
@@ -218,15 +219,18 @@ async function applyTargetedEdit(
   // formats too.
   const { size: editSize } = pickOpenAiSize(width, height);
 
-  const result = await openai.images.edit({
-    model: "gpt-image-1",
-    image: uploadable,
-    mask: maskUploadable,
-    prompt,
-    size: editSize,
-    quality: "high",
-    input_fidelity: "high",
-  });
+  const result = await openai.images.edit(
+    {
+      model: "gpt-image-1",
+      image: uploadable,
+      mask: maskUploadable,
+      prompt,
+      size: editSize,
+      quality: "high",
+      input_fidelity: "high",
+    },
+    { signal }
+  );
 
   const b64 = result.data?.[0]?.b64_json;
   if (!b64) {
@@ -705,7 +709,8 @@ async function applyAiEnhancement(
   references: { buffer: Buffer }[],
   facePreserve: FacePreserve | null,
   targetWidth: number,
-  targetHeight: number
+  targetHeight: number,
+  signal?: AbortSignal
 ): Promise<{ buffer: Buffer; face: FacePreserve | null }> {
   const openai = getOpenAI();
   if (!openai) {
@@ -783,19 +788,22 @@ async function applyAiEnhancement(
     ? `${basePrompt}${faceLockNote}${referenceNote} Also incorporate these specific instructions from the user: ${userDescription.trim()}`
     : `${basePrompt}${faceLockNote}${referenceNote}`;
 
-  const result = await openai.images.edit({
-    model: "gpt-image-1",
-    image: images.length > 1 ? images : images[0],
-    ...(maskUploadable ? { mask: maskUploadable } : {}),
-    prompt,
-    size: aiSize.size,
-    quality: "high",
-    // Defaults to "low" — tells the model to spend real effort matching the
-    // input's facial features instead of loosely reinterpreting them. Kept
-    // even with a mask: it also governs fidelity right at the mask's edge
-    // (hair, ears) where the model still has creative freedom.
-    input_fidelity: "high",
-  });
+  const result = await openai.images.edit(
+    {
+      model: "gpt-image-1",
+      image: images.length > 1 ? images : images[0],
+      ...(maskUploadable ? { mask: maskUploadable } : {}),
+      prompt,
+      size: aiSize.size,
+      quality: "high",
+      // Defaults to "low" — tells the model to spend real effort matching the
+      // input's facial features instead of loosely reinterpreting them. Kept
+      // even with a mask: it also governs fidelity right at the mask's edge
+      // (hair, ears) where the model still has creative freedom.
+      input_fidelity: "high",
+    },
+    { signal }
+  );
 
   const b64 = result.data?.[0]?.b64_json;
   if (!b64) {
@@ -818,7 +826,8 @@ async function applyGeminiEnhancement(
   preset: Preset,
   userDescription: string,
   references: { buffer: Buffer }[],
-  facePreserve: FacePreserve | null
+  facePreserve: FacePreserve | null,
+  signal?: AbortSignal
 ): Promise<{ buffer: Buffer; face: FacePreserve | null }> {
   let normalizedInput: Buffer;
   try {
@@ -857,7 +866,7 @@ async function applyGeminiEnhancement(
     ? `${basePrompt} Also incorporate these specific instructions from the user: ${userDescription.trim()}`
     : basePrompt;
 
-  const buffer = await editImageWithGemini(images, prompt);
+  const buffer = await editImageWithGemini(images, prompt, signal);
   // Unlike OpenAI, nothing here forces the output into a fixed frame that
   // needs the face zone remapped (see prepareAiInput) — Gemini preserves
   // the input's overall framing closely in practice, so the *original*
@@ -1177,7 +1186,8 @@ export async function POST(req: NextRequest) {
               preset,
               aiDescription,
               references,
-              facePreserve
+              facePreserve,
+              req.signal
             );
             aiBuffer = enhanced.buffer;
             faceForEdits = enhanced.face;
@@ -1189,14 +1199,23 @@ export async function POST(req: NextRequest) {
               references,
               facePreserve,
               canvasWidth,
-              canvasHeight
+              canvasHeight,
+              req.signal
             );
             aiBuffer = enhanced.buffer;
             faceForEdits = enhanced.face;
           }
           usedOpenAiCall = true;
         } catch (err) {
+          // Refunds the reservation whether the call genuinely failed or the
+          // client cancelled (see the Annuler button in the UI) — either
+          // way no generation was delivered. req.signal was threaded into
+          // the OpenAI/Gemini call above too, so cancelling also aborts the
+          // actual outbound request instead of letting it finish uselessly.
           await releaseReservationIfNeeded();
+          if (req.signal.aborted) {
+            return NextResponse.json({ error: "Génération annulée." }, { status: 499 });
+          }
           if (err instanceof AiNotConfiguredError) {
             return NextResponse.json({ error: err.message }, { status: 501 });
           }
@@ -1214,10 +1233,13 @@ export async function POST(req: NextRequest) {
       // we ended up with above (fresh or cached).
       if (editZone && editInstruction) {
         try {
-          aiBuffer = await applyTargetedEdit(aiBuffer, editInstruction, editZone, faceForEdits);
+          aiBuffer = await applyTargetedEdit(aiBuffer, editInstruction, editZone, faceForEdits, req.signal);
           usedOpenAiCall = true;
         } catch (err) {
           await releaseReservationIfNeeded();
+          if (req.signal.aborted) {
+            return NextResponse.json({ error: "Génération annulée." }, { status: 499 });
+          }
           if (err instanceof AiNotConfiguredError) {
             return NextResponse.json({ error: err.message }, { status: 501 });
           }

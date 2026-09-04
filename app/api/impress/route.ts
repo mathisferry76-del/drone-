@@ -209,22 +209,25 @@ export async function POST(req: NextRequest) {
 
     try {
       if (provider === "flux") {
-        resultBuffer = await editImageWithFlux(normalizedInput, prompt);
+        resultBuffer = await editImageWithFlux(normalizedInput, prompt, req.signal);
       } else if (provider === "openai" && openai) {
         const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
-        const result = await openai.images.edit({
-          model: "gpt-image-1",
-          image: uploadable,
-          prompt,
-          size: openAiEditSize,
-          quality: "high",
-          input_fidelity: "high",
-        });
+        const result = await openai.images.edit(
+          {
+            model: "gpt-image-1",
+            image: uploadable,
+            prompt,
+            size: openAiEditSize,
+            quality: "high",
+            input_fidelity: "high",
+          },
+          { signal: req.signal }
+        );
         const b64 = result.data?.[0]?.b64_json;
         if (!b64) throw new Error("OpenAI n'a renvoyé aucune image.");
         resultBuffer = Buffer.from(b64, "base64");
       } else if (provider === "gemini") {
-        resultBuffer = await editImageWithGemini([{ buffer: normalizedInput }], prompt);
+        resultBuffer = await editImageWithGemini([{ buffer: normalizedInput }], prompt, req.signal);
       } else {
         await releaseReservationIfNeeded();
         return NextResponse.json(
@@ -233,7 +236,16 @@ export async function POST(req: NextRequest) {
         );
       }
     } catch (err) {
+      // Refunds the trial/credits reservation whether the AI call genuinely
+      // failed or the client aborted the request (cancel button) — either
+      // way, no generation was delivered, so nothing should be charged.
+      // Passing req.signal into each provider call above also aborts the
+      // actual outbound request to OpenAI/Gemini/fal.ai when the client
+      // cancels, instead of letting it finish (and get billed) uselessly.
       await releaseReservationIfNeeded();
+      if (req.signal.aborted) {
+        return NextResponse.json({ error: "Génération annulée." }, { status: 499 });
+      }
       console.error(`${provider} impress error`, err);
       const message =
         provider === "flux"

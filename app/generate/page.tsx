@@ -218,6 +218,12 @@ export default function GeneratePage() {
   const [showOriginal, setShowOriginal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lets the "Annuler" button interrupt an in-flight generation — aborting
+  // the fetch also aborts the actual outbound request to the AI provider
+  // server-side (see app/api/generate/route.ts), and the server refunds the
+  // trial/credits reservation either way, so cancelling costs nothing on
+  // either side.
+  const abortControllerRef = useRef<AbortController | null>(null);
   const [aiEnhance, setAiEnhance] = useState(false);
   const [aiDescription, setAiDescription] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -590,6 +596,9 @@ export default function GeneratePage() {
     // reflect the trial as consumed.
     const usingTrial = willUseAi && hasFreeTrialAvailable;
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     try {
       const formData = new FormData();
@@ -640,6 +649,7 @@ export default function GeneratePage() {
         method: "POST",
         headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
         body: formData,
+        signal: controller.signal,
       });
       const data = await res.json();
 
@@ -664,11 +674,23 @@ export default function GeneratePage() {
       // The server already updated the real quota/history — just pull the
       // fresh numbers instead of guessing them locally.
       await refetchProfile();
-    } catch {
-      setError("Impossible de contacter le serveur. Réessaie.");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // User-initiated cancel, not a real error — the server has already
+        // (or is about to) refund the trial/credits reservation, so just
+        // resync the displayed balance once that's had time to land.
+        setTimeout(refetchProfile, 800);
+      } else {
+        setError("Impossible de contacter le serveur. Réessaie.");
+      }
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
+  }
+
+  function handleCancelGenerate() {
+    abortControllerRef.current?.abort();
   }
 
   // Pas de compte -> on ne montre même pas l'éditeur, juste l'invite à se
@@ -1582,7 +1604,7 @@ export default function GeneratePage() {
             </p>
           )}
 
-          {willUseAi && (
+          {willUseAi && !loading && (
             <p className="text-xs text-zinc-500">
               {willDoTargetedEdit
                 ? "🎯 Retouche ciblée : une vraie génération IA va appliquer ce changement dans la zone marquée (~10-15s, consomme ton quota IA)."
@@ -1592,19 +1614,30 @@ export default function GeneratePage() {
             </p>
           )}
 
-          <button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:opacity-60"
-          >
-            {loading
-              ? willDoTargetedEdit
-                ? "Retouche ciblée en cours..."
-                : willUseAi && !willReuseAiBase
-                ? "Génération IA en cours (10-20s)..."
-                : "Génération..."
-              : "Générer la miniature"}
-          </button>
+          {loading ? (
+            <>
+              <p className="text-xs text-zinc-500">
+                {willDoTargetedEdit
+                  ? "Retouche ciblée en cours..."
+                  : willUseAi && !willReuseAiBase
+                  ? "Génération IA en cours (10-20s)... tu peux annuler si tu as oublié un détail."
+                  : "Génération..."}
+              </p>
+              <button
+                onClick={handleCancelGenerate}
+                className="w-full rounded-full border border-red-500/60 px-6 py-3 font-bold text-red-400 transition hover:bg-red-500/10"
+              >
+                Annuler
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:opacity-60"
+            >
+              Générer la miniature
+            </button>
+          )}
         </div>
 
         <div className="lg:sticky lg:top-6 lg:self-start">

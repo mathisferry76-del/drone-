@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { CREDIT_PACKS, GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
@@ -37,6 +37,12 @@ export default function ImpressPage() {
   // of forcing every photo into a fixed 16:9 "YouTube" box.
   const [previewAspect, setPreviewAspect] = useState<number | null>(null);
   const [resultAspect, setResultAspect] = useState<number | null>(null);
+  // Lets the "Annuler" button interrupt an in-flight generation — aborting
+  // the fetch also aborts the actual outbound request to the AI provider
+  // server-side (see app/api/impress/route.ts), and the server refunds the
+  // trial/credits reservation either way, so cancelling costs nothing on
+  // either side.
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -96,6 +102,9 @@ export default function ImpressPage() {
     // would already reflect the trial as consumed.
     const usingTrial = hasFreeTrialAvailable;
 
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setLoading(true);
     try {
       const formData = new FormData();
@@ -106,6 +115,7 @@ export default function ImpressPage() {
         method: "POST",
         headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
         body: formData,
+        signal: controller.signal,
       });
       const data = await res.json();
 
@@ -129,11 +139,33 @@ export default function ImpressPage() {
           .single();
         if (fresh) setProfile(fresh as Profile);
       }
-    } catch {
-      setError("Impossible de contacter le serveur. Réessaie.");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        // User-initiated cancel, not a real error — the server has already
+        // (or is about to) refund the trial/credits reservation, so just
+        // resync the displayed balance once that's had time to land.
+        if (session) {
+          setTimeout(async () => {
+            const supabase = getSupabaseBrowser();
+            const { data: fresh } = await supabase!
+              .from("profiles")
+              .select("*")
+              .eq("id", session.user.id)
+              .single();
+            if (fresh) setProfile(fresh as Profile);
+          }, 800);
+        }
+      } else {
+        setError("Impossible de contacter le serveur. Réessaie.");
+      }
     } finally {
       setLoading(false);
+      abortControllerRef.current = null;
     }
+  }
+
+  function handleCancelGenerate() {
+    abortControllerRef.current?.abort();
   }
 
   async function handleBuyCredits(packId: string, priceId: string | null) {
@@ -334,13 +366,22 @@ export default function ImpressPage() {
 
           {error && <p className="text-sm text-red-400">{error}</p>}
 
-          <button
-            onClick={handleGenerate}
-            disabled={loading || !file}
-            className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? "Retouche en cours..." : "Générer →"}
-          </button>
+          {loading ? (
+            <button
+              onClick={handleCancelGenerate}
+              className="w-full rounded-full border border-red-500/60 px-6 py-3 font-bold text-red-400 transition hover:bg-red-500/10"
+            >
+              Annuler
+            </button>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={!file}
+              className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Générer →
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col gap-3">

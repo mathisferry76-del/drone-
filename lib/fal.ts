@@ -40,7 +40,11 @@ export class FalApiError extends Error {
 // Blob/File it finds to fal's storage before sending the request (see
 // node_modules/@fal-ai/client/src/storage.js transformInput) — no manual
 // fal.storage.upload() call needed.
-export async function editImageWithFlux(image: Buffer, prompt: string): Promise<Buffer> {
+export async function editImageWithFlux(
+  image: Buffer,
+  prompt: string,
+  signal?: AbortSignal
+): Promise<Buffer> {
   const key = getFalKey();
   if (!key) {
     throw new Error("fal.ai n'est pas configuré (FAL_KEY manquante).");
@@ -53,6 +57,7 @@ export async function editImageWithFlux(image: Buffer, prompt: string): Promise<
         prompt,
         image_url: new Blob([new Uint8Array(image)], { type: "image/png" }),
       },
+      abortSignal: signal,
     });
 
     const url = result.data.images?.[0]?.url;
@@ -60,7 +65,7 @@ export async function editImageWithFlux(image: Buffer, prompt: string): Promise<
       throw new Error("fal.ai n'a renvoyé aucune image.");
     }
 
-    const res = await fetch(url);
+    const res = await fetch(url, { signal });
     if (!res.ok) {
       throw new Error(`Téléchargement de l'image générée par fal.ai impossible (${res.status}).`);
     }
