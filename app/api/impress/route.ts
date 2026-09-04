@@ -174,6 +174,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // gpt-image-1's edit endpoint only offers 3 fixed canvases (square,
+    // landscape 3:2, portrait 2:3) — always sending "1024x1024" squeezed
+    // every non-square photo (portrait phone shots especially) into a
+    // square, visibly distorting it. Picking whichever of the 3 is closest
+    // to the actual photo's own aspect ratio keeps a phone photo tall, a
+    // landscape photo wide, and only forces a real square photo into
+    // "1024x1024" — never a shape the photo wasn't already close to.
+    const inputMeta = await sharp(normalizedInput).metadata();
+    const inputAspect = (inputMeta.width ?? 1) / (inputMeta.height ?? 1);
+    const openAiEditSize: "1024x1024" | "1024x1536" | "1536x1024" =
+      inputAspect > 1.15 ? "1536x1024" : inputAspect < 0.87 ? "1024x1536" : "1024x1024";
+
     const prompt = buildImpressPrompt(description);
     // Unlike /api/generate (thumbnails, where Gemini's stylized regeneration
     // is preferred), this route prioritizes OpenAI's gpt-image-1 first —
@@ -193,7 +205,7 @@ export async function POST(req: NextRequest) {
           model: "gpt-image-1",
           image: uploadable,
           prompt,
-          size: "1024x1024",
+          size: openAiEditSize,
           quality: "high",
           input_fidelity: "high",
         });

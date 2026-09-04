@@ -32,6 +32,11 @@ export default function ImpressPage() {
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultWasTrial, setResultWasTrial] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
+  // Tracks each image's real aspect ratio so the preview/result boxes show
+  // the photo as sent — portrait stays tall, landscape stays wide — instead
+  // of forcing every photo into a fixed 16:9 "YouTube" box.
+  const [previewAspect, setPreviewAspect] = useState<number | null>(null);
+  const [resultAspect, setResultAspect] = useState<number | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -66,6 +71,8 @@ export default function ImpressPage() {
     setFile(f);
     setError(null);
     setResultUrl(null);
+    setResultAspect(null);
+    setPreviewAspect(null);
     const reader = new FileReader();
     reader.onload = () => setPreviewUrl(reader.result as string);
     reader.readAsDataURL(f);
@@ -263,10 +270,22 @@ export default function ImpressPage() {
         <div className="space-y-6">
           <div>
             <label className="mb-2 block text-sm font-semibold text-zinc-300">1. Ta photo</label>
-            <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950">
+            <div
+              className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950 ${
+                previewUrl ? "" : "aspect-video"
+              }`}
+              style={previewUrl && previewAspect ? { aspectRatio: previewAspect, maxHeight: "70vh" } : undefined}
+            >
               {previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={previewUrl} alt="Aperçu" className="h-full w-full object-contain" />
+                <img
+                  src={previewUrl}
+                  alt="Aperçu"
+                  className="h-full w-full object-contain"
+                  onLoad={(e) =>
+                    setPreviewAspect(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
+                  }
+                />
               ) : (
                 <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center text-zinc-400 transition hover:border-zinc-500">
                   <span className="text-3xl">📷</span>
@@ -343,7 +362,12 @@ export default function ImpressPage() {
               </button>
             </div>
           )}
-          <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50">
+          <div
+            className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 ${
+              resultUrl ? "" : "aspect-video"
+            }`}
+            style={resultUrl && resultAspect ? { aspectRatio: resultAspect, maxHeight: "70vh" } : undefined}
+          >
             {loading ? (
               <GeneratingCard label="Retouche en cours..." />
             ) : resultUrl ? (
@@ -352,9 +376,14 @@ export default function ImpressPage() {
                 <img
                   src={showOriginal && previewUrl ? previewUrl : resultUrl}
                   alt={showOriginal ? "Photo originale" : "Résultat généré"}
-                  className={`h-full w-full object-cover ${
+                  className={`h-full w-full object-contain ${
                     resultWasTrial && !showOriginal ? "scale-110 blur-xl" : ""
                   }`}
+                  onLoad={(e) => {
+                    if (!showOriginal) {
+                      setResultAspect(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight);
+                    }
+                  }}
                 />
                 {resultWasTrial && !showOriginal && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 p-6 text-center">
