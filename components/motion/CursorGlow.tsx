@@ -28,7 +28,7 @@ export default function CursorGlow() {
   return (
     <motion.div
       aria-hidden
-      className="pointer-events-none fixed left-0 top-0 z-30 hidden h-[36rem] w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,theme(colors.yellow.400/7%),transparent_70%)] md:block"
+      className="pointer-events-none fixed left-0 top-0 z-30 hidden h-[36rem] w-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,theme(colors.emerald.400/7%),transparent_70%)] md:block"
       style={{ x: springX, y: springY }}
     />
   );

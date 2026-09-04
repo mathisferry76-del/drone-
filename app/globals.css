@@ -59,9 +59,9 @@
   background: linear-gradient(
     100deg,
     transparent 30%,
-    theme(colors.yellow.400/70%) 45%,
-    theme(colors.orange.400/70%) 50%,
-    theme(colors.yellow.400/70%) 55%,
+    theme(colors.emerald.400/70%) 45%,
+    theme(colors.teal.500/70%) 50%,
+    theme(colors.emerald.400/70%) 55%,
     transparent 70%
   );
   background-size: 250% 100%;

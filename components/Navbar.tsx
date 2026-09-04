@@ -35,7 +35,7 @@ export default function Navbar() {
           className="flex shrink-0 items-center gap-2 text-lg font-extrabold tracking-tight text-white"
           onClick={() => setOpen(false)}
         >
-          <span className="rounded bg-yellow-400 px-1.5 py-0.5 text-black">MIN</span>
+          <span className="rounded bg-emerald-400 px-1.5 py-0.5 text-black">MIN</span>
           IA
         </Link>
 
@@ -70,7 +70,7 @@ export default function Navbar() {
           )}
           <Link
             href="/impress"
-            className="rounded-full bg-yellow-400 px-4 py-2 font-bold text-black transition hover:bg-yellow-300"
+            className="rounded-full bg-emerald-400 px-4 py-2 font-bold text-black transition hover:bg-emerald-300"
           >
             Essayer gratuitement
           </Link>
@@ -79,7 +79,7 @@ export default function Navbar() {
         <div className="flex items-center gap-3 sm:hidden">
           <Link
             href="/impress"
-            className="rounded-full bg-yellow-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-300"
+            className="rounded-full bg-emerald-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-emerald-300"
           >
             Essayer
           </Link>

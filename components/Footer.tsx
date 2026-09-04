@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="mx-auto grid w-full max-w-6xl grid-cols-1 gap-10 px-6 py-14 sm:grid-cols-3">
         <div>
           <div className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-white">
-            <span className="rounded bg-yellow-400 px-1.5 py-0.5 text-black">MIN</span>
+            <span className="rounded bg-emerald-400 px-1.5 py-0.5 text-black">MIN</span>
             IA
           </div>
           <p className="mt-3 max-w-xs text-sm text-zinc-500">

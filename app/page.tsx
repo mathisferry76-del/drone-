@@ -11,7 +11,7 @@ import GradientOrb from "@/components/motion/GradientOrb";
 import FaqAccordion from "@/components/FaqAccordion";
 
 const RESULT_ACCENTS = [
-  { border: "border-yellow-400/30 hover:border-yellow-400/60", tag: "bg-yellow-400 text-black" },
+  { border: "border-emerald-400/30 hover:border-emerald-400/60", tag: "bg-emerald-400 text-black" },
   { border: "border-fuchsia-400/30 hover:border-fuchsia-400/60", tag: "bg-fuchsia-400 text-black" },
   { border: "border-cyan-400/30 hover:border-cyan-400/60", tag: "bg-cyan-400 text-black" },
 ];
@@ -83,11 +83,11 @@ export default function Home() {
         <div aria-hidden className="sci-grid pointer-events-none absolute inset-x-0 top-0 h-[36rem]" />
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-40 h-[32rem] bg-[radial-gradient(ellipse_at_top,theme(colors.yellow.400/18%),transparent_65%)] [animation:drift-glow_14s_ease-in-out_infinite]"
+          className="pointer-events-none absolute inset-x-0 -top-40 h-[32rem] bg-[radial-gradient(ellipse_at_top,theme(colors.emerald.400/18%),transparent_65%)] [animation:drift-glow_14s_ease-in-out_infinite]"
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 -top-20 h-[28rem] bg-[radial-gradient(ellipse_at_top,theme(colors.orange.500/12%),transparent_60%)] [animation:drift-glow-alt_18s_ease-in-out_infinite]"
+          className="pointer-events-none absolute inset-x-0 -top-20 h-[28rem] bg-[radial-gradient(ellipse_at_top,theme(colors.teal.600/12%),transparent_60%)] [animation:drift-glow-alt_18s_ease-in-out_infinite]"
         />
         <GradientOrb
           color="rgba(217,70,239,0.14)"
@@ -106,7 +106,7 @@ export default function Home() {
           </span>
           <HeroTitle className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
             Pretend until you look{" "}
-            <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-emerald-400 to-teal-600 bg-clip-text text-transparent">
               real
             </span>
           </HeroTitle>
@@ -118,7 +118,7 @@ export default function Home() {
           <div className="mt-8 flex flex-col gap-4 sm:flex-row">
             <Link
               href="/impress"
-              className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
+              className="rounded-full bg-emerald-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.emerald.400)] transition hover:scale-105 hover:bg-emerald-300"
             >
               Essayer avec ma photo →
             </Link>
@@ -157,7 +157,7 @@ export default function Home() {
           className="text-sm font-semibold uppercase tracking-wide text-zinc-600"
           items={FLEX_TAGS.map((t) => (
             <span key={t} className="flex items-center gap-2">
-              {t} <span className="text-yellow-400/50">✦</span>
+              {t} <span className="text-emerald-400/50">✦</span>
             </span>
           ))}
         />
@@ -176,7 +176,7 @@ export default function Home() {
         <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {FLEX_EXAMPLES.map((ex) => (
             <TiltCard key={ex.label}>
-              <div className="flex h-full flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 text-center transition hover:border-yellow-400/40">
+              <div className="flex h-full flex-col items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6 text-center transition hover:border-emerald-400/40">
                 <span className="text-4xl">{ex.icon}</span>
                 <h3 className="font-bold">{ex.label}</h3>
                 <p className="text-xs text-zinc-500">&quot;{ex.prompt}&quot;</p>
@@ -187,7 +187,7 @@ export default function Home() {
         <div className="mt-10 flex justify-center">
           <Link
             href="/impress"
-            className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
+            className="rounded-full bg-emerald-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.emerald.400)] transition hover:scale-105 hover:bg-emerald-300"
           >
             Essayer avec ma photo →
           </Link>
@@ -214,7 +214,7 @@ export default function Home() {
         <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
           {PRESETS.map((preset) => (
             <TiltCard key={preset.id} className="group">
-              <div className="holo-border overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 transition hover:border-zinc-700 hover:shadow-[0_0_30px_-12px_theme(colors.yellow.400/40%)]">
+              <div className="holo-border overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 transition hover:border-zinc-700 hover:shadow-[0_0_30px_-12px_theme(colors.emerald.400/40%)]">
                 <div className="relative aspect-video w-full overflow-hidden">
                   <Image
                     src={`/examples/${preset.id}.webp`}
@@ -284,7 +284,7 @@ export default function Home() {
         </div>
         <p className="mt-8 text-center text-sm text-zinc-500">
           Envie du même résultat sur tes propres photos ?{" "}
-          <Link href="/generate" className="font-semibold text-yellow-400 hover:text-yellow-300">
+          <Link href="/generate" className="font-semibold text-emerald-400 hover:text-emerald-300">
             Essayer maintenant →
           </Link>
         </p>
@@ -296,13 +296,13 @@ export default function Home() {
           {[
             {
               n: "1",
-              grad: "from-yellow-400 to-orange-500",
+              grad: "from-emerald-400 to-teal-600",
               title: "Upload ta photo",
               body: "Une photo de toi, de ton setup ou de ton sujet — n'importe quelle image de départ.",
             },
             {
               n: "2",
-              grad: "from-orange-500 to-fuchsia-500",
+              grad: "from-teal-600 to-fuchsia-500",
               title: "Choisis un format + un style",
               body: "YouTube, Shorts, TikTok, Instagram... et un style calibré pour le CTR — tu ajoutes juste ton texte d'accroche.",
             },
@@ -338,7 +338,7 @@ export default function Home() {
               key={f.id}
               className={`rounded-full border px-4 py-1.5 text-sm font-semibold transition hover:scale-105 ${
                 i % 3 === 0
-                  ? "border-yellow-400/30 text-yellow-300"
+                  ? "border-emerald-400/30 text-emerald-300"
                   : i % 3 === 1
                     ? "border-fuchsia-400/30 text-fuchsia-300"
                     : "border-cyan-400/30 text-cyan-300"
@@ -369,8 +369,8 @@ export default function Home() {
             </div>
           </TiltCard>
           <TiltCard>
-            <div className="holo-border h-full rounded-2xl border border-yellow-800/40 bg-yellow-400/5 p-6">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-yellow-400/10 text-2xl">
+            <div className="holo-border h-full rounded-2xl border border-emerald-800/40 bg-emerald-400/5 p-6">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/10 text-2xl">
                 ✨
               </div>
               <h3 className="mt-4 font-bold">IA générative (tous les plans)</h3>
@@ -409,7 +409,7 @@ export default function Home() {
         </h2>
         <Link
           href="/generate"
-          className="mt-6 inline-block rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
+          className="mt-6 inline-block rounded-full bg-emerald-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.emerald.400)] transition hover:scale-105 hover:bg-emerald-300"
         >
           Créer ma miniature
         </Link>

@@ -100,12 +100,12 @@ export default function PricingPage() {
             key={tier.id}
             className={`flex flex-col rounded-2xl border p-8 ${
               tier.highlighted
-                ? "border-yellow-400 bg-yellow-400/5"
+                ? "border-emerald-400 bg-emerald-400/5"
                 : "border-zinc-800 bg-zinc-900/40"
             }`}
           >
             {tier.highlighted && (
-              <span className="mb-3 w-fit rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
+              <span className="mb-3 w-fit rounded-full bg-emerald-400 px-3 py-1 text-xs font-bold text-black">
                 Le plus choisi
               </span>
             )}
@@ -124,7 +124,7 @@ export default function PricingPage() {
               disabled={loadingId === tier.id}
               className={`mt-8 rounded-full px-6 py-3 text-center font-bold transition disabled:opacity-60 ${
                 tier.highlighted
-                  ? "bg-yellow-400 text-black hover:bg-yellow-300"
+                  ? "bg-emerald-400 text-black hover:bg-emerald-300"
                   : "border border-zinc-600 text-white hover:border-zinc-400"
               }`}
             >
@@ -181,7 +181,7 @@ export default function PricingPage() {
             ne s&apos;expirent jamais.
           </p>
         </div>
-        <div className="rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-6">
+        <div className="rounded-xl border border-emerald-800/40 bg-emerald-400/5 p-6">
           <h3 className="font-bold text-zinc-100">
             L&apos;IA générative : ce qu&apos;elle fait vraiment
           </h3>

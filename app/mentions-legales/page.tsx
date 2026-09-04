@@ -16,7 +16,7 @@ export default function MentionsLegalesPage() {
           Le site MIN IA (accessible à l&apos;adresse min-ia.fr) est édité par :<br />
           Mathis Ferry<br />
           Rue du Général Koenig, 76360 Barentin, France<br />
-          Email : <a href="mailto:contact@min-ia.fr" className="text-yellow-400 hover:underline">contact@min-ia.fr</a>
+          Email : <a href="mailto:contact@min-ia.fr" className="text-emerald-400 hover:underline">contact@min-ia.fr</a>
         </p>
         <p className="text-zinc-500">
           Activité exercée à titre individuel, en cours d&apos;immatriculation en
@@ -32,7 +32,7 @@ export default function MentionsLegalesPage() {
           Le site est hébergé par :<br />
           Vercel Inc.<br />
           340 S Lemon Ave #4133, Walnut, CA 91789, États-Unis<br />
-          <a href="https://vercel.com" target="_blank" rel="noreferrer" className="text-yellow-400 hover:underline">
+          <a href="https://vercel.com" target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">
             vercel.com
           </a>
         </p>
@@ -60,7 +60,7 @@ export default function MentionsLegalesPage() {
         <h2 className="text-lg font-bold text-white">Données personnelles</h2>
         <p>
           Le traitement de tes données personnelles est détaillé dans notre{" "}
-          <a href="/confidentialite" className="text-yellow-400 hover:underline">
+          <a href="/confidentialite" className="text-emerald-400 hover:underline">
             politique de confidentialité
           </a>.
         </p>
@@ -70,7 +70,7 @@ export default function MentionsLegalesPage() {
         <h2 className="text-lg font-bold text-white">Contact</h2>
         <p>
           Pour toute question relative au site ou à ces mentions légales :{" "}
-          <a href="mailto:contact@min-ia.fr" className="text-yellow-400 hover:underline">
+          <a href="mailto:contact@min-ia.fr" className="text-emerald-400 hover:underline">
             contact@min-ia.fr
           </a>
         </p>

@@ -61,7 +61,7 @@ export default function ContactPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Mathis"
-              className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+              className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
             />
           </div>
 
@@ -75,7 +75,7 @@ export default function ContactPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="ton@email.com"
-              className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+              className="mt-1.5 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
             />
             <p className="mt-1 text-xs text-zinc-500">Pour qu&apos;on puisse te répondre.</p>
           </div>
@@ -92,7 +92,7 @@ export default function ContactPage() {
                   onClick={() => setCategory(c)}
                   className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
                     category === c
-                      ? "border-yellow-400 bg-yellow-400 text-black"
+                      ? "border-emerald-400 bg-emerald-400 text-black"
                       : "border-zinc-700 text-zinc-300 hover:border-zinc-500"
                   }`}
                 >
@@ -112,7 +112,7 @@ export default function ContactPage() {
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Décris ton avis, ton idée ou le problème rencontré..."
-              className="mt-1.5 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+              className="mt-1.5 w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
             />
           </div>
 
@@ -121,7 +121,7 @@ export default function ContactPage() {
           <button
             type="submit"
             disabled={status === "sending"}
-            className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
+            className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:opacity-60"
           >
             {status === "sending" ? "Envoi..." : "Envoyer"}
           </button>

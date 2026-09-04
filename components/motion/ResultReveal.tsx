@@ -82,7 +82,7 @@ export default function ResultReveal({
             <motion.img
               src={activeSrc}
               alt="Ta miniature générée"
-              className="max-h-[70vh] max-w-[70vw] rounded-2xl border border-yellow-400/60 object-contain shadow-[0_0_140px_-15px_theme(colors.yellow.400/80%)]"
+              className="max-h-[70vh] max-w-[70vw] rounded-2xl border border-emerald-400/60 object-contain shadow-[0_0_140px_-15px_theme(colors.emerald.400/80%)]"
               initial={{ scale: 0.12, rotate: -30, rotateY: 180, opacity: 0 }}
               animate={{ scale: 1, rotate: 0, rotateY: 0, opacity: 1 }}
               transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
@@ -94,7 +94,7 @@ export default function ResultReveal({
               <motion.span
                 key={s.id}
                 aria-hidden
-                className="absolute z-10 text-yellow-300"
+                className="absolute z-10 text-emerald-300"
                 style={{ fontSize: s.size, filter: "drop-shadow(0 0 6px rgba(250,204,21,0.9))" }}
                 initial={{ x: 0, y: 0, opacity: 1, scale: 0, rotate: 0 }}
                 animate={{ x: s.x, y: s.y, opacity: 0, scale: 1, rotate: s.rotate }}

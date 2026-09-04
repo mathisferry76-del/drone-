@@ -85,7 +85,7 @@ export default function ComptePage() {
         <p className="mt-3 text-zinc-400">Connecte-toi pour gérer ton compte.</p>
         <Link
           href="/login"
-          className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
+          className="mt-6 rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300"
         >
           Se connecter
         </Link>
@@ -118,13 +118,13 @@ export default function ComptePage() {
           </div>
         </dl>
         <div className="mt-4 flex flex-wrap gap-4 text-sm font-semibold">
-          <Link href="/pricing" className="text-yellow-400 hover:underline">
+          <Link href="/pricing" className="text-emerald-400 hover:underline">
             {profile?.plan ? "Changer de palier / acheter des crédits →" : "Voir les abonnements et packs →"}
           </Link>
-          <Link href="/historique" className="text-yellow-400 hover:underline">
+          <Link href="/historique" className="text-emerald-400 hover:underline">
             Mon historique →
           </Link>
-          <Link href="/parrainage" className="text-yellow-400 hover:underline">
+          <Link href="/parrainage" className="text-emerald-400 hover:underline">
             Mon parrainage →
           </Link>
         </div>
@@ -133,7 +133,7 @@ export default function ComptePage() {
             <button
               onClick={handleManageSubscription}
               disabled={portalLoading}
-              className="rounded-full border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-60"
+              className="rounded-full border border-zinc-700 px-5 py-2.5 text-sm font-semibold text-zinc-200 transition hover:border-emerald-400 hover:text-emerald-400 disabled:opacity-60"
             >
               {portalLoading
                 ? "..."
@@ -161,12 +161,12 @@ export default function ComptePage() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             placeholder="Nouveau mot de passe (8 caractères min.)"
-            className="w-full max-w-xs rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+            className="w-full max-w-xs rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
           />
           <button
             type="submit"
             disabled={passwordStatus === "saving"}
-            className="shrink-0 rounded-full bg-yellow-400 px-6 py-3 text-sm font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
+            className="shrink-0 rounded-full bg-emerald-400 px-6 py-3 text-sm font-bold text-black transition hover:bg-emerald-300 disabled:opacity-60"
           >
             {passwordStatus === "saving" ? "..." : "Définir ce mot de passe"}
           </button>

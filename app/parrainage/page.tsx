@@ -44,7 +44,7 @@ export default function ParrainagePage() {
         </p>
         <Link
           href="/login"
-          className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
+          className="mt-6 rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300"
         >
           Se connecter
         </Link>
@@ -82,7 +82,7 @@ export default function ParrainagePage() {
       )}
 
       {link && (
-        <div className="mt-8 rounded-2xl border border-yellow-800/40 bg-yellow-400/5 p-6">
+        <div className="mt-8 rounded-2xl border border-emerald-800/40 bg-emerald-400/5 p-6">
           <label className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
             Ton lien de parrainage
           </label>
@@ -94,7 +94,7 @@ export default function ParrainagePage() {
             />
             <button
               onClick={handleCopy}
-              className="shrink-0 rounded-full bg-yellow-400 px-6 py-3 text-sm font-bold text-black transition hover:bg-yellow-300"
+              className="shrink-0 rounded-full bg-emerald-400 px-6 py-3 text-sm font-bold text-black transition hover:bg-emerald-300"
             >
               {copied ? "Copié !" : "Copier"}
             </button>
@@ -105,11 +105,11 @@ export default function ParrainagePage() {
       {data && (
         <div className="mt-8 grid grid-cols-2 gap-4">
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 text-center">
-            <div className="text-3xl font-extrabold text-yellow-400">{data.referredCount}</div>
+            <div className="text-3xl font-extrabold text-emerald-400">{data.referredCount}</div>
             <div className="mt-1 text-sm text-zinc-400">ami(s) inscrit(s)</div>
           </div>
           <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6 text-center">
-            <div className="text-3xl font-extrabold text-yellow-400">{data.creditsBalance}</div>
+            <div className="text-3xl font-extrabold text-emerald-400">{data.creditsBalance}</div>
             <div className="mt-1 text-sm text-zinc-400">crédits disponibles</div>
           </div>
         </div>

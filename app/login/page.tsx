@@ -199,7 +199,7 @@ function LoginForm() {
           type="button"
           onClick={() => switchMode("magic")}
           className={`flex-1 px-4 py-2 transition ${
-            mode === "magic" ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-white"
+            mode === "magic" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
           }`}
         >
           Lien magique
@@ -208,7 +208,7 @@ function LoginForm() {
           type="button"
           onClick={() => switchMode("password")}
           className={`flex-1 px-4 py-2 transition ${
-            mode === "password" ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-white"
+            mode === "password" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
           }`}
         >
           Mot de passe
@@ -224,7 +224,7 @@ function LoginForm() {
       </p>
 
       {refCode && (
-        <div className="mt-4 rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-3 text-sm text-yellow-300">
+        <div className="mt-4 rounded-xl border border-emerald-800/40 bg-emerald-400/5 p-3 text-sm text-emerald-300">
           🎁 Tu as été invité par un ami — vous recevrez chacun des
           miniatures gratuites bonus dès ton inscription.
         </div>
@@ -253,13 +253,13 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="ton@email.com"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
           />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <button
             type="submit"
             disabled={status === "sending"}
-            className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
+            className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:opacity-60"
           >
             {status === "sending" ? "Envoi..." : "Recevoir le lien de connexion"}
           </button>
@@ -272,7 +272,7 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="ton@email.com"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
           />
           <input
             type="password"
@@ -281,13 +281,13 @@ function LoginForm() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Mot de passe (8 caractères min.)"
-            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
           />
           {error && <p className="text-sm text-red-400">{error}</p>}
           <button
             type="submit"
             disabled={status === "sending"}
-            className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
+            className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:opacity-60"
           >
             {status === "sending"
               ? "..."
@@ -301,7 +301,7 @@ function LoginForm() {
               setPasswordAction((a) => (a === "signin" ? "signup" : "signin"));
               setError(null);
             }}
-            className="w-full text-center text-xs font-semibold text-yellow-400 hover:underline"
+            className="w-full text-center text-xs font-semibold text-emerald-400 hover:underline"
           >
             {passwordAction === "signin"
               ? "Pas encore de compte ? Créer un compte"

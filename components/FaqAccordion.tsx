@@ -22,7 +22,7 @@ export default function FaqAccordion({ items }: { items: FaqItem[] }) {
           <div
             key={item.q}
             className={`overflow-hidden rounded-xl border transition-colors ${
-              isOpen ? "border-yellow-400/40 bg-yellow-400/5" : "border-zinc-800 bg-zinc-900/40"
+              isOpen ? "border-emerald-400/40 bg-emerald-400/5" : "border-zinc-800 bg-zinc-900/40"
             }`}
           >
             <button
@@ -35,7 +35,7 @@ export default function FaqAccordion({ items }: { items: FaqItem[] }) {
                 animate={{ rotate: isOpen ? 45 : 0 }}
                 transition={{ duration: 0.25 }}
                 className={`flex h-6 w-6 flex-none items-center justify-center rounded-full text-lg font-bold ${
-                  isOpen ? "bg-yellow-400 text-black" : "border border-zinc-600 text-zinc-400"
+                  isOpen ? "bg-emerald-400 text-black" : "border border-zinc-600 text-zinc-400"
                 }`}
               >
                 +

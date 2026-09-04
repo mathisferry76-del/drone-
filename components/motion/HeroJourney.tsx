@@ -148,12 +148,12 @@ export default function HeroJourney() {
           ref={outroRef}
           className="absolute inset-x-0 bottom-[10%] flex flex-col items-center gap-4 px-6 text-center opacity-0"
         >
-          <p className="text-sm font-semibold uppercase tracking-wide text-yellow-300 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">
+          <p className="text-sm font-semibold uppercase tracking-wide text-emerald-300 drop-shadow-[0_2px_12px_rgba(0,0,0,0.9)]">
             Générée avec MIN IA en 10 secondes
           </p>
           <Link
             href="/generate"
-            className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
+            className="rounded-full bg-emerald-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.emerald.400)] transition hover:scale-105 hover:bg-emerald-300"
           >
             Créer la mienne →
           </Link>
@@ -175,7 +175,7 @@ function HeroContent() {
       </span>
       <HeroTitle className="text-4xl font-extrabold leading-tight tracking-tight text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.8)] sm:text-6xl">
         Plus de vues sur tes vidéos, avec{" "}
-        <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
+        <span className="bg-gradient-to-r from-emerald-400 to-teal-600 bg-clip-text text-transparent">
           zéro compétence design
         </span>
       </HeroTitle>
@@ -187,7 +187,7 @@ function HeroContent() {
       <div className="mt-8 flex flex-col gap-4 sm:flex-row">
         <Link
           href="/generate"
-          className="rounded-full bg-yellow-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.yellow.400)] transition hover:scale-105 hover:bg-yellow-300"
+          className="rounded-full bg-emerald-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.emerald.400)] transition hover:scale-105 hover:bg-emerald-300"
         >
           Créer ma première miniature →
         </Link>

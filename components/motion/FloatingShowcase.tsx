@@ -29,7 +29,7 @@ export default function FloatingShowcase({
     >
       <div
         aria-hidden
-        className="absolute -inset-6 -z-10 rounded-[2rem] bg-[radial-gradient(ellipse_at_center,theme(colors.yellow.400/25%),transparent_70%)] blur-2xl"
+        className="absolute -inset-6 -z-10 rounded-[2rem] bg-[radial-gradient(ellipse_at_center,theme(colors.emerald.400/25%),transparent_70%)] blur-2xl"
       />
       <div className="overflow-hidden rounded-2xl border border-zinc-700/80 bg-zinc-900 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)]">
         <div className="flex items-center gap-2 border-b border-zinc-800 bg-zinc-900/90 px-4 py-2.5">

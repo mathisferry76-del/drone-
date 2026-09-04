@@ -14,7 +14,7 @@ export default function ConfidentialitePage() {
         <h2 className="text-lg font-bold text-white">Responsable du traitement</h2>
         <p>
           Mathis Ferry, Rue du Général Koenig, 76360 Barentin, France —{" "}
-          <a href="mailto:contact@min-ia.fr" className="text-yellow-400 hover:underline">
+          <a href="mailto:contact@min-ia.fr" className="text-emerald-400 hover:underline">
             contact@min-ia.fr
           </a>
         </p>
@@ -85,7 +85,7 @@ export default function ConfidentialitePage() {
           (RGPD), tu disposes d&apos;un droit d&apos;accès, de rectification,
           d&apos;effacement et de portabilité de tes données, ainsi que d&apos;un
           droit d&apos;opposition. Pour exercer ces droits, écris à{" "}
-          <a href="mailto:contact@min-ia.fr" className="text-yellow-400 hover:underline">
+          <a href="mailto:contact@min-ia.fr" className="text-emerald-400 hover:underline">
             contact@min-ia.fr
           </a>.
         </p>

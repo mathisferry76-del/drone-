@@ -177,7 +177,7 @@ export default function ImpressPage() {
         </p>
         <Link
           href="/login"
-          className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
+          className="mt-6 rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300"
         >
           Se connecter
         </Link>
@@ -214,11 +214,11 @@ export default function ImpressPage() {
             <div
               key={pack.id}
               className={`flex flex-col rounded-2xl border p-6 ${
-                pack.highlighted ? "border-yellow-400 bg-yellow-400/5" : "border-zinc-800 bg-zinc-900/40"
+                pack.highlighted ? "border-emerald-400 bg-emerald-400/5" : "border-zinc-800 bg-zinc-900/40"
               }`}
             >
               {pack.highlighted && (
-                <span className="mb-3 w-fit rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black">
+                <span className="mb-3 w-fit rounded-full bg-emerald-400 px-3 py-1 text-xs font-bold text-black">
                   Le plus choisi
                 </span>
               )}
@@ -233,7 +233,7 @@ export default function ImpressPage() {
                 disabled={upgradeLoadingTier === pack.id}
                 className={`mt-6 rounded-full px-6 py-3 text-center font-bold transition disabled:opacity-60 ${
                   pack.highlighted
-                    ? "bg-yellow-400 text-black hover:bg-yellow-300"
+                    ? "bg-emerald-400 text-black hover:bg-emerald-300"
                     : "border border-zinc-600 text-white hover:border-zinc-400"
                 }`}
               >
@@ -255,7 +255,7 @@ export default function ImpressPage() {
         exactement ça — rien de plus — pour un résultat crédible.
       </p>
       {hasFreeTrialAvailable && (
-        <p className="mt-3 rounded-lg border border-yellow-800/40 bg-yellow-400/5 px-4 py-2 text-sm text-yellow-300">
+        <p className="mt-3 rounded-lg border border-emerald-800/40 bg-emerald-400/5 px-4 py-2 text-sm text-emerald-300">
           🎁 Ton essai gratuit — un vrai résultat, avec filigrane. Achète des
           crédits pour débloquer sans filigrane et continuer.
         </p>
@@ -316,7 +316,7 @@ export default function ImpressPage() {
               onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
               rows={3}
               placeholder="Ex : remplace ma voiture par une Porsche 911 rouge, même angle, même lumière"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
             />
             <div className="mt-2 flex flex-wrap gap-2">
               {EXAMPLES.map((ex) => (
@@ -337,7 +337,7 @@ export default function ImpressPage() {
           <button
             onClick={handleGenerate}
             disabled={loading || !file}
-            className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Retouche en cours..." : "Générer →"}
           </button>
@@ -349,14 +349,14 @@ export default function ImpressPage() {
               <button
                 type="button"
                 onClick={() => setShowOriginal(false)}
-                className={`px-3 py-1 transition ${!showOriginal ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-white"}`}
+                className={`px-3 py-1 transition ${!showOriginal ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"}`}
               >
                 Après
               </button>
               <button
                 type="button"
                 onClick={() => setShowOriginal(true)}
-                className={`px-3 py-1 transition ${showOriginal ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-white"}`}
+                className={`px-3 py-1 transition ${showOriginal ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"}`}
               >
                 Avant
               </button>
@@ -393,7 +393,7 @@ export default function ImpressPage() {
                     </p>
                     <Link
                       href="/pricing"
-                      className="rounded-full bg-yellow-400 px-5 py-2 text-sm font-bold text-black transition hover:scale-105 hover:bg-yellow-300"
+                      className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-bold text-black transition hover:scale-105 hover:bg-emerald-300"
                     >
                       🔓 Débloquer mon résultat
                     </Link>
@@ -420,7 +420,7 @@ export default function ImpressPage() {
           ) : (
             <Link
               href="/pricing"
-              className="rounded-full bg-yellow-400 px-6 py-3 text-center font-bold text-black transition hover:bg-yellow-300"
+              className="rounded-full bg-emerald-400 px-6 py-3 text-center font-bold text-black transition hover:bg-emerald-300"
             >
               Passe sur un plan pour télécharger sans filigrane
             </Link>

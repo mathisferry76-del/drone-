@@ -70,7 +70,7 @@ export default function HistoriquePage() {
         </p>
         <Link
           href="/login"
-          className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
+          className="mt-6 rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300"
         >
           Se connecter
         </Link>
@@ -123,14 +123,14 @@ export default function HistoriquePage() {
                     month: "short",
                     year: "numeric",
                   })}
-                  {item.usedAi && <span className="ml-2 text-yellow-400">✨ IA</span>}
+                  {item.usedAi && <span className="ml-2 text-emerald-400">✨ IA</span>}
                 </div>
                 <div className="flex gap-3 text-xs font-semibold">
                   {item.url && (
                     <a
                       href={item.url}
                       download
-                      className="text-yellow-400 hover:underline"
+                      className="text-emerald-400 hover:underline"
                     >
                       Télécharger
                     </a>

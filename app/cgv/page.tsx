@@ -18,7 +18,7 @@ export default function CgvPage() {
           le service MIN IA, un générateur d&apos;images par intelligence
           artificielle (retouche photo et miniatures pour créateurs de contenu
           YouTube, TikTok, Reels), édité par Mathis Ferry (voir{" "}
-          <a href="/mentions-legales" className="text-yellow-400 hover:underline">
+          <a href="/mentions-legales" className="text-emerald-400 hover:underline">
             mentions légales
           </a>
           ).
@@ -65,7 +65,7 @@ export default function CgvPage() {
           Les prix sont indiqués en euros, toutes taxes comprises. Chaque
           génération par intelligence artificielle consomme un nombre fixe de
           crédits, précisé sur la page{" "}
-          <a href="/pricing" className="text-yellow-400 hover:underline">tarifs</a>.
+          <a href="/pricing" className="text-emerald-400 hover:underline">tarifs</a>.
           Les crédits, qu&apos;ils viennent d&apos;un abonnement ou d&apos;un
           pack, restent acquis au compte sans date d&apos;expiration — y
           compris après résiliation d&apos;un abonnement — et ne sont ni
@@ -94,7 +94,7 @@ export default function CgvPage() {
           Le client peut résilier son abonnement à tout moment, sans frais ni
           justification, depuis son espace client Stripe (accessible sur la
           page Mon compte) ou en contactant{" "}
-          <a href="mailto:contact@min-ia.fr" className="text-yellow-400 hover:underline">
+          <a href="mailto:contact@min-ia.fr" className="text-emerald-400 hover:underline">
             contact@min-ia.fr
           </a>. La résiliation prend effet à la fin de la période déjà payée ;
           aucun remboursement au prorata n&apos;est effectué pour la période en

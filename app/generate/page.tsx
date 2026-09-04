@@ -688,7 +688,7 @@ export default function GeneratePage() {
         </p>
         <Link
           href="/login"
-          className="mt-6 rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300"
+          className="mt-6 rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300"
         >
           Se connecter et essayer gratuitement
         </Link>
@@ -716,8 +716,8 @@ export default function GeneratePage() {
       )}
 
       {hasFreeTrialAvailable && !resultUrl && (
-        <div className="mt-4 rounded-xl border border-yellow-800/40 bg-yellow-400/5 p-4 text-sm">
-          <p className="font-semibold text-yellow-300">Première fois ici ? Voici comment ça marche :</p>
+        <div className="mt-4 rounded-xl border border-emerald-800/40 bg-emerald-400/5 p-4 text-sm">
+          <p className="font-semibold text-emerald-300">Première fois ici ? Voici comment ça marche :</p>
           <ol className="mt-2 list-decimal space-y-1 pl-4 text-zinc-400">
             <li>Ajoute une photo de toi (étape 1 ci-dessous)</li>
             <li>Choisis le format de sortie et un style (étapes 2 et 3)</li>
@@ -799,7 +799,7 @@ export default function GeneratePage() {
                     return (
                       <div
                         onPointerDown={startEditZoneDrag}
-                        className="absolute flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center justify-center rounded-[50%] border-2 border-dashed border-orange-400 bg-orange-400/10"
+                        className="absolute flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center justify-center rounded-[50%] border-2 border-dashed border-teal-500 bg-teal-500/10"
                         style={{
                           left: `${bx * 100}%`,
                           top: `${by * 100}%`,
@@ -807,7 +807,7 @@ export default function GeneratePage() {
                           height: `${heightPct}%`,
                         }}
                       >
-                        <span className="absolute top-full mt-1 whitespace-nowrap rounded-full bg-orange-400 px-2 py-0.5 text-[10px] font-bold text-black shadow-lg">
+                        <span className="absolute top-full mt-1 whitespace-nowrap rounded-full bg-teal-500 px-2 py-0.5 text-[10px] font-bold text-black shadow-lg">
                           🎯 Zone à retoucher
                         </span>
                       </div>
@@ -817,7 +817,7 @@ export default function GeneratePage() {
                     <div
                       key={layer.id}
                       onPointerDown={startDrag("text", layer.id)}
-                      className="absolute flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center gap-1 rounded-full bg-yellow-400 px-2 py-1 text-[10px] font-bold text-black shadow-lg"
+                      className="absolute flex -translate-x-1/2 -translate-y-1/2 cursor-move items-center gap-1 rounded-full bg-emerald-400 px-2 py-1 text-[10px] font-bold text-black shadow-lg"
                       style={{ left: `${layer.x * 100}%`, top: `${layer.y * 100}%` }}
                     >
                       ✥ T{i + 1}
@@ -888,7 +888,7 @@ export default function GeneratePage() {
                   onClick={() => setResolution(tier)}
                   className={`flex-1 px-3 py-2 uppercase transition ${
                     resolution === tier
-                      ? "bg-yellow-400 text-black"
+                      ? "bg-emerald-400 text-black"
                       : "bg-zinc-900 text-zinc-400 hover:text-white"
                   }`}
                 >
@@ -916,7 +916,7 @@ export default function GeneratePage() {
                   onClick={() => selectPreset(preset.id)}
                   className={`rounded-xl border p-3 text-left transition ${
                     presetId === preset.id
-                      ? "border-yellow-400 bg-yellow-400/10"
+                      ? "border-emerald-400 bg-emerald-400/10"
                       : "border-zinc-800 hover:border-zinc-600"
                   }`}
                 >
@@ -945,14 +945,14 @@ export default function GeneratePage() {
                 value={intensity}
                 disabled={canUseAi && aiEnhance}
                 onChange={(e) => setIntensity(Number(e.target.value))}
-                className="w-full accent-yellow-400 disabled:cursor-not-allowed"
+                className="w-full accent-emerald-400 disabled:cursor-not-allowed"
               />
             </div>
 
             <button
               type="button"
               onClick={() => setShowAdvanced((v) => !v)}
-              className="mt-3 text-xs font-semibold text-yellow-400 hover:underline"
+              className="mt-3 text-xs font-semibold text-emerald-400 hover:underline"
             >
               {showAdvanced ? "▾" : "▸"} Réglages avancés (couleur, cadre)
             </button>
@@ -982,7 +982,7 @@ export default function GeneratePage() {
                       max={50}
                       value={ctrl.value}
                       onChange={(e) => ctrl.set(Number(e.target.value))}
-                      className="w-full accent-yellow-400 disabled:cursor-not-allowed"
+                      className="w-full accent-emerald-400 disabled:cursor-not-allowed"
                     />
                   </div>
                 ))}
@@ -992,7 +992,7 @@ export default function GeneratePage() {
                     type="checkbox"
                     checked={vignette}
                     onChange={(e) => setVignette(e.target.checked)}
-                    className="h-4 w-4 accent-yellow-400"
+                    className="h-4 w-4 accent-emerald-400"
                   />
                   Vignette (assombrir les bords)
                 </label>
@@ -1003,7 +1003,7 @@ export default function GeneratePage() {
                       type="checkbox"
                       checked={border}
                       onChange={(e) => setBorder(e.target.checked)}
-                      className="h-4 w-4 accent-yellow-400"
+                      className="h-4 w-4 accent-emerald-400"
                     />
                     Cadre bordure
                   </label>
@@ -1029,7 +1029,7 @@ export default function GeneratePage() {
                 type="button"
                 onClick={addTextLayer}
                 disabled={textLayers.length >= MAX_TEXT_LAYERS}
-                className="text-xs font-semibold text-yellow-400 hover:underline disabled:opacity-40"
+                className="text-xs font-semibold text-emerald-400 hover:underline disabled:opacity-40"
               >
                 + Ajouter un texte
               </button>
@@ -1067,7 +1067,7 @@ export default function GeneratePage() {
                         ? "J'AI TESTÉ ÇA PENDANT 30 JOURS"
                         : "Texte additionnel (sous-titre, badge...)"
                     }
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+                    className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
                   />
                   <div className="mt-3 grid grid-cols-2 gap-3">
                     <div>
@@ -1101,7 +1101,7 @@ export default function GeneratePage() {
                           onClick={() => updateTextLayer(layer.id, { backgroundStyle: opt.id })}
                           className={`rounded-lg border px-2 py-1.5 text-xs font-semibold transition ${
                             layer.backgroundStyle === opt.id
-                              ? "border-yellow-400 bg-yellow-400/10 text-white"
+                              ? "border-emerald-400 bg-emerald-400/10 text-white"
                               : "border-zinc-700 text-zinc-400 hover:border-zinc-500"
                           }`}
                         >
@@ -1124,7 +1124,7 @@ export default function GeneratePage() {
                         onChange={(e) =>
                           updateTextLayer(layer.id, { fontSize: Number(e.target.value) })
                         }
-                        className="w-full accent-yellow-400"
+                        className="w-full accent-emerald-400"
                       />
                     </div>
                     <div>
@@ -1140,7 +1140,7 @@ export default function GeneratePage() {
                         onChange={(e) =>
                           updateTextLayer(layer.id, { curve: Number(e.target.value) })
                         }
-                        className="w-full accent-yellow-400"
+                        className="w-full accent-emerald-400"
                       />
                     </div>
                   </div>
@@ -1162,7 +1162,7 @@ export default function GeneratePage() {
                   type="button"
                   onClick={() => addShape(type)}
                   disabled={shapes.length >= MAX_SHAPES}
-                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition hover:border-yellow-400 disabled:opacity-40"
+                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition hover:border-emerald-400 disabled:opacity-40"
                 >
                   + {SHAPE_LABELS[type]}
                 </button>
@@ -1210,7 +1210,7 @@ export default function GeneratePage() {
                           onChange={(e) =>
                             updateShape(shape.id, { size: Number(e.target.value) })
                           }
-                          className="w-full accent-yellow-400"
+                          className="w-full accent-emerald-400"
                         />
                       </div>
                       <div>
@@ -1225,7 +1225,7 @@ export default function GeneratePage() {
                           onChange={(e) =>
                             updateShape(shape.id, { rotation: Number(e.target.value) })
                           }
-                          className="w-full accent-yellow-400"
+                          className="w-full accent-emerald-400"
                         />
                       </div>
                     </div>
@@ -1238,7 +1238,7 @@ export default function GeneratePage() {
           <div
             className={`rounded-xl border p-4 ${
               canUseAi
-                ? "border-yellow-800/40 bg-yellow-400/5"
+                ? "border-emerald-800/40 bg-emerald-400/5"
                 : "border-zinc-800 bg-zinc-900/40"
             }`}
           >
@@ -1248,7 +1248,7 @@ export default function GeneratePage() {
                 checked={canUseAi && aiEnhance}
                 disabled={!canUseAi}
                 onChange={(e) => setAiEnhance(e.target.checked)}
-                className="mt-1 h-4 w-4 accent-yellow-400 disabled:opacity-40"
+                className="mt-1 h-4 w-4 accent-emerald-400 disabled:opacity-40"
               />
               <span>
                 <span className="block text-sm font-bold">✨ Amélioration IA générative</span>
@@ -1263,7 +1263,7 @@ export default function GeneratePage() {
                 {!hasFreeTrialAvailable && !hasCredits && (
                   <Link
                     href="/pricing"
-                    className="mt-1 inline-block text-xs font-semibold text-yellow-400 hover:underline"
+                    className="mt-1 inline-block text-xs font-semibold text-emerald-400 hover:underline"
                   >
                     Acheter des crédits →
                   </Link>
@@ -1272,7 +1272,7 @@ export default function GeneratePage() {
             </label>
 
             {canUseAi && aiEnhance && (
-              <div className="mt-3 space-y-4 border-t border-yellow-800/30 pt-3">
+              <div className="mt-3 space-y-4 border-t border-emerald-800/30 pt-3">
                 <div>
                   <label className="mb-1 block text-xs font-semibold text-zinc-300">
                     Coller le lien de ta vidéo YouTube (optionnel)
@@ -1283,13 +1283,13 @@ export default function GeneratePage() {
                       value={videoUrl}
                       onChange={(e) => setVideoUrl(e.target.value)}
                       placeholder="https://www.youtube.com/watch?v=..."
-                      className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+                      className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={handleAnalyzeVideo}
                       disabled={!videoUrl.trim() || analyzingVideo}
-                      className="shrink-0 rounded-lg bg-yellow-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
+                      className="shrink-0 rounded-lg bg-emerald-400 px-4 py-2 text-sm font-bold text-black transition hover:bg-emerald-300 disabled:opacity-60"
                     >
                       {analyzingVideo ? "..." : "Analyser"}
                     </button>
@@ -1304,7 +1304,7 @@ export default function GeneratePage() {
                     onChange={(e) => setVideoContext(e.target.value)}
                     maxLength={300}
                     placeholder="Précise ce qui se passe vraiment (ex : il y a du feu, de la boue, un combat au paintball) — fortement recommandé, le titre seul ne suffit pas à deviner le contenu réel"
-                    className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+                    className="mt-2 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
                   />
                   {videoAnalysisError && (
                     <p className="mt-1 text-xs text-red-400">{videoAnalysisError}</p>
@@ -1322,7 +1322,7 @@ export default function GeneratePage() {
                   <button
                     type="button"
                     onClick={() => setAiDescription(PRESET_PROMPT_SUGGESTIONS[presetId])}
-                    className="mb-2 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300 transition hover:border-yellow-400 hover:text-yellow-400"
+                    className="mb-2 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs text-zinc-300 transition hover:border-emerald-400 hover:text-emerald-400"
                   >
                     ✨ Suggestion pour le style {PRESETS.find((p) => p.id === presetId)?.name}
                   </button>
@@ -1332,7 +1332,7 @@ export default function GeneratePage() {
                     maxLength={AI_DESCRIPTION_MAX}
                     rows={5}
                     placeholder="Ex : je suis assis dans la cabine d'un jet privé, verre de champagne à la main, hublot avec un ciel bleu, lumière chaude et cinématographique, ambiance luxe premium — sois précis sur le décor, les objets et la mise en scène."
-                    className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-yellow-400 focus:outline-none"
+                    className="w-full resize-none rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
                   />
                   <p className="mt-1 text-xs text-zinc-500">
                     Le style {PRESETS.find((p) => p.id === presetId)?.name} donne déjà une
@@ -1412,7 +1412,7 @@ export default function GeneratePage() {
                   </div>
                 )}
 
-                <div className="rounded-lg border border-orange-800/40 bg-orange-400/5 p-3">
+                <div className="rounded-lg border border-teal-800/40 bg-teal-500/5 p-3">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-semibold text-zinc-300">
                       🎯 Retouche ciblée (optionnel)
@@ -1432,7 +1432,7 @@ export default function GeneratePage() {
                       <button
                         type="button"
                         onClick={() => setEditZone(DEFAULT_EDIT_ZONE)}
-                        className="text-xs font-semibold text-orange-400 hover:underline"
+                        className="text-xs font-semibold text-teal-500 hover:underline"
                       >
                         + Ajouter une zone
                       </button>
@@ -1466,7 +1466,7 @@ export default function GeneratePage() {
                                 prev ? { ...prev, sizeX: Number(e.target.value) } : prev
                               )
                             }
-                            className="w-full accent-orange-400"
+                            className="w-full accent-teal-500"
                           />
                         </div>
                         <div>
@@ -1487,7 +1487,7 @@ export default function GeneratePage() {
                                 prev ? { ...prev, sizeY: Number(e.target.value) } : prev
                               )
                             }
-                            className="w-full accent-orange-400"
+                            className="w-full accent-teal-500"
                           />
                         </div>
                       </div>
@@ -1506,7 +1506,7 @@ export default function GeneratePage() {
                           onChange={(e) => setEditInstruction(e.target.value)}
                           maxLength={EDIT_INSTRUCTION_MAX}
                           placeholder="Ex : réduis la saturation de cet objet / déplace-le plus à droite / enlève cet élément"
-                          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-orange-400 focus:outline-none"
+                          className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-teal-500 focus:outline-none"
                         />
                         <p className="mt-1 text-xs text-zinc-500">
                           Laisse vide si tu ne veux pas de retouche ciblée cette
@@ -1595,7 +1595,7 @@ export default function GeneratePage() {
           <button
             onClick={handleGenerate}
             disabled={loading}
-            className="w-full rounded-full bg-yellow-400 px-6 py-3 font-bold text-black transition hover:bg-yellow-300 disabled:opacity-60"
+            className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:opacity-60"
           >
             {loading
               ? willDoTargetedEdit
@@ -1618,7 +1618,7 @@ export default function GeneratePage() {
                   type="button"
                   onClick={() => setShowOriginal(false)}
                   className={`px-3 py-1 transition ${
-                    !showOriginal ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-white"
+                    !showOriginal ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
                   }`}
                 >
                   Après
@@ -1627,7 +1627,7 @@ export default function GeneratePage() {
                   type="button"
                   onClick={() => setShowOriginal(true)}
                   className={`px-3 py-1 transition ${
-                    showOriginal ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-white"
+                    showOriginal ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
                   }`}
                 >
                   Avant
@@ -1713,7 +1713,7 @@ export default function GeneratePage() {
               ) : (
                 <Link
                   href="/pricing"
-                  className="mt-4 block w-full rounded-full bg-yellow-400 px-6 py-3 text-center font-bold text-black transition hover:bg-yellow-300"
+                  className="mt-4 block w-full rounded-full bg-emerald-400 px-6 py-3 text-center font-bold text-black transition hover:bg-emerald-300"
                 >
                   Achète des crédits pour télécharger en HD
                 </Link>
