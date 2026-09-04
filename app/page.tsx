@@ -105,9 +105,9 @@ export default function Home() {
             ✨ Impressionne tes potes
           </span>
           <HeroTitle className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
-            Transforme n&apos;importe quelle photo en{" "}
+            Fais semblant jusqu&apos;à ce que tu aies l&apos;air{" "}
             <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent">
-              flex bluffant
+              vrai
             </span>
           </HeroTitle>
           <p className="mt-6 max-w-xl text-lg text-zinc-400">
