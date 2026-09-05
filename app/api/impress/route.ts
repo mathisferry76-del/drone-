@@ -44,6 +44,10 @@ Règles de portée :
 - N'en fais pas trop : pas de sur-retouche, pas de saturation excessive, pas d'effet "généré par IA" visible.
 - N'ajoute aucun texte, lettre ou chiffre à l'image.
 
+Fidélité de marque/modèle (si l'utilisateur nomme une marque et un modèle précis — voiture, montre, sac, etc.) :
+- Ne généralise JAMAIS vers une interprétation générique de la catégorie ("un SUV sportif", "une montre de luxe"). Reproduis les traits de design réels et distinctifs de CE modèle précis : forme exacte des phares/feux et de la calandre pour une voiture, forme du boîtier/cadran/bracelet et logo pour une montre, silhouette et matières pour un autre objet de marque.
+- Si un détail exact du modèle réel n'est pas certain, privilégie quand même les traits les plus reconnaissables et caractéristiques de cette marque plutôt qu'un design neutre — le résultat doit être identifiable comme ce modèle précis par quelqu'un qui le connaît, pas juste "un objet de la même catégorie".
+
 Changement demandé : ${userDescription}`;
 }
 
