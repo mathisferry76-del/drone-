@@ -6,6 +6,7 @@ import { GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, describeGeminiError } from "@/lib/gemini";
 import { getFalKey, editImageWithFlux, describeFalError } from "@/lib/fal";
+import { getReplicateKey, editImageWithReplicate, describeReplicateError } from "@/lib/replicate";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
@@ -190,16 +191,20 @@ export async function POST(req: NextRequest) {
     const prompt = buildImpressPrompt(description);
     // Provider priority for this route, most-to-least realistic for "insert
     // one real-world object into an existing photo without touching the
-    // rest": FLUX.1 Kontext [Max] via fal.ai first (best-in-class for this
-    // exact task — see lib/fal.ts), then OpenAI's gpt-image-1 (its
-    // input_fidelity "high" edit pipeline, still solid but boxed into 3
-    // fixed canvases), then Gemini as a last-resort fallback. Each is only
-    // used when the one(s) before it aren't configured on this deployment —
-    // not a runtime retry chain, so a mid-request failure surfaces as an
-    // error rather than silently billing a second provider.
+    // rest": FLUX.1 Kontext [Max] first — the exact same model hosted on
+    // either fal.ai (see lib/fal.ts) or Replicate (see lib/replicate.ts),
+    // whichever has a working key configured; fal.ai wins if both are set,
+    // for no reason other than it was wired up first. Then OpenAI's
+    // gpt-image-1 (its input_fidelity "high" edit pipeline, still solid but
+    // boxed into 3 fixed canvases), then Gemini as a last-resort fallback.
+    // Each is only used when the one(s) before it aren't configured on this
+    // deployment — not a runtime retry chain, so a mid-request failure
+    // surfaces as an error rather than silently billing a second provider.
     const openai = getOpenAI();
-    const provider: "flux" | "openai" | "gemini" | null = getFalKey()
-      ? "flux"
+    const provider: "flux-fal" | "flux-replicate" | "openai" | "gemini" | null = getFalKey()
+      ? "flux-fal"
+      : getReplicateKey()
+      ? "flux-replicate"
       : openai
       ? "openai"
       : getGeminiKey()
@@ -208,8 +213,10 @@ export async function POST(req: NextRequest) {
     let resultBuffer: Buffer;
 
     try {
-      if (provider === "flux") {
+      if (provider === "flux-fal") {
         resultBuffer = await editImageWithFlux(normalizedInput, prompt, req.signal);
+      } else if (provider === "flux-replicate") {
+        resultBuffer = await editImageWithReplicate(normalizedInput, prompt, req.signal);
       } else if (provider === "openai" && openai) {
         const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
         const result = await openai.images.edit(
@@ -248,8 +255,10 @@ export async function POST(req: NextRequest) {
       }
       console.error(`${provider} impress error`, err);
       const message =
-        provider === "flux"
+        provider === "flux-fal"
           ? describeFalError(err)
+          : provider === "flux-replicate"
+          ? describeReplicateError(err)
           : provider === "gemini"
           ? describeGeminiError(err)
           : describeAiError(err);

@@ -203,6 +203,7 @@ NEXT_PUBLIC_STRIPE_PRICE_PRO=price_...
 NEXT_PUBLIC_STRIPE_PRICE_STUDIO=price_...
 OPENAI_API_KEY=sk-...
 FAL_KEY=...
+REPLICATE_API_TOKEN=r8_...
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
@@ -298,6 +299,17 @@ avant OpenAI et Gemini, voir `lib/fal.ts`) :
    [fal.ai/dashboard/keys](https://fal.ai/dashboard/keys).
 3. Colle-la dans `FAL_KEY`, redémarre `npm run dev` (ou ajoute-la sur
    Vercel et redéploie).
+
+**Replicate / FLUX.1 Kontext [Max]** (même modèle que ci-dessus, juste
+hébergé ailleurs — utilisé sur `/impress` uniquement si `FAL_KEY` n'est pas
+configurée, voir `lib/replicate.ts`) :
+1. Crée un compte sur [replicate.com](https://replicate.com) et active la
+   facturation (pay-as-you-go) sur
+   [replicate.com/account/billing](https://replicate.com/account/billing).
+2. Génère un token sur
+   [replicate.com/account/api-tokens](https://replicate.com/account/api-tokens).
+3. Colle-le dans `REPLICATE_API_TOKEN`, redémarre `npm run dev` (ou
+   ajoute-le sur Vercel et redéploie).
 
 Sans aucune des deux clés, l'appel renvoie une erreur claire (501) au
 lieu de planter — le reste du produit (styles filtres) continue de
