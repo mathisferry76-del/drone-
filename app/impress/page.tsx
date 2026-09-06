@@ -125,13 +125,29 @@ export default function ImpressPage() {
         body: formData,
         signal: controller.signal,
       });
-      const data = await res.json();
+
+      let data: { image?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        // The server always responds with JSON, success or failure (see
+        // app/api/impress/route.ts) — a body that fails to parse means
+        // something in front of it (Vercel, a proxy) cut the response short
+        // instead, almost always because the request ran too long. Surface
+        // that distinctly instead of falling into the generic
+        // "impossible de contacter le serveur" below, which reads like a
+        // network outage rather than a slow generation.
+        setError(
+          "Le serveur a mis trop de temps à répondre ou a coupé la connexion. Réessaie avec une photo plus légère ou une description plus courte."
+        );
+        return;
+      }
 
       if (!res.ok) {
         setError(data.error ?? "Erreur pendant la retouche.");
         return;
       }
-      setResultUrl(data.image);
+      setResultUrl(data.image ?? null);
       setResultWasTrial(usingTrial);
       setShowOriginal(false);
 

@@ -24,6 +24,19 @@ export const maxDuration = 120;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_DESCRIPTION = 400;
+// Vercel's *actual* enforced function timeout depends on the account's plan
+// and dashboard/project settings, which `maxDuration` above can only ever
+// request, not guarantee — if the real ceiling turns out lower than 120s,
+// the platform kills the function outright and the client gets a
+// non-JSON error page, which crashes `await res.json()` client-side and
+// surfaces as an opaque "Impossible de contacter le serveur" with no way to
+// tell a timeout from a real network failure (see app/impress/page.tsx).
+// This internal deadline fires comfortably before any plausible real
+// ceiling, so a slow generation always gets a clean, specific JSON error
+// (and its in-flight provider calls aborted, so nothing keeps burning
+// tokens after we've already told the user it failed) instead of risking
+// the platform doing it for us with no response body at all.
+const GENERATION_DEADLINE_MS = 55_000;
 // Generates this many independent attempts per request and keeps the best
 // one (see pickBestImage) — brand/logo fidelity on named real-world objects
 // is inconsistent enough between attempts that more rolls measurably
@@ -244,12 +257,31 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Merges the client's own cancel (req.signal) with our internal deadline
+    // into one signal so generateOnce doesn't need to know which one fired —
+    // either way, in-flight provider calls get aborted the same way the
+    // existing Cancel button already relies on.
+    const internalController = new AbortController();
+    if (req.signal.aborted) {
+      internalController.abort(req.signal.reason);
+    } else {
+      req.signal.addEventListener("abort", () => internalController.abort(req.signal.reason), {
+        once: true,
+      });
+    }
+    let timedOut = false;
+    const deadlineTimer = setTimeout(() => {
+      timedOut = true;
+      internalController.abort(new DOMException("Délai interne dépassé", "TimeoutError"));
+    }, GENERATION_DEADLINE_MS);
+
     async function generateOnce(): Promise<Buffer> {
+      const signal = internalController.signal;
       if (provider === "flux-fal") {
-        return editImageWithFlux(normalizedInput, prompt, req.signal);
+        return editImageWithFlux(normalizedInput, prompt, signal);
       }
       if (provider === "flux-replicate") {
-        return editImageWithReplicate(normalizedInput, prompt, req.signal);
+        return editImageWithReplicate(normalizedInput, prompt, signal);
       }
       if (provider === "openai" && openai) {
         const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
@@ -262,13 +294,13 @@ export async function POST(req: NextRequest) {
             quality: "high",
             input_fidelity: "high",
           },
-          { signal: req.signal }
+          { signal }
         );
         const b64 = result.data?.[0]?.b64_json;
         if (!b64) throw new Error("OpenAI n'a renvoyé aucune image.");
         return Buffer.from(b64, "base64");
       }
-      return editImageWithGemini([{ buffer: normalizedInput }], prompt, req.signal);
+      return editImageWithGemini([{ buffer: normalizedInput }], prompt, signal);
     }
 
     let resultBuffer: Buffer;
@@ -310,14 +342,26 @@ export async function POST(req: NextRequest) {
         );
       }
       resultBuffer = successes[bestIndex];
+      clearTimeout(deadlineTimer);
     } catch (err) {
+      clearTimeout(deadlineTimer);
       // Refunds the trial/credits reservation whether the AI call genuinely
-      // failed or the client aborted the request (cancel button) — either
-      // way, no generation was delivered, so nothing should be charged.
-      // Passing req.signal into each provider call above also aborts the
-      // actual outbound request to OpenAI/Gemini/fal.ai when the client
-      // cancels, instead of letting it finish (and get billed) uselessly.
+      // failed, the client aborted the request (cancel button), or our own
+      // internal deadline fired — either way, no generation was delivered,
+      // so nothing should be charged. Passing internalController's signal
+      // into each provider call above also aborts the actual outbound
+      // request to OpenAI/Gemini/fal.ai/Replicate in all three cases,
+      // instead of letting it finish (and get billed) uselessly.
       await releaseReservationIfNeeded();
+      if (timedOut) {
+        return NextResponse.json(
+          {
+            error:
+              "La génération a pris trop de temps et a été interrompue. Réessaie avec une photo plus légère ou une description plus courte.",
+          },
+          { status: 504 }
+        );
+      }
       if (req.signal.aborted) {
         return NextResponse.json({ error: "Génération annulée." }, { status: 499 });
       }
