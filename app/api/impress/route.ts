@@ -5,13 +5,11 @@ import { randomUUID } from "crypto";
 import { GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, describeGeminiError } from "@/lib/gemini";
-import { getFalKey, editImageWithFlux, editImageWithFluxMulti, describeFalError } from "@/lib/fal";
+import { getFalKey, editImageWithFlux, describeFalError } from "@/lib/fal";
 import { getReplicateKey, editImageWithReplicate, describeReplicateError } from "@/lib/replicate";
 import { pickBestImage } from "@/lib/pick-best";
 import { looksUnchanged } from "@/lib/image-diff";
 import { verifyChangeApplied } from "@/lib/verify-change";
-import { extractVehicleModel } from "@/lib/extract-vehicle";
-import { findCarReferenceImage } from "@/lib/car-reference";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
@@ -54,9 +52,14 @@ const GENERATION_DEADLINE_MS = 105_000;
 // Generates this many independent attempts per request and keeps the best
 // one (see pickBestImage) — brand/logo fidelity on named real-world objects
 // is inconsistent enough between attempts that more rolls measurably
-// improve the odds, at the cost of roughly quadrupling the AI spend per
-// generation (~0.32€ on Replicate vs ~0.08€ for a single attempt).
-const CANDIDATE_COUNT = 4;
+// improve the odds, at the cost of a roughly proportional increase in AI
+// spend per generation (~0.08€/attempt on Replicate). Brought down from 4:
+// each attempt now also gets its own verifyChangeApplied pass after
+// generation (see below), so the slowest-of-N generation time is only part
+// of the critical path — 4 was pushing requests past even a 105s internal
+// deadline in production. 3 trades a little of the quality upside for
+// meaningfully lower worst-case latency and cost.
+const CANDIDATE_COUNT = 3;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
 // thumbnail presets: those push dramatic, stylized regeneration. Here the
@@ -70,14 +73,8 @@ const CANDIDATE_COUNT = 4;
 // more detailed AI_QUALITY_DIRECTIVE language already proven to work for
 // the thumbnail presets (see lib/presets.ts), adapted from "regenerate the
 // whole background" to "insert one object convincingly."
-function buildImpressPrompt(userDescription: string, hasReferenceImage: boolean): string {
-  const referenceImageNote = hasReferenceImage
-    ? `
-
-IMPORTANT — deux photos te sont fournies : l'IMAGE 1 est la photo réelle de l'utilisateur, celle à modifier — c'est elle qui fournit le décor, l'angle, la lumière et le cadrage à respecter. L'IMAGE 2 est une VRAIE photo de référence du modèle exact demandé dans la description ci-dessous, fournie uniquement pour que tu reproduises fidèlement sa forme, ses proportions, son design et son logo — n'utilise JAMAIS le décor, l'arrière-plan, l'angle de caméra, la lumière, la plaque d'immatriculation ou le cadrage de l'image 2 : seule sa forme/apparence sert de référence, tout le reste vient de l'image 1. Le résultat final doit avoir le décor et la composition de l'image 1, avec l'objet de la description reproduisant fidèlement l'apparence réelle vue sur l'image 2.`
-    : "";
-
-  return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.${referenceImageNote}
+function buildImpressPrompt(userDescription: string): string {
+  return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.
 
 Règles d'intégration physique (le plus important, cause principale de résultats ratés) :
 - Respecte EXACTEMENT la perspective, l'angle de caméra et l'échelle de la scène d'origine pour l'élément modifié — même point de fuite, même distance apparente que s'il avait été photographié sur place.
@@ -279,36 +276,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Best-effort real-photo reference for a car-replacement request (see
-    // lib/car-reference.ts) — fal.ai's multi-image Kontext variant only,
-    // since it's the only path with a verified schema for a second
-    // reference image (lib/fal.ts's editImageWithFluxMulti). Text-only
-    // brand-fidelity prompting kept drifting to the wrong brand/body-shape
-    // entirely on less iconic models (confirmed in production: "Audi RS6
-    // Avant" → a Ferrari) — giving the model an actual photo to match
-    // against, not just a description, is a fundamentally more reliable
-    // anchor than more prompt wording. Every step degrades silently to the
-    // existing text-only prompt on failure (no OpenAI key to run the
-    // extraction, no vehicle detected, no reference photo found) — this is
-    // a best-effort enhancement, never a reason to block or fail the
-    // request.
-    let referenceImageUrl: string | null = null;
-    if (provider === "flux-fal") {
-      const vehicleModel = await extractVehicleModel(description);
-      if (vehicleModel) {
-        referenceImageUrl = await findCarReferenceImage(vehicleModel);
-      }
-    }
-
-    // Two prompt variants, not one: fal.ai's multi-image Kontext input is
-    // explicitly documented as "experimental", and how it actually weighs a
-    // free-text description of what each of the 2 images is for (as opposed
-    // to a dedicated inline reference syntax) isn't something this codebase
-    // can verify against real generations. Betting all CANDIDATE_COUNT
-    // attempts on an unverified path would risk making brand fidelity worse,
-    // not better, if it turns out to confuse the model rather than help it.
-    const prompt = buildImpressPrompt(description, false);
-    const promptWithReference = referenceImageUrl ? buildImpressPrompt(description, true) : null;
+    const prompt = buildImpressPrompt(description);
 
     // Merges the client's own cancel (req.signal) with our internal deadline
     // into one signal so generateOnce doesn't need to know which one fired —
@@ -328,19 +296,10 @@ export async function POST(req: NextRequest) {
       internalController.abort(new DOMException("Délai interne dépassé", "TimeoutError"));
     }, GENERATION_DEADLINE_MS);
 
-    // Half the attempts (when a reference photo is available) use the
-    // experimental multi-image path, half use the proven text-only path —
-    // hedging instead of committing every attempt to the unverified one, so
-    // a bad bet on the new path can't make results worse than before it
-    // existed; the judge (lib/pick-best.ts) already picks the best result
-    // across all CANDIDATE_COUNT attempts regardless of which path produced
-    // it.
-    async function generateOnce(useReference: boolean): Promise<Buffer> {
+    async function generateOnce(): Promise<Buffer> {
       const signal = internalController.signal;
       if (provider === "flux-fal") {
-        return useReference && referenceImageUrl && promptWithReference
-          ? editImageWithFluxMulti(normalizedInput, referenceImageUrl, promptWithReference, signal)
-          : editImageWithFlux(normalizedInput, prompt, signal);
+        return editImageWithFlux(normalizedInput, prompt, signal);
       }
       if (provider === "flux-replicate") {
         return editImageWithReplicate(normalizedInput, prompt, signal);
@@ -379,7 +338,7 @@ export async function POST(req: NextRequest) {
       // (rate limit, transient failure) doesn't sink the request as long as
       // at least one succeeds.
       const settled = await Promise.allSettled(
-        Array.from({ length: CANDIDATE_COUNT }, (_, i) => generateOnce(i % 2 === 0))
+        Array.from({ length: CANDIDATE_COUNT }, () => generateOnce())
       );
       const successes = settled
         .filter((r): r is PromiseFulfilledResult<Buffer> => r.status === "fulfilled")
