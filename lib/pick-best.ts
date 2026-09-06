@@ -13,14 +13,30 @@ import { getGeminiKey, GEMINI_TEXT_MODEL } from "./gemini";
 // vision-capable model is already configured on this deployment (gpt-4o-mini
 // mirrors the model already used elsewhere for text — see lib/openai.ts —
 // so no new provider account is required).
+// REJECT_ALL is what the judge is asked to answer with "0" — a scene-fidelity
+// gate, not just a tie-breaker: it exists because the tie-breaking criteria
+// alone (logo crispness, realism) say nothing about whether a candidate is
+// even still a retouch of the original photo. FLUX Kontext occasionally
+// ignores the input image entirely and hallucinates an unrelated scene on
+// every single candidate — e.g. asking for a watch on a wrist coming back
+// with a photo of pool-deck clutter, no wrist or watch anywhere in it. Aim
+// judgment at that failure mode explicitly, since "most realistic of 4
+// hallucinations" would otherwise still confidently ship one.
+const REJECT_ALL = -1;
+
 function buildJudgeInstruction(candidateCount: number, description: string): string {
-  return `Ces ${candidateCount} images sont des tentatives séparées de retouche photo IA pour ce changement demandé : "${description}". Réponds UNIQUEMENT avec le numéro (1, 2, ...) de l'image qui a l'air la plus réaliste et physiquement intégrée à la scène, et dont le logo/badge de marque (s'il y en a un visible) est le plus net, le plus fidèle à la vraie marque et le moins flou ou déformé. Réponds seulement avec ce chiffre, sans aucun autre mot.`;
+  return `L'image 0 est la photo originale (AVANT retouche). Les ${candidateCount} images suivantes, numérotées 1 à ${candidateCount}, sont des tentatives séparées de retouche IA de cette même photo pour ce changement demandé : "${description}".
+
+D'abord, élimine toute image qui ne correspond plus à une retouche de la photo originale : scène, décor, cadrage ou sujet clairement différents de l'image 0, ou qui ne montre tout simplement pas le changement demandé (ex : pas de montre visible si on a demandé une montre). Parmi celles qui restent, choisis celle qui a l'air la plus réaliste et physiquement intégrée à la scène, avec le logo/badge de marque (s'il y en a un) le plus net et le plus fidèle.
+
+Réponds UNIQUEMENT avec le numéro (1, 2, ...) de la meilleure image restante, ou avec "0" si TOUTES les images échouent le premier critère (aucune n'est une retouche fidèle de la photo originale). Réponds seulement avec ce chiffre, sans aucun autre mot.`;
 }
 
 function parseIndexFromJudgeReply(text: string, candidateCount: number): number | null {
   const match = text.match(/\d+/);
   if (!match) return null;
   const n = parseInt(match[0], 10);
+  if (n === 0) return REJECT_ALL;
   if (Number.isInteger(n) && n >= 1 && n <= candidateCount) {
     return n - 1;
   }
@@ -29,12 +45,18 @@ function parseIndexFromJudgeReply(text: string, candidateCount: number): number 
 
 async function judgeWithOpenAI(
   openai: OpenAI,
+  original: Buffer,
   candidates: Buffer[],
   description: string
 ): Promise<number | null> {
   const content: OpenAI.ChatCompletionContentPart[] = [
     { type: "text", text: buildJudgeInstruction(candidates.length, description) },
   ];
+  content.push({ type: "text", text: "Image 0 (originale, AVANT) :" });
+  content.push({
+    type: "image_url",
+    image_url: { url: `data:image/png;base64,${original.toString("base64")}`, detail: "high" },
+  });
   candidates.forEach((buf, i) => {
     content.push({ type: "text", text: `Image ${i + 1} :` });
     content.push({
@@ -57,13 +79,19 @@ async function judgeWithOpenAI(
   return parseIndexFromJudgeReply(text, candidates.length);
 }
 
-async function judgeWithGemini(candidates: Buffer[], description: string): Promise<number | null> {
+async function judgeWithGemini(
+  original: Buffer,
+  candidates: Buffer[],
+  description: string
+): Promise<number | null> {
   const key = getGeminiKey();
   if (!key) return null;
 
   const parts: Record<string, unknown>[] = [
     { text: buildJudgeInstruction(candidates.length, description) },
   ];
+  parts.push({ text: "Image 0 (originale, AVANT) :" });
+  parts.push({ inline_data: { mime_type: "image/png", data: original.toString("base64") } });
   candidates.forEach((buf, i) => {
     parts.push({ text: `Image ${i + 1} :` });
     parts.push({ inline_data: { mime_type: "image/png", data: buf.toString("base64") } });
@@ -86,18 +114,29 @@ async function judgeWithGemini(candidates: Buffer[], description: string): Promi
   return parseIndexFromJudgeReply(text, candidates.length);
 }
 
-// Returns the index of the best candidate. Never throws — a judge failure
-// (provider error, unparseable reply) just falls back to the next judge,
-// and ultimately to candidate 0, so a flaky judge call never costs the user
-// the generation they already paid credits for.
-export async function pickBestImage(candidates: Buffer[], description: string): Promise<number> {
+// Returns the index of the best candidate, or null if every judge that
+// managed to answer explicitly rejected all candidates as unfaithful to the
+// original photo (see REJECT_ALL above) — that's the caller's cue to error
+// out and refund instead of shipping a hallucinated result. A judge that
+// fails outright (provider error, unparseable reply) just falls back to the
+// next judge, and ultimately to candidate 0 if none could answer at all, so
+// a flaky judge call never costs the user the generation they already paid
+// credits for — only a genuine "none of these are usable" verdict does.
+export async function pickBestImage(
+  original: Buffer,
+  candidates: Buffer[],
+  description: string
+): Promise<number | null> {
   if (candidates.length <= 1) return 0;
+
+  let sawRejectAll = false;
 
   const openai = getOpenAI();
   if (openai) {
     try {
-      const idx = await judgeWithOpenAI(openai, candidates, description);
-      if (idx !== null) return idx;
+      const idx = await judgeWithOpenAI(openai, original, candidates, description);
+      if (idx !== null && idx !== REJECT_ALL) return idx;
+      if (idx === REJECT_ALL) sawRejectAll = true;
     } catch (err) {
       console.error("pickBestImage openai judge error", err);
     }
@@ -105,12 +144,13 @@ export async function pickBestImage(candidates: Buffer[], description: string): 
 
   if (getGeminiKey()) {
     try {
-      const idx = await judgeWithGemini(candidates, description);
-      if (idx !== null) return idx;
+      const idx = await judgeWithGemini(original, candidates, description);
+      if (idx !== null && idx !== REJECT_ALL) return idx;
+      if (idx === REJECT_ALL) sawRejectAll = true;
     } catch (err) {
       console.error("pickBestImage gemini judge error", err);
     }
   }
 
-  return 0;
+  return sawRejectAll ? null : 0;
 }

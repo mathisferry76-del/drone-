@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { getUserFromAuthHeader, getSupabaseAdmin, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
@@ -55,9 +56,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: portalSession.url });
   } catch (err) {
     console.error("billing portal error", err);
-    return NextResponse.json(
-      { error: "Impossible d'ouvrir la gestion du compte." },
-      { status: 500 }
-    );
+    // Stripe's own message here is what actually says "you must activate
+    // the customer portal" (a one-time dashboard setup step, separate for
+    // test/live mode, at dashboard.stripe.com/settings/billing/portal) —
+    // by far the most common reason this call fails on a deployment that
+    // has never opened the portal before. Surfacing it (Stripe writes these
+    // for developers, nothing sensitive in them) beats a dead-end generic
+    // message with no way to self-diagnose without server log access.
+    const message =
+      err instanceof Stripe.errors.StripeError
+        ? `Stripe : ${err.message}`
+        : "Impossible d'ouvrir la gestion du compte.";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
