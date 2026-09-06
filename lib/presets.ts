@@ -237,6 +237,13 @@ export function getPreset(id: string): Preset {
 // négligeable, et ils servent de porte d'entrée vers l'achat de crédits.
 export const GENERATION_CREDIT_COST = 200;
 
+// Coût crédits pour "Impressionne tes potes" en vidéo (Veo 3.1, clip 4s en
+// 1080p avec son) — voir lib/fal-video.ts. Le coût réel API est d'environ
+// 1,50€ à 1,60€, soit ~6x celui d'une image ; 1500 crédits garde une marge
+// confortable (~9x, plus large que les 7x de l'image) le temps de valider la
+// fonctionnalité en conditions réelles avant ouverture à tous les comptes.
+export const VIDEO_CREDIT_COST = 1500;
+
 export interface CreditPack {
   id: string;
   credits: number;
