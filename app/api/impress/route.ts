@@ -298,7 +298,17 @@ export async function POST(req: NextRequest) {
         throw firstFailure ? firstFailure.reason : new Error("Toutes les tentatives ont échoué.");
       }
 
-      const bestIndex = await pickBestImage(successes, description);
+      const bestIndex = await pickBestImage(normalizedInput, successes, description);
+      // null means the judge(s) agreed none of the CANDIDATE_COUNT attempts
+      // actually kept the original photo's scene — e.g. the model
+      // hallucinated an unrelated image instead of editing the real one.
+      // Erroring out (and refunding below) beats silently shipping and
+      // charging for a result that has nothing to do with the user's photo.
+      if (bestIndex === null) {
+        throw new Error(
+          "Aucune des tentatives ne respecte assez la photo d'origine. Réessaie avec une description plus précise ou une autre photo."
+        );
+      }
       resultBuffer = successes[bestIndex];
     } catch (err) {
       // Refunds the trial/credits reservation whether the AI call genuinely
