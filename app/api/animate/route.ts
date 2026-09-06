@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
+import { getFalKey } from "@/lib/fal";
 import { animateImageToVideo, describeFalVideoError } from "@/lib/fal-video";
+import { getReplicateKey } from "@/lib/replicate";
+import { animateImageToVideoReplicate, describeReplicateVideoError } from "@/lib/replicate-video";
 import { VIDEO_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
@@ -61,6 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   let reservation: string | null = null;
+  let provider: "fal" | "replicate" | null = null;
   async function releaseReservationIfNeeded() {
     if (!reservation) return;
     if (reservation !== "ok_trial" && reservation !== "ok_credits") return;
@@ -90,6 +94,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "Décris le mouvement/l'animation que tu veux voir." },
         { status: 400 }
+      );
+    }
+
+    // Same provider precedent as the image pipeline (app/api/impress/
+    // route.ts): fal.ai first if configured, else Replicate — whichever key
+    // is actually set decides which host serves Veo 3.1. Checked before the
+    // credit reservation below so a missing key never debits credits for a
+    // request that was never going to run.
+    provider = getFalKey() ? "fal" : getReplicateKey() ? "replicate" : null;
+    if (!provider) {
+      return NextResponse.json(
+        { error: "Aucun fournisseur vidéo configuré (FAL_KEY ou REPLICATE_API_TOKEN manquantes)." },
+        { status: 500 }
       );
     }
 
@@ -132,7 +149,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const videoUrl = await animateImageToVideo(normalizedInput, description, req.signal);
+    const videoUrl =
+      provider === "fal"
+        ? await animateImageToVideo(normalizedInput, description, req.signal)
+        : await animateImageToVideoReplicate(normalizedInput, description, req.signal);
     return NextResponse.json({ video: videoUrl });
   } catch (err) {
     await releaseReservationIfNeeded();
@@ -140,6 +160,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Génération annulée." }, { status: 499 });
     }
     console.error("animate error", err);
-    return NextResponse.json({ error: describeFalVideoError(err) }, { status: 502 });
+    const message =
+      provider === "replicate" ? describeReplicateVideoError(err) : describeFalVideoError(err);
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
