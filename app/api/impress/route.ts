@@ -18,9 +18,10 @@ const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_DESCRIPTION = 400;
 // Generates this many independent attempts per request and keeps the best
 // one (see pickBestImage) — brand/logo fidelity on named real-world objects
-// is inconsistent enough between attempts that a second roll measurably
-// helps, at the cost of roughly doubling the AI spend per generation.
-const CANDIDATE_COUNT = 2;
+// is inconsistent enough between attempts that more rolls measurably
+// improve the odds, at the cost of roughly tripling the AI spend per
+// generation (~0.24-0.25€ on Replicate vs ~0.08€ for a single attempt).
+const CANDIDATE_COUNT = 3;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
 // thumbnail presets: those push dramatic, stylized regeneration. Here the
@@ -266,11 +267,11 @@ export async function POST(req: NextRequest) {
       // Runs CANDIDATE_COUNT independent generations in parallel and keeps
       // the best one instead of a single roll of the dice — cars, watches
       // and other named brands come back inconsistent enough (a crisp logo
-      // on one attempt, a blurry smudge on another) that a second attempt
-      // measurably improves the odds of a usable result. Paid for out of
-      // margin (roughly doubles the AI cost per generation, absorbed by
+      // on one attempt, a blurry smudge on another) that more attempts
+      // measurably improve the odds of a usable result. Paid for out of
+      // margin (roughly triples the AI cost per generation, absorbed by
       // MIN IA — the user's credit cost stays the same), not passed on to
-      // the credits charged. Promise.allSettled means one candidate erroring
+      // the credits charged. Promise.allSettled means a candidate erroring
       // (rate limit, transient failure) doesn't sink the request as long as
       // at least one succeeds.
       const settled = await Promise.allSettled(
