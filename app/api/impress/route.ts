@@ -41,15 +41,16 @@ const MAX_DESCRIPTION = 400;
 // tokens after we've already told the user it failed) instead of risking
 // the platform doing it for us with no response body at all.
 //
-// Raised from 55s: the pipeline now runs two extra vision-model passes
-// after the CANDIDATE_COUNT generations finish — the pixel-diff gate is
-// local/instant, but verifyChangeApplied (lib/verify-change.ts) and
-// pickBestImage's own judge call are each a real network round-trip on top
-// of however long the slowest of the 4 parallel generations already took.
-// 55s was tuned before those existed and left too little headroom, causing
-// requests that would otherwise have finished fine to get cut off. Still
-// comfortably under the 120s requested above.
-const GENERATION_DEADLINE_MS = 90_000;
+// Raised from 55s, then again from 90s: the pipeline now runs two extra
+// vision-model passes after the CANDIDATE_COUNT generations finish — the
+// pixel-diff gate is local/instant, but verifyChangeApplied
+// (lib/verify-change.ts) and pickBestImage's own judge call are each a real
+// network round-trip on top of however long the slowest of the 4 parallel
+// generations already took, and 90s still wasn't enough headroom in
+// production. Set close to the 120s ceiling requested above rather than
+// nudging it up again by guesswork — leaves the most margin this route can
+// have without exceeding what's already been asked of the platform.
+const GENERATION_DEADLINE_MS = 105_000;
 // Generates this many independent attempts per request and keeps the best
 // one (see pickBestImage) — brand/logo fidelity on named real-world objects
 // is inconsistent enough between attempts that more rolls measurably
