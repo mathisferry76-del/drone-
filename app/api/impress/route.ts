@@ -7,6 +7,7 @@ import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, describeGeminiError } from "@/lib/gemini";
 import { getFalKey, editImageWithFlux, describeFalError } from "@/lib/fal";
 import { getReplicateKey, editImageWithReplicate, describeReplicateError } from "@/lib/replicate";
+import { pickBestImage } from "@/lib/pick-best";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
@@ -15,6 +16,11 @@ export const runtime = "nodejs";
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_DESCRIPTION = 400;
+// Generates this many independent attempts per request and keeps the best
+// one (see pickBestImage) — brand/logo fidelity on named real-world objects
+// is inconsistent enough between attempts that a second roll measurably
+// helps, at the cost of roughly doubling the AI spend per generation.
+const CANDIDATE_COUNT = 2;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
 // thumbnail presets: those push dramatic, stylized regeneration. Here the
@@ -218,14 +224,23 @@ export async function POST(req: NextRequest) {
       : getGeminiKey()
       ? "gemini"
       : null;
-    let resultBuffer: Buffer;
 
-    try {
+    if (provider === null) {
+      await releaseReservationIfNeeded();
+      return NextResponse.json(
+        { error: "L'IA n'est pas configurée sur ce déploiement." },
+        { status: 501 }
+      );
+    }
+
+    async function generateOnce(): Promise<Buffer> {
       if (provider === "flux-fal") {
-        resultBuffer = await editImageWithFlux(normalizedInput, prompt, req.signal);
-      } else if (provider === "flux-replicate") {
-        resultBuffer = await editImageWithReplicate(normalizedInput, prompt, req.signal);
-      } else if (provider === "openai" && openai) {
+        return editImageWithFlux(normalizedInput, prompt, req.signal);
+      }
+      if (provider === "flux-replicate") {
+        return editImageWithReplicate(normalizedInput, prompt, req.signal);
+      }
+      if (provider === "openai" && openai) {
         const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
         const result = await openai.images.edit(
           {
@@ -240,16 +255,40 @@ export async function POST(req: NextRequest) {
         );
         const b64 = result.data?.[0]?.b64_json;
         if (!b64) throw new Error("OpenAI n'a renvoyé aucune image.");
-        resultBuffer = Buffer.from(b64, "base64");
-      } else if (provider === "gemini") {
-        resultBuffer = await editImageWithGemini([{ buffer: normalizedInput }], prompt, req.signal);
-      } else {
-        await releaseReservationIfNeeded();
-        return NextResponse.json(
-          { error: "L'IA n'est pas configurée sur ce déploiement." },
-          { status: 501 }
-        );
+        return Buffer.from(b64, "base64");
       }
+      return editImageWithGemini([{ buffer: normalizedInput }], prompt, req.signal);
+    }
+
+    let resultBuffer: Buffer;
+
+    try {
+      // Runs CANDIDATE_COUNT independent generations in parallel and keeps
+      // the best one instead of a single roll of the dice — cars, watches
+      // and other named brands come back inconsistent enough (a crisp logo
+      // on one attempt, a blurry smudge on another) that a second attempt
+      // measurably improves the odds of a usable result. Paid for out of
+      // margin (roughly doubles the AI cost per generation, absorbed by
+      // MIN IA — the user's credit cost stays the same), not passed on to
+      // the credits charged. Promise.allSettled means one candidate erroring
+      // (rate limit, transient failure) doesn't sink the request as long as
+      // at least one succeeds.
+      const settled = await Promise.allSettled(
+        Array.from({ length: CANDIDATE_COUNT }, () => generateOnce())
+      );
+      const successes = settled
+        .filter((r): r is PromiseFulfilledResult<Buffer> => r.status === "fulfilled")
+        .map((r) => r.value);
+
+      if (successes.length === 0) {
+        const firstFailure = settled.find(
+          (r): r is PromiseRejectedResult => r.status === "rejected"
+        );
+        throw firstFailure ? firstFailure.reason : new Error("Toutes les tentatives ont échoué.");
+      }
+
+      const bestIndex = await pickBestImage(successes, description);
+      resultBuffer = successes[bestIndex];
     } catch (err) {
       // Refunds the trial/credits reservation whether the AI call genuinely
       // failed or the client aborted the request (cancel button) — either

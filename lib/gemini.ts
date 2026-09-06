@@ -87,7 +87,7 @@ export async function editImageWithGemini(
 // the time of writing, while this concrete version answered reliably —
 // pinned to a real currently-working model over a currently-broken
 // "stable" alias. Worth re-checking if this starts 404ing later.
-const GEMINI_TEXT_MODEL = "gemini-3.5-flash";
+export const GEMINI_TEXT_MODEL = "gemini-3.5-flash";
 
 // Turns a YouTube video's title (and description, when available — see
 // lib/youtube.ts) into a ready-to-use AI thumbnail description prompt,
