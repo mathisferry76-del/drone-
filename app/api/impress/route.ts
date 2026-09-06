@@ -8,6 +8,7 @@ import { getGeminiKey, editImageWithGemini, describeGeminiError } from "@/lib/ge
 import { getFalKey, editImageWithFlux, describeFalError } from "@/lib/fal";
 import { getReplicateKey, editImageWithReplicate, describeReplicateError } from "@/lib/replicate";
 import { pickBestImage } from "@/lib/pick-best";
+import { looksUnchanged } from "@/lib/image-diff";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
@@ -333,7 +334,26 @@ export async function POST(req: NextRequest) {
         throw firstFailure ? firstFailure.reason : new Error("Toutes les tentatives ont échoué.");
       }
 
-      const bestIndex = await pickBestImage(normalizedInput, successes, description);
+      // Deterministic pixel-level backstop, ahead of the LLM judge: FLUX
+      // Kontext occasionally returns a candidate that's essentially the
+      // unedited input photo, and the judge (asked to catch this among
+      // several other criteria) doesn't reliably reject it every time —
+      // confirmed in production, twice. Whether a candidate changed at all
+      // is answerable by comparing pixels directly, so filter those out
+      // before the judge ever sees them rather than trusting its rubric for
+      // this specific case too.
+      const changedFlags = await Promise.all(
+        successes.map((buf) => looksUnchanged(normalizedInput, buf).then((u) => !u))
+      );
+      const changedSuccesses = successes.filter((_, i) => changedFlags[i]);
+
+      if (changedSuccesses.length === 0) {
+        throw new Error(
+          "L'IA n'a appliqué aucune modification visible à la photo. Réessaie avec une description plus précise ou une autre photo."
+        );
+      }
+
+      const bestIndex = await pickBestImage(normalizedInput, changedSuccesses, description);
       // null means the judge(s) agreed none of the CANDIDATE_COUNT attempts
       // actually kept the original photo's scene — e.g. the model
       // hallucinated an unrelated image instead of editing the real one.
@@ -344,7 +364,7 @@ export async function POST(req: NextRequest) {
           "Aucune des tentatives ne respecte assez la photo d'origine. Réessaie avec une description plus précise ou une autre photo."
         );
       }
-      resultBuffer = successes[bestIndex];
+      resultBuffer = changedSuccesses[bestIndex];
       clearTimeout(deadlineTimer);
     } catch (err) {
       clearTimeout(deadlineTimer);
