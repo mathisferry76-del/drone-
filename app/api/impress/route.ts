@@ -259,15 +259,25 @@ export async function POST(req: NextRequest) {
     // Each is only used when the one(s) before it aren't configured on this
     // deployment — not a runtime retry chain, so a mid-request failure
     // surfaces as an error rather than silently billing a second provider.
+    //
+    // Gemini moved to the front: Gemini 2.5 Flash Image has a strong
+    // reputation specifically for this kind of realistic object-in-photo
+    // compositing — reflections and lighting consistency on the inserted/
+    // replaced object in particular — plausibly stronger than FLUX Kontext
+    // there, and it was sitting completely unused as a last-resort fallback
+    // on any deployment where FAL_KEY is set (which, until now, silently
+    // starved it of ever actually running here). Only takes effect where
+    // GEMINI_API_KEY is actually configured; falls through to the same
+    // order as before otherwise.
     const openai = getOpenAI();
-    const provider: "flux-fal" | "flux-replicate" | "openai" | "gemini" | null = getFalKey()
+    const provider: "flux-fal" | "flux-replicate" | "openai" | "gemini" | null = getGeminiKey()
+      ? "gemini"
+      : getFalKey()
       ? "flux-fal"
       : getReplicateKey()
       ? "flux-replicate"
       : openai
       ? "openai"
-      : getGeminiKey()
-      ? "gemini"
       : null;
 
     if (provider === null) {
