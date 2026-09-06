@@ -50,6 +50,7 @@ Règles d'intégration physique (le plus important, cause principale de résulta
 Règles de portée :
 - Applique exactement le changement demandé, rien d'autre.
 - Ne change ni l'éclairage général, ni les couleurs, ni le style, ni le cadrage, ni aucun élément de la photo qui n'est pas mentionné.
+- N'ÉLARGIS ET NE RECADRE JAMAIS la photo pour montrer une partie de la scène absente du cadre d'origine (ex : ne montre pas la banquette arrière si la photo d'origine est un gros plan sur le volant qui ne la montre pas), même si la description de l'utilisateur mentionne un détail qui se trouve normalement hors champ. Applique la description uniquement à ce qui est visible dans le cadre exact de la photo fournie — ignore la partie de la description qui concerne une zone non visible plutôt que d'élargir le cadre pour la faire rentrer.
 - N'en fais pas trop : pas de sur-retouche, pas de saturation excessive, pas d'effet "généré par IA" visible.
 - N'ajoute aucun texte, lettre ou chiffre à l'image.
 
