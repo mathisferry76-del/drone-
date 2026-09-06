@@ -670,6 +670,14 @@ export default function ImpressPage() {
             <>
               {error && <p className="text-sm text-red-400">{error}</p>}
 
+              <p className="text-center text-xs text-zinc-500">
+                {hasFreeTrialAvailable
+                  ? "Cette génération utilisera ton essai gratuit (avec filigrane)."
+                  : isOwnerAccount
+                  ? `Compte propriétaire — génération offerte (${GENERATION_CREDIT_COST} crédits pour tout autre compte).`
+                  : `Coûte ${GENERATION_CREDIT_COST} crédits.`}
+              </p>
+
               {loading ? (
                 <button
                   onClick={handleCancelGenerate}
@@ -690,6 +698,8 @@ export default function ImpressPage() {
           ) : (
             <>
               {videoError && <p className="text-sm text-red-400">{videoError}</p>}
+
+              <p className="text-center text-xs text-zinc-500">Coûte {VIDEO_CREDIT_COST} crédits.</p>
 
               {videoLoading ? (
                 <button
