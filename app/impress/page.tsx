@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { CREDIT_PACKS, GENERATION_CREDIT_COST, VIDEO_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
@@ -16,16 +17,16 @@ const EXAMPLES = [
   "Change la façade de ma maison en pierre blanche moderne",
   "Remplace mon t-shirt par une veste en cuir noir",
 ];
-// Vidéo (Veo 3.1) : bêta réservée au compte propriétaire (voir
-// app/api/animate/route.ts) — mêmes limites de longueur que la description
-// image, exemples orientés mouvement/caméra plutôt que remplacement d'objet.
+// Vidéo (Veo 3.1) : mêmes limites de longueur que la description image,
+// exemples orientés mouvement/caméra plutôt que remplacement d'objet.
 const VIDEO_EXAMPLES = [
   "La caméra tourne lentement autour de la voiture, reflets qui bougent sur la carrosserie",
   "Le vent fait légèrement bouger mes cheveux et mes vêtements",
   "Zoom avant lent et fluide vers le sujet principal",
 ];
 
-export default function ImpressPage() {
+function ImpressPageInner() {
+  const searchParams = useSearchParams();
   const { loading: authLoading, session } = useSupabaseUser();
   const loggedIn = Boolean(session);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -67,7 +68,11 @@ export default function ImpressPage() {
   // son propre résultat et son propre statut de chargement/erreur, puisque
   // les deux modes appellent des routes différentes et peuvent échouer
   // indépendamment l'un de l'autre.
-  const [mode, setMode] = useState<"image" | "video">("image");
+  // Lets a direct link (e.g. the old standalone /animate page, now a
+  // redirect) open straight into video mode via ?mode=video.
+  const [mode, setMode] = useState<"image" | "video">(() =>
+    searchParams.get("mode") === "video" ? "video" : "image"
+  );
   const [videoDescription, setVideoDescription] = useState("");
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -477,28 +482,26 @@ export default function ImpressPage() {
         exactement ça — rien de plus — pour un résultat crédible.
       </p>
 
-      {isOwnerAccount && (
-        <div className="mt-4 inline-flex overflow-hidden rounded-full border border-zinc-700 text-sm font-semibold">
-          <button
-            type="button"
-            onClick={() => setMode("image")}
-            className={`px-4 py-1.5 transition ${
-              mode === "image" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            🖼️ Image
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode("video")}
-            className={`px-4 py-1.5 transition ${
-              mode === "video" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            🎬 Vidéo (bêta)
-          </button>
-        </div>
-      )}
+      <div className="mt-4 inline-flex overflow-hidden rounded-full border border-zinc-700 text-sm font-semibold">
+        <button
+          type="button"
+          onClick={() => setMode("image")}
+          className={`px-4 py-1.5 transition ${
+            mode === "image" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          🖼️ Image
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("video")}
+          className={`px-4 py-1.5 transition ${
+            mode === "video" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          🎬 Vidéo (bêta)
+        </button>
+      </div>
 
       {mode === "image" && hasFreeTrialAvailable && (
         <p className="mt-3 rounded-lg border border-emerald-800/40 bg-emerald-400/5 px-4 py-2 text-sm text-emerald-300">
@@ -514,18 +517,20 @@ export default function ImpressPage() {
       {mode === "video" && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <p className="text-sm text-zinc-500">
-            Bêta interne réservée à ton compte — {VIDEO_CREDIT_COST} crédits par
-            vidéo (4 secondes, 1080p, avec son). {creditsBalance} crédits disponibles (
+            Nouveau — {VIDEO_CREDIT_COST} crédits par vidéo (4 secondes, 1080p,
+            avec son). {creditsBalance} crédits disponibles (
             {Math.floor(creditsBalance / VIDEO_CREDIT_COST)} vidéo(s)).
           </p>
-          <button
-            type="button"
-            onClick={handleGrantTestCredits}
-            disabled={grantingCredits}
-            className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white disabled:opacity-50"
-          >
-            {grantingCredits ? "Ajout..." : "🧪 +3000 crédits de test"}
-          </button>
+          {isOwnerAccount && (
+            <button
+              type="button"
+              onClick={handleGrantTestCredits}
+              disabled={grantingCredits}
+              className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white disabled:opacity-50"
+            >
+              {grantingCredits ? "Ajout..." : "🧪 +3000 crédits de test"}
+            </button>
+          )}
         </div>
       )}
 
@@ -841,5 +846,15 @@ export default function ImpressPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ImpressPage() {
+  return (
+    <Suspense
+      fallback={<div className="mx-auto w-full max-w-6xl px-6 py-16 text-zinc-500">Chargement...</div>}
+    >
+      <ImpressPageInner />
+    </Suspense>
   );
 }

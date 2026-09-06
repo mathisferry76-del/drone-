@@ -262,8 +262,16 @@ Billing Portal (upgrade/downgrade avec proration, moyen de paiement,
 résiliation) pour un utilisateur qui a déjà un `stripe_customer_id` —
 c'est ce qu'utilisent le bouton "Changer de plan / résilier" sur
 `/compte` et le clic sur un autre plan depuis `/pricing` quand un
-abonnement est déjà actif. Ne nécessite aucune configuration
-supplémentaire (le portail par défaut de Stripe suffit).
+abonnement est déjà actif. **Nécessite une configuration manuelle
+ponctuelle** : sur
+[dashboard.stripe.com/settings/billing/portal](https://dashboard.stripe.com/settings/billing/portal),
+onglet "Subscriptions", active "Customers can switch plans" (désactivé
+par défaut sur tout compte Stripe) et ajoute les 3 prix des paliers
+(Starter/Creator/Pro) à la liste des offres proposées — sans ça, le
+portail n'affiche que résiliation/moyen de paiement, pas le changement
+de palier, même si le code applicatif gère déjà correctement la
+proration côté webhook (`invoice.paid`,
+`customer.subscription.updated`).
 
 **Amélioration IA générative — deux fournisseurs possibles :**
 
