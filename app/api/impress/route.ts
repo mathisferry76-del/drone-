@@ -289,7 +289,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const prompt = buildImpressPrompt(description, referenceImageUrl !== null);
+    // Two prompt variants, not one: fal.ai's multi-image Kontext input is
+    // explicitly documented as "experimental", and how it actually weighs a
+    // free-text description of what each of the 2 images is for (as opposed
+    // to a dedicated inline reference syntax) isn't something this codebase
+    // can verify against real generations. Betting all CANDIDATE_COUNT
+    // attempts on an unverified path would risk making brand fidelity worse,
+    // not better, if it turns out to confuse the model rather than help it.
+    const prompt = buildImpressPrompt(description, false);
+    const promptWithReference = referenceImageUrl ? buildImpressPrompt(description, true) : null;
 
     // Merges the client's own cancel (req.signal) with our internal deadline
     // into one signal so generateOnce doesn't need to know which one fired —
@@ -309,11 +317,18 @@ export async function POST(req: NextRequest) {
       internalController.abort(new DOMException("Délai interne dépassé", "TimeoutError"));
     }, GENERATION_DEADLINE_MS);
 
-    async function generateOnce(): Promise<Buffer> {
+    // Half the attempts (when a reference photo is available) use the
+    // experimental multi-image path, half use the proven text-only path —
+    // hedging instead of committing every attempt to the unverified one, so
+    // a bad bet on the new path can't make results worse than before it
+    // existed; the judge (lib/pick-best.ts) already picks the best result
+    // across all CANDIDATE_COUNT attempts regardless of which path produced
+    // it.
+    async function generateOnce(useReference: boolean): Promise<Buffer> {
       const signal = internalController.signal;
       if (provider === "flux-fal") {
-        return referenceImageUrl
-          ? editImageWithFluxMulti(normalizedInput, referenceImageUrl, prompt, signal)
+        return useReference && referenceImageUrl && promptWithReference
+          ? editImageWithFluxMulti(normalizedInput, referenceImageUrl, promptWithReference, signal)
           : editImageWithFlux(normalizedInput, prompt, signal);
       }
       if (provider === "flux-replicate") {
@@ -353,7 +368,7 @@ export async function POST(req: NextRequest) {
       // (rate limit, transient failure) doesn't sink the request as long as
       // at least one succeeds.
       const settled = await Promise.allSettled(
-        Array.from({ length: CANDIDATE_COUNT }, () => generateOnce())
+        Array.from({ length: CANDIDATE_COUNT }, (_, i) => generateOnce(i % 2 === 0))
       );
       const successes = settled
         .filter((r): r is PromiseFulfilledResult<Buffer> => r.status === "fulfilled")
