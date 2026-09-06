@@ -9,6 +9,7 @@ import { getFalKey, editImageWithFlux, editImageWithFluxMulti, describeFalError 
 import { getReplicateKey, editImageWithReplicate, describeReplicateError } from "@/lib/replicate";
 import { pickBestImage } from "@/lib/pick-best";
 import { looksUnchanged } from "@/lib/image-diff";
+import { verifyChangeApplied } from "@/lib/verify-change";
 import { extractVehicleModel } from "@/lib/extract-vehicle";
 import { findCarReferenceImage } from "@/lib/car-reference";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
@@ -400,7 +401,32 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const bestIndex = await pickBestImage(normalizedInput, changedSuccesses, description);
+      // Second, narrower verification pass ahead of the ranking judge — the
+      // pixel-diff gate above only proves *something* changed, not that the
+      // *right* thing changed. Confirmed in production: a candidate that
+      // only recolors the original object (same Renault, repainted black)
+      // instead of actually becoming the requested model (a BMW M4) passed
+      // both the pixel-diff gate (color is a real, substantial change) and
+      // pickBestImage's own rejection criteria. A single-image, single yes/
+      // no question ("was the actual requested object produced") is a much
+      // smaller ask for a cheap vision model than the multi-criteria,
+      // multi-image rubric pickBestImage runs, so give it its own pass
+      // instead of folding it into that one. false is the only verdict that
+      // discards a candidate — true or an unclear/failed check (null) both
+      // let it through, so a flaky verification call never costs the user a
+      // generation that would otherwise have been fine.
+      const verifiedFlags = await Promise.all(
+        changedSuccesses.map((buf) => verifyChangeApplied(buf, description))
+      );
+      const verifiedSuccesses = changedSuccesses.filter((_, i) => verifiedFlags[i] !== false);
+
+      if (verifiedSuccesses.length === 0) {
+        throw new Error(
+          "L'IA n'a pas réussi à appliquer fidèlement le changement demandé (l'objet a changé de couleur/finition sans devenir le modèle exact demandé). Réessaie avec une description plus précise ou une autre photo."
+        );
+      }
+
+      const bestIndex = await pickBestImage(normalizedInput, verifiedSuccesses, description);
       // null means the judge(s) agreed none of the CANDIDATE_COUNT attempts
       // actually kept the original photo's scene — e.g. the model
       // hallucinated an unrelated image instead of editing the real one.
@@ -411,7 +437,7 @@ export async function POST(req: NextRequest) {
           "Aucune des tentatives ne respecte assez la photo d'origine. Réessaie avec une description plus précise ou une autre photo."
         );
       }
-      resultBuffer = changedSuccesses[bestIndex];
+      resultBuffer = verifiedSuccesses[bestIndex];
       clearTimeout(deadlineTimer);
     } catch (err) {
       clearTimeout(deadlineTimer);
