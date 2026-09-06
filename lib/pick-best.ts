@@ -33,7 +33,7 @@ function buildJudgeInstruction(candidateCount: number, description: string): str
 
 Important : le critère (a) porte sur le DÉCOR/CONTEXTE autour de l'objet concerné, jamais sur l'objet lui-même quand la description demande justement de le changer ou de le remplacer — dans ce cas, que cet objet ait l'air différent de l'image 0 est le résultat ATTENDU, pas un défaut. Ne rejette jamais une image uniquement parce que l'objet demandé a changé d'apparence.
 
-Parmi les images qui passent ces deux critères, choisis celle qui a l'air la plus réaliste et physiquement intégrée à la scène, avec le logo/badge de marque (s'il y en a un) le plus net et le plus fidèle au vrai modèle demandé.
+Parmi les images qui passent ces deux critères, la netteté et la fidélité du logo/badge de marque (s'il y en a un) est le critère de classement LE PLUS IMPORTANT, avant même le réalisme général — une image dont le logo est nettement plus net et plus fidèle au vrai logo doit être préférée à une autre plus réaliste ailleurs mais dont le logo est flou, bavant ou à la forme approximative (ex : un cheval cabré Ferrari qui ressemble à une tache plutôt qu'à un cheval reconnaissable). Choisis celle qui a l'air la plus réaliste et physiquement intégrée à la scène en départageant à partir de ce critère de logo.
 
 Réponds UNIQUEMENT avec le numéro (1, 2, ...) de la meilleure image restante, ou avec "0" si TOUTES les images échouent (a) ou (b). Réponds seulement avec ce chiffre, sans aucun autre mot.`;
 }
