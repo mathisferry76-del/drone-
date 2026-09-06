@@ -56,6 +56,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: portalSession.url });
   } catch (err) {
     console.error("billing portal error", err);
+    // "resource_missing" here means Stripe has no record at all of this
+    // customer id — happens when the stored id was created under a
+    // different mode/account than the one STRIPE_SECRET_KEY now points to
+    // (e.g. leftover from test-mode testing before going live). No portal
+    // session can ever work for an id Stripe doesn't recognize, and it'll
+    // fail the exact same way every time, so clear it (and the now-equally
+    // orphaned subscription id) instead of leaving the account permanently
+    // stuck on both this and the checkout tier-switch guard in
+    // /api/checkout, which also gates on stripe_subscription_id. Next
+    // attempt falls through to the normal "no billing history yet" reply
+    // below, pointing them back to /pricing to start fresh.
+    if (err instanceof Stripe.errors.StripeInvalidRequestError && err.code === "resource_missing") {
+      await admin
+        .from("profiles")
+        .update({ stripe_customer_id: null, stripe_subscription_id: null })
+        .eq("id", user.id);
+      return NextResponse.json(
+        { error: "Aucun historique de paiement. Achète des crédits sur /pricing." },
+        { status: 404 }
+      );
+    }
     // Stripe's own message here is what actually says "you must activate
     // the customer portal" (a one-time dashboard setup step, separate for
     // test/live mode, at dashboard.stripe.com/settings/billing/portal) —
