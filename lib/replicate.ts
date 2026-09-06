@@ -57,6 +57,11 @@ export async function editImageWithReplicate(
           input_image: image,
           aspect_ratio: "match_input_image",
           output_format: "png",
+          // PNG is already lossless, but this is Replicate's explicit
+          // top-end quality setting for this model (0-100) — set at max
+          // rather than relying on whatever default the model would
+          // otherwise pick.
+          output_quality: 100,
         },
         signal,
       }

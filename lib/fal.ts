@@ -56,6 +56,9 @@ export async function editImageWithFlux(
       input: {
         prompt,
         image_url: new Blob([new Uint8Array(image)], { type: "image/png" }),
+        // Defaults to lossy "jpeg" if left unset — explicit "png" avoids
+        // unnecessary compression artifacts on the final output.
+        output_format: "png",
       },
       abortSignal: signal,
     });
