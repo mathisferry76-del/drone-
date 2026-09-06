@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
-import { CREDIT_PACKS, GENERATION_CREDIT_COST } from "@/lib/presets";
+import { CREDIT_PACKS, GENERATION_CREDIT_COST, VIDEO_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { useEffect } from "react";
@@ -15,6 +15,14 @@ const EXAMPLES = [
   "Ajoute une montre de luxe à mon poignet",
   "Change la façade de ma maison en pierre blanche moderne",
   "Remplace mon t-shirt par une veste en cuir noir",
+];
+// Vidéo (Veo 3.1) : bêta réservée au compte propriétaire (voir
+// app/api/animate/route.ts) — mêmes limites de longueur que la description
+// image, exemples orientés mouvement/caméra plutôt que remplacement d'objet.
+const VIDEO_EXAMPLES = [
+  "La caméra tourne lentement autour de la voiture, reflets qui bougent sur la carrosserie",
+  "Le vent fait légèrement bouger mes cheveux et mes vêtements",
+  "Zoom avant lent et fluide vers le sujet principal",
 ];
 
 export default function ImpressPage() {
@@ -53,6 +61,19 @@ export default function ImpressPage() {
   // either side.
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Vidéo (Veo 3.1, bêta réservée au compte propriétaire — voir
+  // app/api/animate/route.ts) : partage la même photo que le mode image
+  // (state `file`/`previewUrl` ci-dessus) mais avec sa propre description,
+  // son propre résultat et son propre statut de chargement/erreur, puisque
+  // les deux modes appellent des routes différentes et peuvent échouer
+  // indépendamment l'un de l'autre.
+  const [mode, setMode] = useState<"image" | "video">("image");
+  const [videoDescription, setVideoDescription] = useState("");
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const videoAbortControllerRef = useRef<AbortController | null>(null);
+
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!session) {
@@ -88,6 +109,8 @@ export default function ImpressPage() {
     setResultUrl(null);
     setResultAspect(null);
     setPreviewAspect(null);
+    setVideoError(null);
+    setVideoUrl(null);
     const reader = new FileReader();
     reader.onload = () => setPreviewUrl(reader.result as string);
     reader.readAsDataURL(f);
@@ -218,6 +241,90 @@ export default function ImpressPage() {
     abortControllerRef.current?.abort();
   }
 
+  async function handleGenerateVideo() {
+    setVideoError(null);
+    if (!file) {
+      setVideoError("Ajoute d'abord une photo.");
+      return;
+    }
+    if (!videoDescription.trim()) {
+      setVideoError("Décris le mouvement/l'animation que tu veux voir.");
+      return;
+    }
+    if (!session) {
+      setVideoError("Connecte-toi d'abord.");
+      return;
+    }
+
+    setVideoUrl(null);
+    const controller = new AbortController();
+    videoAbortControllerRef.current = controller;
+    setVideoLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      formData.append("description", videoDescription.trim());
+
+      const res = await fetch("/api/animate", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+        signal: controller.signal,
+      });
+
+      let data: { video?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setVideoError(
+          "Le serveur a mis trop de temps à répondre ou a coupé la connexion. Réessaie."
+        );
+        return;
+      }
+
+      if (!res.ok || !data.video) {
+        setVideoError(data.error ?? "Erreur pendant la génération vidéo.");
+        return;
+      }
+      setVideoUrl(data.video);
+
+      // Une vidéo débite de vrais crédits (voir app/api/animate/route.ts) —
+      // resynchronise le solde affiché, comme après une génération image.
+      if (session) {
+        const supabase = getSupabaseBrowser();
+        const { data: fresh } = await supabase!
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        if (fresh) setProfile(fresh as Profile);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        if (session) {
+          setTimeout(async () => {
+            const supabase = getSupabaseBrowser();
+            const { data: fresh } = await supabase!
+              .from("profiles")
+              .select("*")
+              .eq("id", session.user.id)
+              .single();
+            if (fresh) setProfile(fresh as Profile);
+          }, 800);
+        }
+      } else {
+        setVideoError("Impossible de contacter le serveur.");
+      }
+    } finally {
+      setVideoLoading(false);
+      videoAbortControllerRef.current = null;
+    }
+  }
+
+  function handleCancelVideoGenerate() {
+    videoAbortControllerRef.current?.abort();
+  }
+
   async function handleBuyCredits(packId: string, priceId: string | null) {
     setUpgradeError(null);
     if (!priceId) {
@@ -336,15 +443,46 @@ export default function ImpressPage() {
         Prends une photo, décris un seul changement précis. L&apos;IA applique
         exactement ça — rien de plus — pour un résultat crédible.
       </p>
-      {hasFreeTrialAvailable && (
+
+      {isOwnerAccount && (
+        <div className="mt-4 inline-flex overflow-hidden rounded-full border border-zinc-700 text-sm font-semibold">
+          <button
+            type="button"
+            onClick={() => setMode("image")}
+            className={`px-4 py-1.5 transition ${
+              mode === "image" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            🖼️ Image
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("video")}
+            className={`px-4 py-1.5 transition ${
+              mode === "video" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
+            }`}
+          >
+            🎬 Vidéo (bêta)
+          </button>
+        </div>
+      )}
+
+      {mode === "image" && hasFreeTrialAvailable && (
         <p className="mt-3 rounded-lg border border-emerald-800/40 bg-emerald-400/5 px-4 py-2 text-sm text-emerald-300">
           🎁 Ton essai gratuit — un vrai résultat, avec filigrane. Achète des
           crédits pour débloquer sans filigrane et continuer.
         </p>
       )}
-      {!hasFreeTrialAvailable && !isOwnerAccount && (
+      {mode === "image" && !hasFreeTrialAvailable && !isOwnerAccount && (
         <p className="mt-3 text-sm text-zinc-500">
           {creditsBalance} crédits disponibles ({Math.floor(creditsBalance / GENERATION_CREDIT_COST)} génération(s)).
+        </p>
+      )}
+      {mode === "video" && (
+        <p className="mt-3 text-sm text-zinc-500">
+          Bêta interne réservée à ton compte — {VIDEO_CREDIT_COST} crédits par
+          vidéo (4 secondes, 1080p, avec son). {creditsBalance} crédits disponibles (
+          {Math.floor(creditsBalance / VIDEO_CREDIT_COST)} vidéo(s)).
         </p>
       )}
 
@@ -384,175 +522,269 @@ export default function ImpressPage() {
             )}
           </div>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <label className="block text-sm font-semibold text-zinc-300">
-                2. Décris LE changement à apporter
-              </label>
-              <span className="text-xs text-zinc-500">
-                {description.length}/{DESCRIPTION_MAX}
-              </span>
-            </div>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
-              rows={3}
-              placeholder="Ex : remplace ma voiture par une Porsche 911 rouge, même angle, même lumière"
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
-            />
-            <div className="mt-2 flex flex-wrap gap-2">
-              {EXAMPLES.map((ex) => (
-                <button
-                  key={ex}
-                  type="button"
-                  onClick={() => setDescription(ex)}
-                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 transition hover:border-zinc-500 hover:text-white"
-                >
-                  {ex.length > 40 ? ex.slice(0, 40) + "…" : ex}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-zinc-300">
-              3. Photo de référence du modèle exact (optionnel)
-            </label>
-            <p className="mb-2 text-xs text-zinc-500">
-              Une vraie photo du logo/motif/design exact demandé (ex : une photo de la carte,
-              de la montre) aide l&apos;IA à mieux le reproduire.
-            </p>
-            {referencePreviewUrl ? (
-              <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={referencePreviewUrl}
-                  alt="Référence"
-                  className="h-16 w-16 rounded-lg border border-zinc-700 object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={handleRemoveReference}
-                  className="text-xs font-semibold text-zinc-400 hover:text-white"
-                >
-                  Retirer
-                </button>
+          {mode === "image" ? (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="block text-sm font-semibold text-zinc-300">
+                  2. Décris LE changement à apporter
+                </label>
+                <span className="text-xs text-zinc-500">
+                  {description.length}/{DESCRIPTION_MAX}
+                </span>
               </div>
-            ) : (
-              <label className="inline-block cursor-pointer rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white">
-                + Ajouter une photo de référence
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleReferenceFileChange}
-                />
-              </label>
-            )}
-          </div>
-
-          {error && <p className="text-sm text-red-400">{error}</p>}
-
-          {loading ? (
-            <button
-              onClick={handleCancelGenerate}
-              className="w-full rounded-full border border-red-500/60 px-6 py-3 font-bold text-red-400 transition hover:bg-red-500/10"
-            >
-              Annuler
-            </button>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
+                rows={3}
+                placeholder="Ex : remplace ma voiture par une Porsche 911 rouge, même angle, même lumière"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    onClick={() => setDescription(ex)}
+                    className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+                  >
+                    {ex.length > 40 ? ex.slice(0, 40) + "…" : ex}
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : (
-            <button
-              onClick={handleGenerate}
-              disabled={!file}
-              className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Générer →
-            </button>
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="block text-sm font-semibold text-zinc-300">
+                  2. Décris le mouvement/l&apos;animation
+                </label>
+                <span className="text-xs text-zinc-500">
+                  {videoDescription.length}/{DESCRIPTION_MAX}
+                </span>
+              </div>
+              <textarea
+                value={videoDescription}
+                onChange={(e) => setVideoDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
+                rows={3}
+                placeholder="Ex : la caméra tourne lentement autour de la voiture, reflets qui bougent sur la carrosserie"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {VIDEO_EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    onClick={() => setVideoDescription(ex)}
+                    className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+                  >
+                    {ex.length > 40 ? ex.slice(0, 40) + "…" : ex}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {mode === "image" && (
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-300">
+                3. Photo de référence du modèle exact (optionnel)
+              </label>
+              <p className="mb-2 text-xs text-zinc-500">
+                Une vraie photo du logo/motif/design exact demandé (ex : une photo de la carte,
+                de la montre) aide l&apos;IA à mieux le reproduire.
+              </p>
+              {referencePreviewUrl ? (
+                <div className="flex items-center gap-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={referencePreviewUrl}
+                    alt="Référence"
+                    className="h-16 w-16 rounded-lg border border-zinc-700 object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemoveReference}
+                    className="text-xs font-semibold text-zinc-400 hover:text-white"
+                  >
+                    Retirer
+                  </button>
+                </div>
+              ) : (
+                <label className="inline-block cursor-pointer rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white">
+                  + Ajouter une photo de référence
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleReferenceFileChange}
+                  />
+                </label>
+              )}
+            </div>
+          )}
+
+          {mode === "image" ? (
+            <>
+              {error && <p className="text-sm text-red-400">{error}</p>}
+
+              {loading ? (
+                <button
+                  onClick={handleCancelGenerate}
+                  className="w-full rounded-full border border-red-500/60 px-6 py-3 font-bold text-red-400 transition hover:bg-red-500/10"
+                >
+                  Annuler
+                </button>
+              ) : (
+                <button
+                  onClick={handleGenerate}
+                  disabled={!file}
+                  className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Générer →
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {videoError && <p className="text-sm text-red-400">{videoError}</p>}
+
+              {videoLoading ? (
+                <button
+                  onClick={handleCancelVideoGenerate}
+                  className="w-full rounded-full border border-red-500/60 px-6 py-3 font-bold text-red-400 transition hover:bg-red-500/10"
+                >
+                  Annuler
+                </button>
+              ) : (
+                <button
+                  onClick={handleGenerateVideo}
+                  disabled={!file}
+                  className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Générer la vidéo →
+                </button>
+              )}
+            </>
           )}
         </div>
 
         <div className="flex flex-col gap-3">
-          {resultUrl && previewUrl && (
-            <div className="flex overflow-hidden self-center rounded-full border border-zinc-700 text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setShowOriginal(false)}
-                className={`px-3 py-1 transition ${!showOriginal ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"}`}
+          {mode === "image" ? (
+            <>
+              {resultUrl && previewUrl && (
+                <div className="flex overflow-hidden self-center rounded-full border border-zinc-700 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setShowOriginal(false)}
+                    className={`px-3 py-1 transition ${!showOriginal ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"}`}
+                  >
+                    Après
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowOriginal(true)}
+                    className={`px-3 py-1 transition ${showOriginal ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"}`}
+                  >
+                    Avant
+                  </button>
+                </div>
+              )}
+              <div
+                className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 ${
+                  resultUrl ? "" : "aspect-video"
+                }`}
+                style={resultUrl && resultAspect ? { aspectRatio: resultAspect, maxHeight: "70vh" } : undefined}
               >
-                Après
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowOriginal(true)}
-                className={`px-3 py-1 transition ${showOriginal ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"}`}
-              >
-                Avant
-              </button>
-            </div>
-          )}
-          <div
-            className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 ${
-              resultUrl ? "" : "aspect-video"
-            }`}
-            style={resultUrl && resultAspect ? { aspectRatio: resultAspect, maxHeight: "70vh" } : undefined}
-          >
-            {loading ? (
-              <GeneratingCard label="Retouche en cours..." />
-            ) : resultUrl ? (
-              <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={showOriginal && previewUrl ? previewUrl : resultUrl}
-                  alt={showOriginal ? "Photo originale" : "Résultat généré"}
-                  className={`h-full w-full object-contain ${
-                    resultWasTrial && !showOriginal ? "scale-110 blur-xl" : ""
-                  }`}
-                  onLoad={(e) => {
-                    if (!showOriginal) {
-                      setResultAspect(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight);
-                    }
-                  }}
-                />
-                {resultWasTrial && !showOriginal && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 p-6 text-center">
-                    <span className="text-3xl">🔒</span>
-                    <p className="text-sm font-semibold text-white">
-                      Ton résultat est prêt
-                    </p>
-                    <Link
-                      href="/pricing"
-                      className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-bold text-black transition hover:scale-105 hover:bg-emerald-300"
-                    >
-                      🔓 Débloquer mon résultat
-                    </Link>
-                  </div>
+                {loading ? (
+                  <GeneratingCard label="Retouche en cours..." />
+                ) : resultUrl ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={showOriginal && previewUrl ? previewUrl : resultUrl}
+                      alt={showOriginal ? "Photo originale" : "Résultat généré"}
+                      className={`h-full w-full object-contain ${
+                        resultWasTrial && !showOriginal ? "scale-110 blur-xl" : ""
+                      }`}
+                      onLoad={(e) => {
+                        if (!showOriginal) {
+                          setResultAspect(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight);
+                        }
+                      }}
+                    />
+                    {resultWasTrial && !showOriginal && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/50 p-6 text-center">
+                        <span className="text-3xl">🔒</span>
+                        <p className="text-sm font-semibold text-white">
+                          Ton résultat est prêt
+                        </p>
+                        <Link
+                          href="/pricing"
+                          className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-bold text-black transition hover:scale-105 hover:bg-emerald-300"
+                        >
+                          🔓 Débloquer mon résultat
+                        </Link>
+                      </div>
+                    )}
+                  </>
+                ) : previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewUrl} alt="Aperçu" className="h-full w-full object-contain opacity-40" />
+                ) : (
+                  <p className="px-6 text-center text-sm text-zinc-600">
+                    Le résultat apparaîtra ici après génération.
+                  </p>
                 )}
-              </>
-            ) : previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="Aperçu" className="h-full w-full object-contain opacity-40" />
-            ) : (
-              <p className="px-6 text-center text-sm text-zinc-600">
-                Le résultat apparaîtra ici après génération.
-              </p>
-            )}
-          </div>
-          {resultUrl && (!resultWasTrial ? (
-            <a
-              href={resultUrl}
-              download="impression.png"
-              className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400"
-            >
-              Télécharger
-            </a>
+              </div>
+              {resultUrl && (!resultWasTrial ? (
+                <a
+                  href={resultUrl}
+                  download="impression.png"
+                  className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400"
+                >
+                  Télécharger
+                </a>
+              ) : (
+                <Link
+                  href="/pricing"
+                  className="rounded-full bg-emerald-400 px-6 py-3 text-center font-bold text-black transition hover:bg-emerald-300"
+                >
+                  Passe sur un plan pour télécharger sans filigrane
+                </Link>
+              ))}
+            </>
           ) : (
-            <Link
-              href="/pricing"
-              className="rounded-full bg-emerald-400 px-6 py-3 text-center font-bold text-black transition hover:bg-emerald-300"
-            >
-              Passe sur un plan pour télécharger sans filigrane
-            </Link>
-          ))}
+            <>
+              <div
+                className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 ${
+                  videoUrl ? "" : "aspect-video"
+                }`}
+              >
+                {videoLoading ? (
+                  <GeneratingCard label="Génération vidéo en cours (peut prendre plusieurs minutes)..." />
+                ) : videoUrl ? (
+                  <video src={videoUrl} controls autoPlay loop className="h-full w-full object-contain" />
+                ) : previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={previewUrl} alt="Aperçu" className="h-full w-full object-contain opacity-40" />
+                ) : (
+                  <p className="px-6 text-center text-sm text-zinc-600">
+                    La vidéo apparaîtra ici après génération.
+                  </p>
+                )}
+              </div>
+              {videoUrl && (
+                <a
+                  href={videoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400"
+                >
+                  Ouvrir / télécharger la vidéo
+                </a>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
