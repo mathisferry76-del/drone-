@@ -59,6 +59,21 @@ export async function editImageWithFlux(
         // Defaults to lossy "jpeg" if left unset — explicit "png" avoids
         // unnecessary compression artifacts on the final output.
         output_format: "png",
+        // Default is 3.5. This route's whole prompt (see buildImpressPrompt
+        // in app/api/impress/route.ts) is a long, specific instruction list
+        // — real brand logo fidelity above all — and a low default CFG
+        // gives the model more room to drift from that instead of sticking
+        // to it. Nudged up, not maxed: too high starts introducing
+        // oversaturation/artifacts, which the prompt explicitly asks against.
+        guidance_scale: 4.5,
+        // Default is "2" (fairly strict). BFL's moderation on this tier is
+        // known to soften/genericize outputs it flags as borderline —
+        // real, identifiable brand logos and named car/watch models are
+        // exactly the kind of trademarked content that can trip it, which
+        // would show up as exactly the blurry/generic logo the user is
+        // asking us to fix. Maxed out since this route is legitimate
+        // product photo editing, not open-ended generation.
+        safety_tolerance: "6",
       },
       abortSignal: signal,
     });

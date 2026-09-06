@@ -62,6 +62,17 @@ export async function editImageWithReplicate(
           // rather than relying on whatever default the model would
           // otherwise pick.
           output_quality: 100,
+          // 1 (strictest) to 6 (most permissive) — Replicate's default is
+          // stricter than this. BFL's moderation on this tier is known to
+          // soften/genericize output it flags as borderline, and real,
+          // identifiable brand logos or named car/watch models are exactly
+          // the kind of trademarked content that can trip it — showing up
+          // as a blurry/generic logo instead of the real one. Maxed out
+          // since this route is legitimate product photo editing, not
+          // open-ended generation. (Not setting prompt_upsampling: it
+          // rewrites the prompt for "more creative" results, which fights
+          // the strict, specific instructions in buildImpressPrompt.)
+          safety_tolerance: 6,
         },
         signal,
       }
