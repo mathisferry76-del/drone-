@@ -21,6 +21,12 @@ import { getFormat, RESOLUTION_MULTIPLIERS, isResolutionTier } from "@/lib/forma
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
 
 export const runtime = "nodejs";
+// AI-enhance generations (OpenAI/Gemini) plus an optional second targeted-
+// edit call can take longer than Vercel's default function timeout (10s on
+// Hobby, 15s on Pro unless configured) — raised so a genuinely slow but
+// otherwise successful generation doesn't get silently killed mid-request.
+// Capped automatically to whatever the plan actually supports if lower.
+export const maxDuration = 90;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_CURVE_ANGLE = 0.8; // radians of total arc sweep at curve = ±100

@@ -13,6 +13,14 @@ import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
 
 export const runtime = "nodejs";
+// FLUX Kontext Max generations run ~10-20s each; CANDIDATE_COUNT of them run
+// in parallel (so total time is roughly the slowest one, not the sum), plus
+// a judge call afterward. Without raising this, Vercel's default function
+// timeout (10s on Hobby, 15s on Pro unless configured) could silently kill
+// an otherwise-successful request — this needs the higher ceiling Pro/
+// Enterprise plans allow. Capped automatically to whatever the plan
+// actually supports if lower.
+export const maxDuration = 120;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_DESCRIPTION = 400;
@@ -49,8 +57,8 @@ Règles d'intégration physique (le plus important, cause principale de résulta
 
 Règles de portée :
 - Applique exactement le changement demandé, rien d'autre.
-- Ne change ni l'éclairage général, ni les couleurs, ni le style, ni le cadrage, ni aucun élément de la photo qui n'est pas mentionné.
-- Contrainte géométrique stricte sur le cadrage : le cadrage de sortie doit correspondre EXACTEMENT au champ de vision de la photo d'entrée — même distance focale apparente, même zoom, mêmes limites de la scène visible sur les 4 bords. Si un élément (siège, banquette, portière, plafond) n'est pas visible, même partiellement, sur la photo d'origine, il ne doit PAS apparaître dans le résultat, quelle que soit la description fournie — n'élargis, ne dézoome et ne recule jamais la "caméra" virtuelle pour faire rentrer un élément décrit qui est normalement hors champ. Ignore la partie de la description concernant une zone non visible plutôt que d'élargir le cadre pour la faire rentrer.
+- Ne change ni l'éclairage général, ni les couleurs, ni le style, ni aucun élément de la photo qui n'est pas mentionné.
+- Contrainte géométrique stricte sur le cadrage (règle séparée, encore plus importante que la précédente) : le cadrage de sortie doit correspondre EXACTEMENT au champ de vision de la photo d'entrée — même distance focale apparente, même zoom, mêmes limites de la scène visible sur les 4 bords. Si un élément (siège, banquette, portière, plafond) n'est pas visible, même partiellement, sur la photo d'origine, il ne doit PAS apparaître dans le résultat, quelle que soit la description fournie — n'élargis, ne dézoome et ne recule jamais la "caméra" virtuelle pour faire rentrer un élément décrit qui est normalement hors champ. Ignore la partie de la description concernant une zone non visible plutôt que d'élargir le cadre pour la faire rentrer.
 - N'en fais pas trop : pas de sur-retouche, pas de saturation excessive, pas d'effet "généré par IA" visible.
 - N'ajoute aucun texte, lettre ou chiffre à l'image.
 - Si un écran numérique, un compteur ou un cadran est visible et lisible dans la photo d'origine, garde ses chiffres/icônes aussi nets et lisibles que possible dans le résultat — ne les transforme jamais en texte flou ou en symboles illisibles.

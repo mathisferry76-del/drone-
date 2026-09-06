@@ -2,11 +2,11 @@ import OpenAI from "openai";
 import { getOpenAI } from "./openai";
 import { getGeminiKey, GEMINI_TEXT_MODEL } from "./gemini";
 
-// "Impressionne tes potes" now generates 2 candidates per request instead of
-// 1 (see CANDIDATE_COUNT in app/api/impress/route.ts) and picks the better
-// one automatically — cars/watches/luxury goods are inconsistent enough
-// (a logo readable in one attempt, a smudge in another) that a second roll
-// of the dice measurably improves the odds of a usable result, the same way
+// "Impressionne tes potes" now generates several candidates per request
+// instead of 1 (see CANDIDATE_COUNT in app/api/impress/route.ts) and picks
+// the better one automatically — cars/watches/luxury goods are inconsistent
+// enough (a logo readable in one attempt, a smudge in another) that more
+// rolls of the dice measurably improve the odds of a usable result, the same way
 // a competitor's showcased examples are themselves picked from several
 // attempts rather than a guaranteed first try. This judge is what picks
 // between them without a human in the loop, using whichever cheap
@@ -39,7 +39,11 @@ async function judgeWithOpenAI(
     content.push({ type: "text", text: `Image ${i + 1} :` });
     content.push({
       type: "image_url",
-      image_url: { url: `data:image/png;base64,${buf.toString("base64")}`, detail: "low" },
+      // "high" detail matters here specifically — "low" forces OpenAI to
+      // downscale to a fixed ~512x512 tile before the model ever sees it,
+      // which would blur out exactly the fine detail (logo crispness,
+      // badge legibility) this judge exists to compare between candidates.
+      image_url: { url: `data:image/png;base64,${buf.toString("base64")}`, detail: "high" },
     });
   });
 
