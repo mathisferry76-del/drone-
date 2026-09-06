@@ -17,9 +17,10 @@ import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
 
 export const runtime = "nodejs";
-// FLUX Kontext Max generations run ~10-20s each; CANDIDATE_COUNT of them run
-// in parallel (so total time is roughly the slowest one, not the sum), plus
-// a judge call afterward. Without raising this, Vercel's default function
+// Generations run ~10-20s each; several of them run in parallel per request
+// (so total time is roughly the slowest one, not the sum — see
+// CANDIDATE_COUNT_REPLACEMENT/_GENERAL below), plus a judge call afterward.
+// Without raising this, Vercel's default function
 // timeout (10s on Hobby, 15s on Pro unless configured) could silently kill
 // an otherwise-successful request — this needs the higher ceiling Pro/
 // Enterprise plans allow. Capped automatically to whatever the plan
@@ -42,7 +43,7 @@ const MAX_DESCRIPTION = 400;
 // the platform doing it for us with no response body at all.
 //
 // Raised from 55s, then again from 90s: the pipeline now runs two extra
-// vision-model passes after the CANDIDATE_COUNT generations finish — the
+// vision-model passes after the parallel generations finish — the
 // pixel-diff gate is local/instant, but verifyChangeApplied
 // (lib/verify-change.ts) and pickBestImage's own judge call are each a real
 // network round-trip on top of however long the slowest of the 4 parallel
@@ -55,13 +56,20 @@ const GENERATION_DEADLINE_MS = 105_000;
 // one (see pickBestImage) — brand/logo fidelity on named real-world objects
 // is inconsistent enough between attempts that more rolls measurably
 // improve the odds, at the cost of a roughly proportional increase in AI
-// spend per generation (~0.08€/attempt on Replicate). Brought down from 4:
-// each attempt now also gets its own verifyChangeApplied pass after
-// generation (see below), so the slowest-of-N generation time is only part
-// of the critical path — 4 was pushing requests past even a 105s internal
-// deadline in production. 3 trades a little of the quality upside for
-// meaningfully lower worst-case latency and cost.
-const CANDIDATE_COUNT = 3;
+// spend per generation.
+//
+// Two different counts, not one: gpt-image-1 (~0.17-0.25$/image at "high"
+// quality — used for the masked full-replacement path below) costs roughly
+// 5x what Gemini 2.5 Flash Image costs (~0.039$/image). 3 was already
+// tuned down from 4 for that pricier path specifically, after it pushed
+// requests past even a 105s internal deadline in production (each attempt
+// also gets its own verifyChangeApplied pass after generation, so the
+// slowest-of-N generation time is only part of the critical path). Gemini's
+// lower cost buys room for more rolls of the dice at roughly the same
+// total spend as 3 gpt-image-1 attempts, without touching the deadline math
+// that's already tuned around 3 concurrent generations.
+const CANDIDATE_COUNT_REPLACEMENT = 3;
+const CANDIDATE_COUNT_GENERAL = 6;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
 // thumbnail presets: those push dramatic, stylized regeneration. Here the
@@ -373,18 +381,19 @@ export async function POST(req: NextRequest) {
     let resultBuffer: Buffer;
 
     try {
-      // Runs CANDIDATE_COUNT independent generations in parallel and keeps
-      // the best one instead of a single roll of the dice — cars, watches
-      // and other named brands come back inconsistent enough (a crisp logo
-      // on one attempt, a blurry smudge on another) that more attempts
-      // measurably improve the odds of a usable result. Paid for out of
-      // margin (roughly quadruples the AI cost per generation, absorbed by
-      // MIN IA — the user's credit cost stays the same), not passed on to
-      // the credits charged. Promise.allSettled means a candidate erroring
-      // (rate limit, transient failure) doesn't sink the request as long as
-      // at least one succeeds.
+      // Runs several independent generations in parallel and keeps the best
+      // one instead of a single roll of the dice — cars, watches and other
+      // named brands come back inconsistent enough (a crisp logo on one
+      // attempt, a blurry smudge on another) that more attempts measurably
+      // improve the odds of a usable result. Paid for out of margin,
+      // absorbed by MIN IA — the user's credit cost stays the same. Count
+      // depends on which path this request is on (see
+      // CANDIDATE_COUNT_REPLACEMENT/_GENERAL above). Promise.allSettled
+      // means a candidate erroring (rate limit, transient failure) doesn't
+      // sink the request as long as at least one succeeds.
+      const candidateCount = replacementMask ? CANDIDATE_COUNT_REPLACEMENT : CANDIDATE_COUNT_GENERAL;
       const settled = await Promise.allSettled(
-        Array.from({ length: CANDIDATE_COUNT }, () => generateOnce())
+        Array.from({ length: candidateCount }, () => generateOnce())
       );
       const successes = settled
         .filter((r): r is PromiseFulfilledResult<Buffer> => r.status === "fulfilled")
@@ -442,8 +451,8 @@ export async function POST(req: NextRequest) {
       }
 
       const bestIndex = await pickBestImage(normalizedInput, verifiedSuccesses, description);
-      // null means the judge(s) agreed none of the CANDIDATE_COUNT attempts
-      // actually kept the original photo's scene — e.g. the model
+      // null means the judge(s) agreed none of the attempts actually kept
+      // the original photo's scene — e.g. the model
       // hallucinated an unrelated image instead of editing the real one.
       // Erroring out (and refunding below) beats silently shipping and
       // charging for a result that has nothing to do with the user's photo.
