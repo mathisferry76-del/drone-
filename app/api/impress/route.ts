@@ -83,8 +83,14 @@ const CANDIDATE_COUNT_GENERAL = 6;
 // more detailed AI_QUALITY_DIRECTIVE language already proven to work for
 // the thumbnail presets (see lib/presets.ts), adapted from "regenerate the
 // whole background" to "insert one object convincingly."
-function buildImpressPrompt(userDescription: string): string {
-  return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.
+function buildImpressPrompt(userDescription: string, hasReferenceImage: boolean): string {
+  const referenceImageNote = hasReferenceImage
+    ? `
+
+IMPORTANT — une image de référence supplémentaire t'est fournie en plus de la photo à modifier : elle montre le vrai design exact de l'objet demandé (logo, motifs gravés, cadran, texte...). Utilise-la comme modèle fidèle UNIQUEMENT pour ces détails de design de l'objet — n'utilise JAMAIS son propre décor, arrière-plan, angle de caméra, lumière ou cadrage, qui n'ont aucun rapport avec la photo à modifier. Le résultat final garde entièrement le décor et la composition de la photo à modifier ; seul l'objet inséré/remplacé doit ressembler fidèlement à ce qui est montré sur cette image de référence.`
+    : "";
+
+  return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.${referenceImageNote}
 
 Règles d'intégration physique (le plus important, cause principale de résultats ratés) :
 - Respecte EXACTEMENT la perspective, l'angle de caméra et l'échelle de la scène d'origine pour l'élément modifié — même point de fuite, même distance apparente que s'il avait été photographié sur place.
@@ -249,6 +255,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Optional: a real reference photo of the exact object's design (a
+    // watch dial, a card's engraved pattern...), supplied by the user
+    // rather than fetched automatically — the earlier attempt at an
+    // automated reference lookup for cars (a search API + an LLM call to
+    // find it) added real latency and reliability risk for a benefit that
+    // never panned out, and got reverted. This is the same idea scoped
+    // down to "the user already has the photo, just let them attach it" —
+    // no extra network calls, no detection step, purely optional. Passed
+    // through to whichever provider supports multiple reference images
+    // (Gemini and gpt-image-1 both do, natively — see generateOnce below);
+    // silently ignored for FLUX Kontext/Replicate, which only take one.
+    const referenceFile = formData.get("reference");
+    let normalizedReference: Buffer | null = null;
+    if (referenceFile instanceof File && referenceFile.size > 0) {
+      if (referenceFile.size > MAX_UPLOAD_BYTES) {
+        await releaseReservationIfNeeded();
+        return NextResponse.json(
+          { error: "Photo de référence trop lourde (12 Mo max)." },
+          { status: 400 }
+        );
+      }
+      try {
+        normalizedReference = await sharp(Buffer.from(await referenceFile.arrayBuffer()))
+          .rotate()
+          .png()
+          .toBuffer();
+      } catch {
+        await releaseReservationIfNeeded();
+        return NextResponse.json(
+          {
+            error:
+              "La photo de référence n'a pas pu être lue par le serveur. Essaie de la réexporter en JPEG ou PNG.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // gpt-image-1's edit endpoint only offers 3 fixed canvases (square,
     // landscape 3:2, portrait 2:3) — always sending "1024x1024" squeezed
     // every non-square photo (portrait phone shots especially) into a
@@ -301,7 +345,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const prompt = buildImpressPrompt(description);
+    const prompt = buildImpressPrompt(description, normalizedReference !== null);
 
     // For a full object-replacement request (most often a car swapped for a
     // different, differently-shaped model), route generation through
@@ -355,13 +399,23 @@ export async function POST(req: NextRequest) {
       if (replacementMask || provider === "openai") {
         if (!openai) throw new Error("OpenAI n'est pas configuré (OPENAI_API_KEY manquante).");
         const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
+        // gpt-image-1's edit endpoint natively accepts multiple input images
+        // (image: Uploadable | Array<Uploadable>) — a documented, stable
+        // capability, not the "experimental" multi-image mode that caused
+        // problems on FLUX Kontext. A mask, when present, always applies to
+        // the first image (the user's own photo) regardless of how many
+        // follow it.
+        const referenceUploadable = normalizedReference
+          ? await toFile(normalizedReference, "reference.png", { type: "image/png" })
+          : null;
+        const image = referenceUploadable ? [uploadable, referenceUploadable] : uploadable;
         const maskUploadable = replacementMask
           ? await toFile(replacementMask, "mask.png", { type: "image/png" })
           : undefined;
         const result = await openai.images.edit(
           {
             model: "gpt-image-1",
-            image: uploadable,
+            image,
             ...(maskUploadable ? { mask: maskUploadable } : {}),
             prompt,
             size: openAiEditSize,
@@ -380,7 +434,13 @@ export async function POST(req: NextRequest) {
       if (provider === "flux-replicate") {
         return editImageWithReplicate(normalizedInput, prompt, signal);
       }
-      return editImageWithGemini([{ buffer: normalizedInput }], prompt, signal);
+      // Gemini's generateContent natively takes multiple images in one
+      // request too — same reasoning as gpt-image-1 above, just passed as a
+      // second inline_data part instead of a second array element.
+      const geminiImages = normalizedReference
+        ? [{ buffer: normalizedInput }, { buffer: normalizedReference }]
+        : [{ buffer: normalizedInput }];
+      return editImageWithGemini(geminiImages, prompt, signal);
     }
 
     let resultBuffer: Buffer;
