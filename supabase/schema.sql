@@ -265,3 +265,26 @@ as $$
   set credits_balance = credits_balance + p_amount
   where id = p_user_id;
 $$;
+
+-- CRITIQUE : Postgres accorde EXECUTE à PUBLIC par défaut sur toute fonction
+-- nouvellement créée, et Supabase expose automatiquement chaque fonction du
+-- schéma public comme endpoint RPC appelable par les rôles anon/authenticated
+-- (donc depuis le navigateur, par n'importe quel compte connecté) — sauf
+-- révocation explicite. Ces trois fonctions sont SECURITY DEFINER (elles
+-- s'exécutent avec les droits du propriétaire, en contournant RLS) et ne
+-- vérifient jamais elles-mêmes qui les appelle ; le contrôle d'accès repose
+-- entièrement sur le fait qu'aujourd'hui seul le serveur (clé service_role)
+-- les appelle. Sans cette révocation, n'importe quel compte connecté pouvait
+-- s'octroyer des crédits gratuits en appelant directement
+-- `supabase.rpc('add_credits', {...})` ou
+-- `supabase.rpc('release_credits_reservation', { p_reservation: 'ok_credits', p_cost: 999999, ... })`
+-- depuis la console du navigateur, sans jamais payer sur Stripe. Le code
+-- applicatif n'appelle déjà ces fonctions que via le client admin
+-- (service_role, voir lib/supabase.ts) — cette révocation ne change donc
+-- aucun comportement légitime.
+revoke execute on function public.reserve_credits(uuid, int, boolean) from public, anon, authenticated;
+revoke execute on function public.release_credits_reservation(uuid, text, int) from public, anon, authenticated;
+revoke execute on function public.add_credits(uuid, int) from public, anon, authenticated;
+grant execute on function public.reserve_credits(uuid, int, boolean) to service_role;
+grant execute on function public.release_credits_reservation(uuid, text, int) to service_role;
+grant execute on function public.add_credits(uuid, int) to service_role;
