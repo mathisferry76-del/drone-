@@ -23,14 +23,6 @@ const MAX_DESCRIPTION = 400;
 // works, without needing to revisit /historique for the same result.
 const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
 
-// Test-stage gate: pricing is now set (VIDEO_CREDIT_COST, lib/presets.ts)
-// and wired into the same reserve_credits/release_credits_reservation flow
-// as /api/impress, so the financial exposure that justified this gate is
-// gone. Still restricted to the owner's own account so the full flow — a
-// real generation, a real credit debit — can be validated end-to-end in
-// production before opening it up more broadly.
-const OWNER_EMAIL = "mathis.ferry76@gmail.com";
-
 export async function POST(req: NextRequest) {
   if (isRateLimited(`animate:${getClientIp(req)}`, 5, 10 * 60 * 1000)) {
     return NextResponse.json(
@@ -50,12 +42,6 @@ export async function POST(req: NextRequest) {
   const authUser = await getUserFromAuthHeader(req.headers.get("authorization"));
   if (!authUser) {
     return NextResponse.json({ error: "Connexion requise." }, { status: 401 });
-  }
-  if (authUser.email?.toLowerCase() !== OWNER_EMAIL) {
-    return NextResponse.json(
-      { error: "Fonctionnalité en test, pas encore ouverte à tous les comptes." },
-      { status: 403 }
-    );
   }
 
   const { data } = await admin.from("profiles").select("*").eq("id", authUser.id).single();
@@ -116,9 +102,8 @@ export async function POST(req: NextRequest) {
 
     // Real credit reservation, deliberately without the `p_force_paid`
     // bypass /api/impress grants its owner account (which returns
-    // 'ok_owner' and never touches the balance) — the whole point of
-    // keeping this feature owner-gated for now is to validate the complete
-    // flow, credit debit included, before opening it to every account.
+    // 'ok_owner' and never touches the balance) — video always costs real
+    // credits, owner account included, unlike the image path.
     const { data: reserved, error: reserveError } = await admin.rpc("reserve_credits", {
       p_user_id: authUser.id,
       p_cost: VIDEO_CREDIT_COST,
