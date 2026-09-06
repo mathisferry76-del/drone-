@@ -102,6 +102,14 @@ export default function ImpressPage() {
     // would already reflect the trial as consumed.
     const usingTrial = hasFreeTrialAvailable;
 
+    // Clears the previous result before firing a new request — without
+    // this, a failed/errored generation left the last successful result on
+    // screen with only a small error message to notice, easy to miss and
+    // easy to mistake for the output of the new (failed) request.
+    setResultUrl(null);
+    setResultAspect(null);
+    setShowOriginal(false);
+
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
