@@ -10,6 +10,8 @@ import { getReplicateKey, editImageWithReplicate, describeReplicateError } from 
 import { pickBestImage } from "@/lib/pick-best";
 import { looksUnchanged } from "@/lib/image-diff";
 import { verifyChangeApplied } from "@/lib/verify-change";
+import { detectReplacementRegion } from "@/lib/detect-replacement-region";
+import { buildReplacementMask } from "@/lib/mask";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
@@ -278,6 +280,31 @@ export async function POST(req: NextRequest) {
 
     const prompt = buildImpressPrompt(description);
 
+    // For a full object-replacement request (most often a car swapped for a
+    // different, differently-shaped model), route generation through
+    // gpt-image-1's actual inpainting mask instead of whichever provider was
+    // otherwise selected above. None of FLUX Kontext's hosts (fal.ai,
+    // Replicate) expose any masking primitive at all, and in production it
+    // kept a strong bias toward preserving the original object's silhouette
+    // no matter how explicitly the prompt said otherwise — a pixel mask is a
+    // structural constraint the model can't partially ignore the way it can
+    // ignore a sentence in a prompt. Only takes effect when OpenAI is
+    // configured and the detector confidently identifies both the request
+    // type and the object's location (lib/detect-replacement-region.ts);
+    // anything less than that and this silently falls through to the
+    // existing provider flow below, unchanged.
+    let replacementMask: Buffer | null = null;
+    if (openai) {
+      const region = await detectReplacementRegion(normalizedInput, description);
+      if (region) {
+        replacementMask = await buildReplacementMask(
+          inputMeta.width ?? 1024,
+          inputMeta.height ?? 1024,
+          region
+        );
+      }
+    }
+
     // Merges the client's own cancel (req.signal) with our internal deadline
     // into one signal so generateOnce doesn't need to know which one fired —
     // either way, in-flight provider calls get aborted the same way the
@@ -298,18 +325,21 @@ export async function POST(req: NextRequest) {
 
     async function generateOnce(): Promise<Buffer> {
       const signal = internalController.signal;
-      if (provider === "flux-fal") {
-        return editImageWithFlux(normalizedInput, prompt, signal);
-      }
-      if (provider === "flux-replicate") {
-        return editImageWithReplicate(normalizedInput, prompt, signal);
-      }
-      if (provider === "openai" && openai) {
+      // The mask takes priority over normal provider selection whenever
+      // it's available (see replacementMask above) — even when FLUX Kontext
+      // is the configured provider, gpt-image-1's real inpainting mask is
+      // the better tool for a full object-replacement request specifically.
+      if (replacementMask || provider === "openai") {
+        if (!openai) throw new Error("OpenAI n'est pas configuré (OPENAI_API_KEY manquante).");
         const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
+        const maskUploadable = replacementMask
+          ? await toFile(replacementMask, "mask.png", { type: "image/png" })
+          : undefined;
         const result = await openai.images.edit(
           {
             model: "gpt-image-1",
             image: uploadable,
+            ...(maskUploadable ? { mask: maskUploadable } : {}),
             prompt,
             size: openAiEditSize,
             quality: "high",
@@ -320,6 +350,12 @@ export async function POST(req: NextRequest) {
         const b64 = result.data?.[0]?.b64_json;
         if (!b64) throw new Error("OpenAI n'a renvoyé aucune image.");
         return Buffer.from(b64, "base64");
+      }
+      if (provider === "flux-fal") {
+        return editImageWithFlux(normalizedInput, prompt, signal);
+      }
+      if (provider === "flux-replicate") {
+        return editImageWithReplicate(normalizedInput, prompt, signal);
       }
       return editImageWithGemini([{ buffer: normalizedInput }], prompt, signal);
     }
