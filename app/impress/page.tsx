@@ -26,6 +26,15 @@ export default function ImpressPage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // Optional real photo of the exact object's design (a watch dial, a
+  // card's engraved pattern...) — passed straight through to whichever
+  // provider supports multiple reference images (see app/api/impress/
+  // route.ts), with no automated lookup on our side. The earlier attempt at
+  // fetching this automatically added real latency/reliability risk for a
+  // benefit that never panned out; letting the user attach a photo they
+  // already have sidesteps that entirely.
+  const [referenceFile, setReferenceFile] = useState<File | null>(null);
+  const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +93,20 @@ export default function ImpressPage() {
     reader.readAsDataURL(f);
   }
 
+  function handleReferenceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setReferenceFile(f);
+    const reader = new FileReader();
+    reader.onload = () => setReferencePreviewUrl(reader.result as string);
+    reader.readAsDataURL(f);
+  }
+
+  function handleRemoveReference() {
+    setReferenceFile(null);
+    setReferencePreviewUrl(null);
+  }
+
   async function handleGenerate() {
     setError(null);
     if (!file) {
@@ -118,6 +141,9 @@ export default function ImpressPage() {
       const formData = new FormData();
       formData.append("image", file);
       formData.append("description", description.trim());
+      if (referenceFile) {
+        formData.append("reference", referenceFile);
+      }
 
       const res = await fetch("/api/impress", {
         method: "POST",
@@ -386,6 +412,43 @@ export default function ImpressPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-zinc-300">
+              3. Photo de référence du modèle exact (optionnel)
+            </label>
+            <p className="mb-2 text-xs text-zinc-500">
+              Une vraie photo du logo/motif/design exact demandé (ex : une photo de la carte,
+              de la montre) aide l&apos;IA à mieux le reproduire.
+            </p>
+            {referencePreviewUrl ? (
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={referencePreviewUrl}
+                  alt="Référence"
+                  className="h-16 w-16 rounded-lg border border-zinc-700 object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveReference}
+                  className="text-xs font-semibold text-zinc-400 hover:text-white"
+                >
+                  Retirer
+                </button>
+              </div>
+            ) : (
+              <label className="inline-block cursor-pointer rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white">
+                + Ajouter une photo de référence
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleReferenceFileChange}
+                />
+              </label>
+            )}
           </div>
 
           {error && <p className="text-sm text-red-400">{error}</p>}
