@@ -675,14 +675,6 @@ function ImpressPageInner() {
             <>
               {error && <p className="text-sm text-red-400">{error}</p>}
 
-              <p className="text-center text-xs text-zinc-500">
-                {hasFreeTrialAvailable
-                  ? "Cette génération utilisera ton essai gratuit (avec filigrane)."
-                  : isOwnerAccount
-                  ? `Compte propriétaire — génération offerte (${GENERATION_CREDIT_COST} crédits pour tout autre compte).`
-                  : `Coûte ${GENERATION_CREDIT_COST} crédits.`}
-              </p>
-
               {loading ? (
                 <button
                   onClick={handleCancelGenerate}
@@ -696,15 +688,18 @@ function ImpressPageInner() {
                   disabled={!file}
                   className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Générer →
+                  Générer →{" "}
+                  {hasFreeTrialAvailable
+                    ? "essai gratuit"
+                    : isOwnerAccount
+                    ? "offert"
+                    : `${GENERATION_CREDIT_COST} crédits`}
                 </button>
               )}
             </>
           ) : (
             <>
               {videoError && <p className="text-sm text-red-400">{videoError}</p>}
-
-              <p className="text-center text-xs text-zinc-500">Coûte {VIDEO_CREDIT_COST} crédits.</p>
 
               {videoLoading ? (
                 <button
@@ -719,7 +714,7 @@ function ImpressPageInner() {
                   disabled={!file}
                   className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Générer la vidéo →
+                  Générer la vidéo → {VIDEO_CREDIT_COST} crédits
                 </button>
               )}
             </>
