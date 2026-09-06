@@ -51,9 +51,17 @@ async function verifyWithOpenAI(
           { type: "text", text: buildVerifyInstruction(description) },
           {
             type: "image_url",
+            // "low" (a fixed ~512x512 tile) is enough here and meaningfully
+            // faster than "high" — this check only needs to recognize
+            // overall shape/body-type (a Renault vs a BMW), not read fine
+            // logo detail the way pickBestImage's ranking judge does. This
+            // runs once per surviving candidate, in the critical path after
+            // all CANDIDATE_COUNT generations already finished (see
+            // GENERATION_DEADLINE_MS in app/api/impress/route.ts) — needless
+            // latency here directly risks the whole request timing out.
             image_url: {
               url: `data:image/png;base64,${candidate.toString("base64")}`,
-              detail: "high",
+              detail: "low",
             },
           },
         ],
