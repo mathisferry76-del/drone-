@@ -5,10 +5,12 @@ import { randomUUID } from "crypto";
 import { GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, describeGeminiError } from "@/lib/gemini";
-import { getFalKey, editImageWithFlux, describeFalError } from "@/lib/fal";
+import { getFalKey, editImageWithFlux, editImageWithFluxMulti, describeFalError } from "@/lib/fal";
 import { getReplicateKey, editImageWithReplicate, describeReplicateError } from "@/lib/replicate";
 import { pickBestImage } from "@/lib/pick-best";
 import { looksUnchanged } from "@/lib/image-diff";
+import { extractVehicleModel } from "@/lib/extract-vehicle";
+import { findCarReferenceImage } from "@/lib/car-reference";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
@@ -57,8 +59,14 @@ const CANDIDATE_COUNT = 4;
 // more detailed AI_QUALITY_DIRECTIVE language already proven to work for
 // the thumbnail presets (see lib/presets.ts), adapted from "regenerate the
 // whole background" to "insert one object convincingly."
-function buildImpressPrompt(userDescription: string): string {
-  return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.
+function buildImpressPrompt(userDescription: string, hasReferenceImage: boolean): string {
+  const referenceImageNote = hasReferenceImage
+    ? `
+
+IMPORTANT — deux photos te sont fournies : l'IMAGE 1 est la photo réelle de l'utilisateur, celle à modifier — c'est elle qui fournit le décor, l'angle, la lumière et le cadrage à respecter. L'IMAGE 2 est une VRAIE photo de référence du modèle exact demandé dans la description ci-dessous, fournie uniquement pour que tu reproduises fidèlement sa forme, ses proportions, son design et son logo — n'utilise JAMAIS le décor, l'arrière-plan, l'angle de caméra, la lumière, la plaque d'immatriculation ou le cadrage de l'image 2 : seule sa forme/apparence sert de référence, tout le reste vient de l'image 1. Le résultat final doit avoir le décor et la composition de l'image 1, avec l'objet de la description reproduisant fidèlement l'apparence réelle vue sur l'image 2.`
+    : "";
+
+  return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.${referenceImageNote}
 
 Règles d'intégration physique (le plus important, cause principale de résultats ratés) :
 - Respecte EXACTEMENT la perspective, l'angle de caméra et l'échelle de la scène d'origine pour l'élément modifié — même point de fuite, même distance apparente que s'il avait été photographié sur place.
@@ -230,7 +238,6 @@ export async function POST(req: NextRequest) {
     const openAiEditSize: "1024x1024" | "1024x1536" | "1536x1024" =
       inputAspect > 1.15 ? "1536x1024" : inputAspect < 0.87 ? "1024x1536" : "1024x1024";
 
-    const prompt = buildImpressPrompt(description);
     // Provider priority for this route, most-to-least realistic for "insert
     // one real-world object into an existing photo without touching the
     // rest": FLUX.1 Kontext [Max] first — the exact same model hosted on
@@ -261,6 +268,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Best-effort real-photo reference for a car-replacement request (see
+    // lib/car-reference.ts) — fal.ai's multi-image Kontext variant only,
+    // since it's the only path with a verified schema for a second
+    // reference image (lib/fal.ts's editImageWithFluxMulti). Text-only
+    // brand-fidelity prompting kept drifting to the wrong brand/body-shape
+    // entirely on less iconic models (confirmed in production: "Audi RS6
+    // Avant" → a Ferrari) — giving the model an actual photo to match
+    // against, not just a description, is a fundamentally more reliable
+    // anchor than more prompt wording. Every step degrades silently to the
+    // existing text-only prompt on failure (no OpenAI key to run the
+    // extraction, no vehicle detected, no reference photo found) — this is
+    // a best-effort enhancement, never a reason to block or fail the
+    // request.
+    let referenceImageUrl: string | null = null;
+    if (provider === "flux-fal") {
+      const vehicleModel = await extractVehicleModel(description);
+      if (vehicleModel) {
+        referenceImageUrl = await findCarReferenceImage(vehicleModel);
+      }
+    }
+
+    const prompt = buildImpressPrompt(description, referenceImageUrl !== null);
+
     // Merges the client's own cancel (req.signal) with our internal deadline
     // into one signal so generateOnce doesn't need to know which one fired —
     // either way, in-flight provider calls get aborted the same way the
@@ -282,7 +312,9 @@ export async function POST(req: NextRequest) {
     async function generateOnce(): Promise<Buffer> {
       const signal = internalController.signal;
       if (provider === "flux-fal") {
-        return editImageWithFlux(normalizedInput, prompt, signal);
+        return referenceImageUrl
+          ? editImageWithFluxMulti(normalizedInput, referenceImageUrl, prompt, signal)
+          : editImageWithFlux(normalizedInput, prompt, signal);
       }
       if (provider === "flux-replicate") {
         return editImageWithReplicate(normalizedInput, prompt, signal);
