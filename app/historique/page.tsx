@@ -8,6 +8,7 @@ interface HistoryItem {
   id: string;
   presetId: string | null;
   usedAi: boolean;
+  kind: string;
   createdAt: string;
   url: string | null;
 }
@@ -107,13 +108,17 @@ export default function HistoriquePage() {
               className="overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50"
             >
               <div className="relative aspect-video w-full bg-zinc-950">
-                {item.url && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.url}
-                    alt="Miniature générée"
-                    className="h-full w-full object-cover"
-                  />
+                {item.url && item.kind === "video" ? (
+                  <video src={item.url} controls className="h-full w-full object-cover" />
+                ) : (
+                  item.url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.url}
+                      alt="Miniature générée"
+                      className="h-full w-full object-cover"
+                    />
+                  )
                 )}
               </div>
               <div className="flex items-center justify-between p-4">

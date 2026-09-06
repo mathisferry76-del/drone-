@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
+import { randomUUID } from "crypto";
 import { getFalKey } from "@/lib/fal";
 import { animateImageToVideo, describeFalVideoError } from "@/lib/fal-video";
 import { getReplicateKey } from "@/lib/replicate";
@@ -18,6 +19,9 @@ export const maxDuration = 300;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_DESCRIPTION = 400;
+// Long enough that leaving the tab open for a while and coming back still
+// works, without needing to revisit /historique for the same result.
+const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
 
 // Test-stage gate: pricing is now set (VIDEO_CREDIT_COST, lib/presets.ts)
 // and wired into the same reserve_credits/release_credits_reservation flow
@@ -149,10 +153,51 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const videoUrl =
+    const rawVideoUrl =
       provider === "fal"
         ? await animateImageToVideo(normalizedInput, description, req.signal)
         : await animateImageToVideoReplicate(normalizedInput, description, req.signal);
+
+    // fal.ai/Replicate's returned URL points at the provider's own hosted
+    // copy, which isn't guaranteed to stay reachable indefinitely
+    // (Replicate's in particular can expire) — re-download and re-upload to
+    // our own 'videos' bucket so the result survives a page reload or a
+    // slow viewer, the same way /api/impress persists every image result to
+    // 'thumbnails'. Also recorded in `generations` so it shows up in
+    // /historique like every other generation. A failure here is logged but
+    // never discards an already-paid-for generation: the provider's own URL
+    // is returned as a fallback either way.
+    let videoUrl = rawVideoUrl;
+    try {
+      const videoRes = await fetch(rawVideoUrl, { signal: req.signal });
+      if (!videoRes.ok) {
+        throw new Error(`download failed (${videoRes.status})`);
+      }
+      const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+      const storagePath = `${authUser.id}/${randomUUID()}.mp4`;
+
+      const { error: uploadError } = await admin.storage
+        .from("videos")
+        .upload(storagePath, videoBuffer, { contentType: "video/mp4" });
+      if (uploadError) throw uploadError;
+
+      const { data: signed } = await admin.storage
+        .from("videos")
+        .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+      if (signed?.signedUrl) videoUrl = signed.signedUrl;
+
+      await admin.from("generations").insert({
+        user_id: authUser.id,
+        storage_path: storagePath,
+        storage_bucket: "videos",
+        kind: "video",
+        preset_id: "impress-video",
+        used_ai: true,
+      });
+    } catch (err) {
+      console.error("animate history save error", err);
+    }
+
     return NextResponse.json({ video: videoUrl });
   } catch (err) {
     await releaseReservationIfNeeded();
