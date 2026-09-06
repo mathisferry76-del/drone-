@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   const { data: rows, error } = await admin
     .from("generations")
-    .select("id, storage_path, preset_id, used_ai, created_at")
+    .select("id, storage_path, storage_bucket, kind, preset_id, used_ai, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(100);
@@ -32,12 +32,13 @@ export async function GET(req: NextRequest) {
   const items = await Promise.all(
     (rows ?? []).map(async (row) => {
       const { data: signed } = await admin.storage
-        .from("thumbnails")
+        .from(row.storage_bucket ?? "thumbnails")
         .createSignedUrl(row.storage_path, SIGNED_URL_TTL_SECONDS);
       return {
         id: row.id,
         presetId: row.preset_id,
         usedAi: row.used_ai,
+        kind: row.kind ?? "image",
         createdAt: row.created_at,
         url: signed?.signedUrl ?? null,
       };
@@ -68,7 +69,7 @@ export async function DELETE(req: NextRequest) {
 
   const { data: row } = await admin
     .from("generations")
-    .select("id, storage_path, user_id")
+    .select("id, storage_path, storage_bucket, user_id")
     .eq("id", id)
     .single();
 
@@ -76,7 +77,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Introuvable." }, { status: 404 });
   }
 
-  await admin.storage.from("thumbnails").remove([row.storage_path]);
+  await admin.storage.from(row.storage_bucket ?? "thumbnails").remove([row.storage_path]);
   await admin.from("generations").delete().eq("id", id);
 
   return NextResponse.json({ ok: true });

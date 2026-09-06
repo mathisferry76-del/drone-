@@ -65,6 +65,14 @@ create table if not exists public.generations (
   created_at timestamptz not null default now()
 );
 
+-- 'kind' + 'storage_bucket' : ajoutés pour la vidéo (/api/animate), qui
+-- stocke dans un bucket séparé ('videos', pas 'thumbnails') et doit être
+-- rendue différemment dans /historique (<video> plutôt que <img>). Les
+-- lignes existantes (miniatures/impress) gardent leurs valeurs par défaut
+-- 'image'/'thumbnails' sans backfill nécessaire.
+alter table public.generations add column if not exists kind text not null default 'image';
+alter table public.generations add column if not exists storage_bucket text not null default 'thumbnails';
+
 alter table public.profiles enable row level security;
 alter table public.generations enable row level security;
 
@@ -143,6 +151,20 @@ on conflict (id) do nothing;
 drop policy if exists "Service role manages thumbnails" on storage.objects;
 create policy "Service role manages thumbnails" on storage.objects
   for all using (bucket_id = 'thumbnails' and auth.role() = 'service_role');
+
+-- Bucket séparé pour les vidéos générées (/api/animate) — même politique
+-- d'accès privé que 'thumbnails' ci-dessus, juste un bucket distinct
+-- puisque ce sont des fichiers vidéo (.mp4) et non des images. Nécessaire
+-- car l'URL renvoyée par fal.ai/Replicate pour Veo 3.1 est temporaire :
+-- sans ce re-stockage, la vidéo générée devenait irrécupérable dès que
+-- cette URL expirait ou que la page était rechargée.
+insert into storage.buckets (id, name, public)
+values ('videos', 'videos', false)
+on conflict (id) do nothing;
+
+drop policy if exists "Service role manages videos" on storage.objects;
+create policy "Service role manages videos" on storage.objects
+  for all using (bucket_id = 'videos' and auth.role() = 'service_role');
 
 drop function if exists public.reserve_generation(uuid, boolean, text, int, boolean);
 drop function if exists public.release_generation_reservation(uuid, text, text);
