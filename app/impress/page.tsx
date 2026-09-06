@@ -73,6 +73,7 @@ export default function ImpressPage() {
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const videoAbortControllerRef = useRef<AbortController | null>(null);
+  const [grantingCredits, setGrantingCredits] = useState(false);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -325,6 +326,38 @@ export default function ImpressPage() {
     videoAbortControllerRef.current?.abort();
   }
 
+  // Owner-only test-credit top-up (see app/api/admin/grant-test-credits/
+  // route.ts) — the owner's image generations always bypass the credits
+  // balance, so it sits at 0 with no way to fund it for testing video's
+  // real credit-debit flow short of an actual Stripe purchase.
+  async function handleGrantTestCredits() {
+    if (!session) return;
+    setVideoError(null);
+    setGrantingCredits(true);
+    try {
+      const res = await fetch("/api/admin/grant-test-credits", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setVideoError(data.error ?? "Erreur pendant l'ajout de crédits.");
+        return;
+      }
+      const supabase = getSupabaseBrowser();
+      const { data: fresh } = await supabase!
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .single();
+      if (fresh) setProfile(fresh as Profile);
+    } catch {
+      setVideoError("Impossible de contacter le serveur.");
+    } finally {
+      setGrantingCredits(false);
+    }
+  }
+
   async function handleBuyCredits(packId: string, priceId: string | null) {
     setUpgradeError(null);
     if (!priceId) {
@@ -479,11 +512,21 @@ export default function ImpressPage() {
         </p>
       )}
       {mode === "video" && (
-        <p className="mt-3 text-sm text-zinc-500">
-          Bêta interne réservée à ton compte — {VIDEO_CREDIT_COST} crédits par
-          vidéo (4 secondes, 1080p, avec son). {creditsBalance} crédits disponibles (
-          {Math.floor(creditsBalance / VIDEO_CREDIT_COST)} vidéo(s)).
-        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <p className="text-sm text-zinc-500">
+            Bêta interne réservée à ton compte — {VIDEO_CREDIT_COST} crédits par
+            vidéo (4 secondes, 1080p, avec son). {creditsBalance} crédits disponibles (
+            {Math.floor(creditsBalance / VIDEO_CREDIT_COST)} vidéo(s)).
+          </p>
+          <button
+            type="button"
+            onClick={handleGrantTestCredits}
+            disabled={grantingCredits}
+            className="rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white disabled:opacity-50"
+          >
+            {grantingCredits ? "Ajout..." : "🧪 +3000 crédits de test"}
+          </button>
+        </div>
       )}
 
       <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-2">
