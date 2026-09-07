@@ -25,6 +25,26 @@ const VIDEO_EXAMPLES = [
   "Zoom avant lent et fluide vers le sujet principal",
 ];
 
+// Narration affichée pendant la génération (GeneratingCard) — donne
+// l'impression qu'un vrai travail d'analyse se déroule, plutôt qu'un seul
+// message figé, pour rendre le moment du dévoilement (résultat flouté à
+// débloquer sur l'essai gratuit) plus fort. Vidéo a sa propre séquence, plus
+// longue, puisque Veo 3.1 prend nettement plus de temps qu'une image.
+const IMAGE_GENERATION_STEPS = [
+  "Analyse de ta photo...",
+  "Détection de l'angle, de la perspective et de la lumière...",
+  "Application de la modification demandée...",
+  "Vérification de la fidélité au modèle et des détails...",
+  "Finalisation du rendu...",
+];
+const VIDEO_GENERATION_STEPS = [
+  "Analyse de ta photo...",
+  "Composition du mouvement de caméra...",
+  "Génération de la vidéo (Veo 3.1)...",
+  "Synchronisation du son...",
+  "Encodage final en 1080p (peut prendre plusieurs minutes)...",
+];
+
 function ImpressPageInner() {
   const searchParams = useSearchParams();
   const { loading: authLoading, session } = useSupabaseUser();
@@ -749,7 +769,7 @@ function ImpressPageInner() {
                 style={resultUrl && resultAspect ? { aspectRatio: resultAspect, maxHeight: "70vh" } : undefined}
               >
                 {loading ? (
-                  <GeneratingCard label="Retouche en cours..." />
+                  <GeneratingCard steps={IMAGE_GENERATION_STEPS} />
                 ) : resultUrl ? (
                   <>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -814,7 +834,7 @@ function ImpressPageInner() {
                 }`}
               >
                 {videoLoading ? (
-                  <GeneratingCard label="Génération vidéo en cours (peut prendre plusieurs minutes)..." />
+                  <GeneratingCard steps={VIDEO_GENERATION_STEPS} />
                 ) : videoUrl ? (
                   <video src={videoUrl} controls autoPlay loop className="h-full w-full object-contain" />
                 ) : previewUrl ? (
