@@ -75,7 +75,12 @@ const GENERATION_DEADLINE_MS = 105_000;
 // total spend as 3 gpt-image-1 attempts, without touching the deadline math
 // that's already tuned around 3 concurrent generations.
 const CANDIDATE_COUNT_REPLACEMENT = 3;
-const CANDIDATE_COUNT_GENERAL = 6;
+// Raised from 6: at ~0.039$/image this path has real cost headroom left
+// (8 candidates is still ~0.31$ total, comfortably inside margin even on
+// the base 2€ pack), and unlike CANDIDATE_COUNT_REPLACEMENT above, this
+// path isn't deadline-constrained — Gemini calls are fast (~10-15s) and
+// run in parallel, so more candidates barely moves total request time.
+const CANDIDATE_COUNT_GENERAL = 8;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
 // thumbnail presets: those push dramatic, stylized regeneration. Here the
