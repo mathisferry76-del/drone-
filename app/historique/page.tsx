@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
+import { downloadFile } from "@/lib/download";
 
 interface HistoryItem {
   id: string;
@@ -18,6 +19,7 @@ export default function HistoriquePage() {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -47,6 +49,23 @@ export default function HistoriquePage() {
     })();
   }, [authLoading, session]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // A plain <a href download> silently fails to force a download here — the
+  // URL is a signed Supabase Storage link on a different origin than the
+  // site, and browsers ignore `download` for cross-origin links, just
+  // navigating to the file instead (see lib/download.ts).
+  async function handleDownload(item: HistoryItem) {
+    if (!item.url) return;
+    setDownloadingId(item.id);
+    try {
+      const ext = item.kind === "video" ? "mp4" : "png";
+      await downloadFile(item.url, `${item.kind === "video" ? "video" : "miniature"}-${item.id}.${ext}`);
+    } catch {
+      setError("Le téléchargement a échoué. Réessaie.");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
 
   async function handleDelete(id: string) {
     if (!session) return;
@@ -132,13 +151,13 @@ export default function HistoriquePage() {
                 </div>
                 <div className="flex gap-3 text-xs font-semibold">
                   {item.url && (
-                    <a
-                      href={item.url}
-                      download
-                      className="text-emerald-400 hover:underline"
+                    <button
+                      onClick={() => handleDownload(item)}
+                      disabled={downloadingId === item.id}
+                      className="text-emerald-400 hover:underline disabled:opacity-60"
                     >
-                      Télécharger
-                    </a>
+                      {downloadingId === item.id ? "Téléchargement..." : "Télécharger"}
+                    </button>
                   )}
                   <button
                     onClick={() => handleDelete(item.id)}

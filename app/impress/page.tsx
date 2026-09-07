@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CREDIT_PACKS, GENERATION_CREDIT_COST, VIDEO_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
+import { downloadFile } from "@/lib/download";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { useEffect } from "react";
 import GeneratingCard from "@/components/motion/GeneratingCard";
@@ -104,6 +105,7 @@ function ImpressPageInner() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [downloadingVideo, setDownloadingVideo] = useState(false);
   const videoAbortControllerRef = useRef<AbortController | null>(null);
   const [grantingCredits, setGrantingCredits] = useState(false);
 
@@ -356,6 +358,22 @@ function ImpressPageInner() {
 
   function handleCancelVideoGenerate() {
     videoAbortControllerRef.current?.abort();
+  }
+
+  // A plain <a href download> silently fails here — videoUrl is a signed
+  // Supabase Storage URL on a different origin than the site, and browsers
+  // ignore `download` for cross-origin links, just navigating to the file
+  // instead of saving it (see lib/download.ts).
+  async function handleDownloadVideo() {
+    if (!videoUrl) return;
+    setDownloadingVideo(true);
+    try {
+      await downloadFile(videoUrl, "video.mp4");
+    } catch {
+      setVideoError("Le téléchargement a échoué. Réessaie.");
+    } finally {
+      setDownloadingVideo(false);
+    }
   }
 
   // Owner-only test-credit top-up (see app/api/admin/grant-test-credits/
@@ -854,14 +872,13 @@ function ImpressPageInner() {
                 )}
               </div>
               {videoUrl && (
-                <a
-                  href={videoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400"
+                <button
+                  onClick={handleDownloadVideo}
+                  disabled={downloadingVideo}
+                  className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400 disabled:opacity-60"
                 >
-                  Ouvrir / télécharger la vidéo
-                </a>
+                  {downloadingVideo ? "Téléchargement..." : "Télécharger la vidéo"}
+                </button>
               )}
             </>
           )}
