@@ -64,15 +64,15 @@ const GENERATION_DEADLINE_MS = 105_000;
 // improve the odds, at the cost of a roughly proportional increase in AI
 // spend per generation.
 //
-// Two different counts, not one: gpt-image-1 (~0.17-0.25$/image at "high"
+// Two different counts, not one: gpt-image-2 (~0.17-0.21$/image at "high"
 // quality — used for the masked full-replacement path below) costs roughly
-// 5x what Gemini 2.5 Flash Image costs (~0.039$/image). 3 was already
+// 3x what Gemini 3.1 Flash Image costs (~0.067$/image). 3 was already
 // tuned down from 4 for that pricier path specifically, after it pushed
 // requests past even a 105s internal deadline in production (each attempt
 // also gets its own verifyChangeApplied pass after generation, so the
 // slowest-of-N generation time is only part of the critical path). Gemini's
 // lower cost buys room for more rolls of the dice at roughly the same
-// total spend as 3 gpt-image-1 attempts, without touching the deadline math
+// total spend as 3 gpt-image-2 attempts, without touching the deadline math
 // that's already tuned around 3 concurrent generations.
 const CANDIDATE_COUNT_REPLACEMENT = 3;
 const CANDIDATE_COUNT_GENERAL = 6;
@@ -514,7 +514,12 @@ export async function POST(req: NextRequest) {
           : undefined;
         const result = await openai.images.edit(
           {
-            model: "gpt-image-1",
+            // Upgraded from gpt-image-1: same mask/input_fidelity edit API
+            // (confirmed in the installed `openai` SDK's type defs), ranked
+            // ahead of it on blind-vote editing leaderboards, at a
+            // comparable ~0.17-0.21$/image cost at "high" quality — see
+            // CANDIDATE_COUNT_REPLACEMENT's cost comment above.
+            model: "gpt-image-2",
             image,
             ...(maskUploadable ? { mask: maskUploadable } : {}),
             prompt,
