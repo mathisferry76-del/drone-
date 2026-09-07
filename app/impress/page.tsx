@@ -563,8 +563,9 @@ function ImpressPageInner() {
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <p className="text-sm text-zinc-500">
             Nouveau — {VIDEO_CREDIT_COST} crédits par vidéo (4 secondes, 1080p,
-            avec son). {creditsBalance} crédits disponibles (
-            {Math.floor(creditsBalance / VIDEO_CREDIT_COST)} vidéo(s)).
+            avec son, toujours au format paysage quelle que soit
+            l&apos;orientation de ta photo). {creditsBalance} crédits
+            disponibles ({Math.floor(creditsBalance / VIDEO_CREDIT_COST)} vidéo(s)).
           </p>
           {isOwnerAccount && (
             <button

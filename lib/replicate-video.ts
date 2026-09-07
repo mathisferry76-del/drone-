@@ -10,14 +10,22 @@ import { getReplicateKey } from "./replicate";
 //
 // Schema confirmed only from Replicate's own published example (`image`,
 // `prompt`, `duration`: 4/6/8, `resolution`: "720p"/"1080p") plus
-// `aspect_ratio` ("16:9"/"9:16", confirmed via Veo 3.1's own portrait-mode
-// announcement) — this sandbox's network egress blocks replicate.com
-// itself, so an audio-generation flag couldn't be verified and is
-// deliberately left out rather than guessed: Replicate's Cog-based schemas
-// reject unrecognized input fields outright, so an unconfirmed field risks
-// breaking every call instead of just this one. Pricing (~0.40$/s with
-// audio at 1080p on Replicate too, same ballpark as fal.ai) matches
-// VIDEO_CREDIT_COST's assumption in lib/presets.ts without changes.
+// `aspect_ratio` ("16:9"/"9:16") — this sandbox's network egress blocks
+// replicate.com itself, so an audio-generation flag couldn't be verified
+// and is deliberately left out rather than guessed: Replicate's Cog-based
+// schemas reject unrecognized input fields outright, so an unconfirmed
+// field risks breaking every call instead of just this one. Always
+// requests "16:9": Veo 3.1's image-to-video mode only ever actually
+// renders 16:9 internally regardless of what's requested here — per
+// Google's own docs, 9:16 is explicitly excluded from this mode, and
+// independently confirmed by other users hitting the exact same "accepts
+// 9:16, silently renders 16:9 anyway" behavior. Requesting "9:16" doesn't
+// produce a portrait video, just that same 16:9 content letterboxed into a
+// taller canvas — see app/api/animate/route.ts, which now always crops the
+// source photo to real 16:9 instead of pretending portrait is possible.
+// Pricing (~0.40$/s with audio at 1080p on Replicate too, same ballpark as
+// fal.ai) matches VIDEO_CREDIT_COST's assumption in lib/presets.ts without
+// changes.
 const VEO_MODEL = "google/veo-3.1";
 
 let client: Replicate | null = null;
@@ -40,7 +48,6 @@ export class ReplicateVideoApiError extends Error {
 export async function animateImageToVideoReplicate(
   image: Buffer,
   prompt: string,
-  aspectRatio: "16:9" | "9:16",
   signal?: AbortSignal
 ): Promise<string> {
   const key = getReplicateKey();
@@ -58,7 +65,7 @@ export async function animateImageToVideoReplicate(
           prompt,
           duration: 4,
           resolution: "1080p",
-          aspect_ratio: aspectRatio,
+          aspect_ratio: "16:9",
         },
         signal,
       }
