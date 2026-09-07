@@ -102,6 +102,12 @@ function ImpressPageInner() {
     searchParams.get("mode") === "video" ? "video" : "image"
   );
   const [videoDescription, setVideoDescription] = useState("");
+  // Veo itself only ever renders 16:9 — "portrait" asks the server to crop
+  // that real 16:9 result into 9:16 afterward (see app/api/animate/
+  // route.ts and lib/video-crop.ts), trading the left/right edges of the
+  // frame for a clip that actually fills a vertical (Story-shaped) screen
+  // instead of the black-bar result a native "9:16" request produces.
+  const [videoFormat, setVideoFormat] = useState<"landscape" | "portrait">("landscape");
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
@@ -299,6 +305,7 @@ function ImpressPageInner() {
       const formData = new FormData();
       formData.append("image", file);
       formData.append("description", videoDescription.trim());
+      formData.append("format", videoFormat);
 
       const res = await fetch("/api/animate", {
         method: "POST",
@@ -674,6 +681,43 @@ function ImpressPageInner() {
                     {ex.length > 40 ? ex.slice(0, 40) + "…" : ex}
                   </button>
                 ))}
+              </div>
+
+              <div className="mt-4">
+                <label className="mb-2 block text-sm font-semibold text-zinc-300">
+                  3. Format
+                </label>
+                <div className="inline-flex overflow-hidden rounded-full border border-zinc-700 text-sm font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setVideoFormat("landscape")}
+                    className={`px-4 py-1.5 transition ${
+                      videoFormat === "landscape"
+                        ? "bg-emerald-400 text-black"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    🖥️ Paysage
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVideoFormat("portrait")}
+                    className={`px-4 py-1.5 transition ${
+                      videoFormat === "portrait"
+                        ? "bg-emerald-400 text-black"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    📱 Portrait (story)
+                  </button>
+                </div>
+                {videoFormat === "portrait" && (
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Veo ne sait générer qu&apos;en paysage — le format portrait
+                    recadre ce résultat après coup pour remplir un écran de
+                    story, en perdant les bords gauche/droite de l&apos;image.
+                  </p>
+                )}
               </div>
             </div>
           )}
