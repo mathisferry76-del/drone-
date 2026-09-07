@@ -40,25 +40,14 @@ const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
 // needs by default: the main subject staying fully, comfortably in frame
 // for the whole clip is the actual requirement, and only mild motion that
 // doesn't require inventing unseen geometry reliably delivers that.
-function buildAnimatePrompt(userDescription: string, wantsPortrait: boolean): string {
-  // Veo only ever renders 16:9; a portrait request crops that output down
-  // to roughly the center third of its width afterward (lib/video-crop.ts).
-  // "Stay in frame" alone only protects against leaving the full 16:9
-  // canvas — confirmed in production to be nowhere near enough for
-  // portrait: an orbit that keeps the subject safely inside the wide frame
-  // the whole time can still drift out of that much narrower center column
-  // partway through, so the cropped result shows the subject sliding off
-  // one edge even though the raw 16:9 clip never technically "lost" it.
-  const portraitRule = wantsPortrait
-    ? `\n- Cette vidéo sera recadrée verticalement après coup, en ne conservant que la bande centrale (environ le tiers central de la largeur de l'image). Le sujet principal doit donc rester dans cette bande centrale étroite du premier au dernier photogramme, pas seulement "dans le cadre" au sens large — tout mouvement de caméra (travelling, orbite, révélation d'un côté) qui déplace le sujet vers les bords gauche/droite le fera disparaître du résultat final même s'il reste visible dans le cadre large. Privilégie donc un mouvement quasi immobile ou une rotation très légère qui garde le sujet bien centré horizontalement en permanence.`
-    : "";
+function buildAnimatePrompt(userDescription: string): string {
   return `Tu animes une photo réelle fixe en un clip vidéo court et réaliste, pas une scène générée de zéro. Un seul angle de caméra a été réellement photographié — tout le reste (côtés, arrière, dessous) n'existe dans aucune donnée réelle et doit être traité avec prudence.
 
 Règles de mouvement de caméra :
-- Le sujet principal (véhicule/personne/objet demandé) doit rester ENTIÈREMENT visible dans le cadre du premier au dernier photogramme — ni recadré, ni coupé sur les bords, ni sorti du cadre. C'est la règle la plus importante, plus importante que le style du mouvement demandé. Attention en particulier si la photo d'origine ne montre déjà qu'une partie du sujet (ex : un véhicule cadré serré, vu seulement de l'arrière, dont l'avant n'apparaît même pas sur la photo) : garder "la même taille apparente que la photo d'origine" ne suffit PAS dans ce cas, puisque la photo elle-même ne montrait pas tout. Dès que le mouvement de caméra change l'angle de vue (ex : orbite, révélation d'un profil), la distance de caméra doit être suffisamment grande pour que le sujet ENTIER (pour un véhicule : du pare-choc avant au pare-choc arrière, du toit aux roues) tienne dans le cadre à ce nouvel angle, quitte à paraître plus petit ou plus éloigné qu'à l'image de départ.
+- Le sujet principal (véhicule/personne/objet demandé) doit rester ENTIÈREMENT visible dans le cadre du premier au dernier photogramme, à une taille comparable à celle de la photo d'origine — ni recadré, ni coupé sur les bords, ni sorti du cadre. C'est la règle la plus importante, plus importante que le style du mouvement demandé.
 - Sauf si la description ci-dessous demande explicitement un zoom prononcé, n'utilise PAS de zoom avant marqué — un zoom qui grossit trop le sujet finit par le faire sortir du cadre, ce qui est un échec pire que l'absence de mouvement. Privilégie par défaut un mouvement discret qui ne change presque rien au cadrage : très léger travelling ou parallaxe (quelques % de déplacement latéral maximum), inclinaison verticale à peine perceptible, ou simplement les reflets/lumières/éléments du décor (feuillage, cheveux, vêtements) qui bougent doucement pendant que la caméra reste quasiment fixe.
-- Si la description demande explicitement de tourner autour du sujet ou de révéler un côté/l'arrière non visible sur la photo d'origine, tu peux le faire, mais recule ou élargis le cadrage autant que nécessaire pour garder le sujet ENTIER visible à ce nouvel angle (voir règle ci-dessus) — ne reste jamais à une distance de caméra qui ne laissait de la place que pour la portion du sujet visible sur la photo d'origine. Toute partie nouvellement visible (carrosserie, silhouette, structure) doit aussi rester STRICTEMENT cohérente avec le style de carrosserie, les proportions et les lignes de design déjà visibles sur la photo (ex : une voiture qui a des barres de toit et l'allure d'un break/Avant sur la photo d'origine doit rester un break/Avant une fois le côté ou l'arrière révélé, jamais dériver vers une silhouette de berline ou de coupé). Ne change JAMAIS le type de carrosserie, le nombre de portes visibles ou les proportions générales du sujet entre le début et la fin du clip.
-- Garde le décor, la lumière, les couleurs et l'identité exacte du sujet (même véhicule/objet, mêmes finitions) cohérents sur toute la durée du clip — aucun élément ne doit se transformer, apparaître ou disparaître de façon incohérente.${portraitRule}
+- Si la description demande explicitement de tourner autour du sujet ou de révéler un côté/l'arrière non visible sur la photo d'origine, tu peux le faire, mais toute partie nouvellement visible (carrosserie, silhouette, structure) doit rester STRICTEMENT cohérente avec le style de carrosserie, les proportions et les lignes de design déjà visibles sur la photo (ex : une voiture qui a des barres de toit et l'allure d'un break/Avant sur la photo d'origine doit rester un break/Avant une fois le côté ou l'arrière révélé, jamais dériver vers une silhouette de berline ou de coupé). Ne change JAMAIS le type de carrosserie, le nombre de portes visibles ou les proportions générales du sujet entre le début et la fin du clip.
+- Garde le décor, la lumière, les couleurs et l'identité exacte du sujet (même véhicule/objet, mêmes finitions) cohérents sur toute la durée du clip — aucun élément ne doit se transformer, apparaître ou disparaître de façon incohérente.
 
 Mouvement demandé : ${userDescription}`;
 }
@@ -226,7 +215,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const prompt = buildAnimatePrompt(description, wantsPortrait);
+    const prompt = buildAnimatePrompt(description);
     const rawVideoUrl =
       provider === "fal"
         ? await animateImageToVideo(normalizedInput, prompt, req.signal)
