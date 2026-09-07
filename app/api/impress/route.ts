@@ -441,7 +441,49 @@ export async function POST(req: NextRequest) {
       internalController.abort(new DOMException("Délai interne dépassé", "TimeoutError"));
     }, GENERATION_DEADLINE_MS);
 
-    async function generateOnce(): Promise<Buffer> {
+    // The true "before" frame every candidate is judged against — see
+    // generationInput above (the OpenAI-canvas-cropped photo on that path,
+    // the untouched photo otherwise).
+    const generationInputMeta = usesOpenAiEditPath ? openAiInputMeta : inputMeta;
+    const generationRatio = (generationInputMeta.width ?? 1) / (generationInputMeta.height ?? 1);
+
+    // Defensive backstop against ANY provider silently returning an image
+    // whose aspect ratio doesn't match what was actually sent — confirmed
+    // for gpt-image-1's 3 fixed canvases (handled above by pre-cropping the
+    // input to match exactly), but Gemini 2.5 Flash Image has no documented
+    // output-size guarantee at all and no aspect-ratio parameter to pin it
+    // down, unlike FLUX Kontext's explicit "match_input_image" — so a
+    // mismatch there would slip through unnoticed and come back as visible
+    // black letterboxing, exactly what showed up in production on a
+    // steering-wheel result even after the gpt-image-1-specific fix.
+    // Cropping (never stretching) whichever axis grew is the same
+    // assumption already validated for gpt-image-1: the real photo content
+    // isn't shrunk, only the canvas around it is padded, so trimming that
+    // padding back off recovers a genuine full-bleed result instead of a
+    // shrunk one. A near-exact match (within 2%, ordinary rounding) is left
+    // untouched rather than trimmed for no reason.
+    async function matchGenerationAspect(candidate: Buffer): Promise<Buffer> {
+      const meta = await sharp(candidate).metadata();
+      const { width, height } = meta;
+      if (!width || !height) return candidate;
+      const currentRatio = width / height;
+      if (Math.abs(currentRatio - generationRatio) / generationRatio < 0.02) return candidate;
+      let cropWidth = width;
+      let cropHeight = height;
+      if (currentRatio > generationRatio) {
+        cropWidth = Math.round(height * generationRatio);
+      } else {
+        cropHeight = Math.round(width / generationRatio);
+      }
+      const left = Math.round((width - cropWidth) / 2);
+      const top = Math.round((height - cropHeight) / 2);
+      return sharp(candidate)
+        .extract({ left, top, width: cropWidth, height: cropHeight })
+        .png()
+        .toBuffer();
+    }
+
+    async function generateOnceRaw(): Promise<Buffer> {
       const signal = internalController.signal;
       // The mask takes priority over normal provider selection whenever
       // it's available (see replacementMask above) — even when FLUX Kontext
@@ -492,6 +534,11 @@ export async function POST(req: NextRequest) {
         ? [{ buffer: normalizedInput }, { buffer: normalizedReference }]
         : [{ buffer: normalizedInput }];
       return editImageWithGemini(geminiImages, prompt, signal);
+    }
+
+    async function generateOnce(): Promise<Buffer> {
+      const raw = await generateOnceRaw();
+      return matchGenerationAspect(raw);
     }
 
     let resultBuffer: Buffer;
