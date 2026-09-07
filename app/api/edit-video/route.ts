@@ -31,6 +31,10 @@ const MAX_DESCRIPTION = 1200;
 // cost. Capped tight rather than accepting the full 30s range Aleph allows.
 const MIN_DURATION_SECONDS = 2;
 const MAX_DURATION_SECONDS = 4;
+// Generous relative to how long Aleph 2.0 actually takes to fetch and
+// start processing the video — this is how long the signed URL we hand it
+// has to remain valid, not how long the whole job can run.
+const ALEPH_FETCH_URL_TTL_SECONDS = 60 * 60;
 
 const execFileAsync = promisify(execFile);
 
@@ -210,6 +214,43 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Re-uploaded (overwriting the same path) with an explicit
+    // Content-Type we control, then handed to Aleph as a URL rather than
+    // a raw Buffer/File — a first attempt let Replicate auto-upload the
+    // File to its own storage, which still served it back as
+    // "application/octet-stream" regardless of the type set on upload
+    // (Aleph's own asset validation rejects that; see
+    // lib/replicate-video-edit.ts's file-level comment). Supabase Storage
+    // reliably serves back whatever Content-Type we set here, so routing
+    // through our own storage instead of Replicate's sidesteps that
+    // entirely. Deliberately NOT cleaned up immediately after starting the
+    // job below — Aleph fetches this URL sometime during its own
+    // processing, not synchronously during predictions.create() — so it
+    // has to stay alive until app/api/edit-video/status/route.ts sees a
+    // terminal status and cleans it up then.
+    const { error: reuploadError } = await admin.storage
+      .from("videos")
+      .upload(path, videoBuffer, { contentType: "video/mp4", upsert: true });
+    if (reuploadError) {
+      console.error("edit-video reupload error", reuploadError);
+      await cleanupUpload();
+      return NextResponse.json(
+        { error: "Impossible de préparer la vidéo pour la transformation. Réessaie." },
+        { status: 500 }
+      );
+    }
+    const { data: signedForAleph, error: signError } = await admin.storage
+      .from("videos")
+      .createSignedUrl(path, ALEPH_FETCH_URL_TTL_SECONDS);
+    if (signError || !signedForAleph) {
+      console.error("edit-video sign error", signError);
+      await cleanupUpload();
+      return NextResponse.json(
+        { error: "Impossible de préparer la vidéo pour la transformation. Réessaie." },
+        { status: 500 }
+      );
+    }
+
     // Real credit reservation, no owner bypass — same deliberate choice as
     // /api/animate: this feature's real paid flow gets validated for every
     // account, owner included.
@@ -220,6 +261,7 @@ export async function POST(req: NextRequest) {
 
     if (reserveError) {
       console.error("reserve_credits error", reserveError);
+      await cleanupUpload();
       return NextResponse.json(
         { error: "Erreur pendant la vérification des crédits." },
         { status: 500 }
@@ -228,6 +270,7 @@ export async function POST(req: NextRequest) {
 
     reservation = reserved as string;
     if (reservation === "insufficient_credits") {
+      await cleanupUpload();
       return NextResponse.json(
         {
           error: `Crédits insuffisants (il faut ${VIDEO_EDIT_CREDIT_COST} crédits pour transformer une vidéo). Achète un pack sur /pricing pour continuer.`,
@@ -237,14 +280,16 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const { id } = await startVideoEdit(videoBuffer, description);
-      await cleanupUpload();
-      // The client polls app/api/edit-video/status/route.ts with both of
-      // these — `reservation` has to round-trip through the client (not
-      // stored server-side) since this route and the polling route are
-      // separate, stateless serverless invocations with nothing else
-      // linking them beyond what the client passes back.
-      return NextResponse.json({ predictionId: id, reservation });
+      const { id } = await startVideoEdit(signedForAleph.signedUrl, description);
+      // NOT cleaned up here — Aleph fetches the video sometime during its
+      // own processing, not synchronously during this call, so the file
+      // has to stay in Storage until app/api/edit-video/status/route.ts
+      // sees a terminal status and cleans it up then. `reservation` and
+      // `path` both have to round-trip through the client (not stored
+      // server-side) since this route and the polling route are separate,
+      // stateless serverless invocations with nothing else linking them
+      // beyond what the client passes back.
+      return NextResponse.json({ predictionId: id, reservation, path });
     } catch (err) {
       await releaseReservationIfNeeded();
       await cleanupUpload();

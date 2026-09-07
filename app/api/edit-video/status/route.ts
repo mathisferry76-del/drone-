@@ -37,6 +37,22 @@ async function releaseReservation(
   }
 }
 
+// The normalized copy app/api/edit-video/route.ts uploaded for Aleph to
+// fetch during its own processing (see that file's comment) — can only
+// safely be deleted once we know Aleph has reached a terminal state,
+// never right after starting the job, so cleanup happens here instead.
+async function cleanupSourceUpload(
+  admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  path: string | null
+) {
+  if (!path) return;
+  try {
+    await admin.storage.from("videos").remove([path]);
+  } catch (err) {
+    console.error("edit-video-status source cleanup error", err);
+  }
+}
+
 export async function GET(req: NextRequest) {
   // Generous compared to the start route: a single generation is polled
   // every few seconds for as long as it takes, easily dozens of calls.
@@ -58,6 +74,7 @@ export async function GET(req: NextRequest) {
 
   const id = req.nextUrl.searchParams.get("id");
   const reservation = req.nextUrl.searchParams.get("reservation");
+  const sourcePath = req.nextUrl.searchParams.get("path");
   if (!id) {
     return NextResponse.json({ error: "Identifiant de tâche manquant." }, { status: 400 });
   }
@@ -68,6 +85,11 @@ export async function GET(req: NextRequest) {
     if (result.status === "starting" || result.status === "processing") {
       return NextResponse.json({ status: "processing" });
     }
+
+    // Every branch below is a terminal state — Aleph is done with the
+    // source video one way or another, so the copy uploaded for it to
+    // fetch (app/api/edit-video/route.ts) is safe to delete now.
+    await cleanupSourceUpload(admin, sourcePath);
 
     if (result.status === "succeeded" && result.videoUrl) {
       // Re-downloaded and persisted to our own 'videos' bucket for the same
@@ -139,11 +161,13 @@ export async function DELETE(req: NextRequest) {
 
   const id = req.nextUrl.searchParams.get("id");
   const reservation = req.nextUrl.searchParams.get("reservation");
+  const sourcePath = req.nextUrl.searchParams.get("path");
   if (!id) {
     return NextResponse.json({ error: "Identifiant de tâche manquant." }, { status: 400 });
   }
 
   await cancelVideoEdit(id);
   await releaseReservation(admin, authUser.id, reservation);
+  await cleanupSourceUpload(admin, sourcePath);
   return NextResponse.json({ status: "canceled" });
 }

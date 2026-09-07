@@ -119,10 +119,17 @@ export default function EditVideoPage() {
   // in case a job somehow never reaches a terminal state.
   const POLL_INTERVAL_MS = 4000;
   const MAX_POLLS = 180; // ~12 minutes
-  const activeJobRef = useRef<{ predictionId: string; reservation: string } | null>(null);
+  const activeJobRef = useRef<{ predictionId: string; reservation: string; path: string } | null>(
+    null
+  );
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function pollJobStatus(predictionId: string, reservation: string, pollCount: number) {
+  async function pollJobStatus(
+    predictionId: string,
+    reservation: string,
+    path: string,
+    pollCount: number
+  ) {
     if (!session) return;
     // A newer job (or a cancel) superseded this poll loop — stop silently.
     if (activeJobRef.current?.predictionId !== predictionId) return;
@@ -139,7 +146,7 @@ export default function EditVideoPage() {
       const res = await fetch(
         `/api/edit-video/status?id=${encodeURIComponent(predictionId)}&reservation=${encodeURIComponent(
           reservation
-        )}`,
+        )}&path=${encodeURIComponent(path)}`,
         { headers: { Authorization: `Bearer ${session.access_token}` } }
       );
       const data: { status?: string; video?: string; error?: string } = await res.json();
@@ -148,7 +155,7 @@ export default function EditVideoPage() {
 
       if (data.status === "processing") {
         pollTimeoutRef.current = setTimeout(
-          () => pollJobStatus(predictionId, reservation, pollCount + 1),
+          () => pollJobStatus(predictionId, reservation, path, pollCount + 1),
           POLL_INTERVAL_MS
         );
         return;
@@ -170,7 +177,7 @@ export default function EditVideoPage() {
       // A transient network error on one poll shouldn't abandon an
       // otherwise-healthy job — just try again on the next tick.
       pollTimeoutRef.current = setTimeout(
-        () => pollJobStatus(predictionId, reservation, pollCount + 1),
+        () => pollJobStatus(predictionId, reservation, path, pollCount + 1),
         POLL_INTERVAL_MS
       );
     }
@@ -231,7 +238,7 @@ export default function EditVideoPage() {
         body: JSON.stringify({ path: urlData.path, description: description.trim() }),
       });
 
-      let data: { predictionId?: string; reservation?: string; error?: string };
+      let data: { predictionId?: string; reservation?: string; path?: string; error?: string };
       try {
         data = await res.json();
       } catch {
@@ -242,14 +249,18 @@ export default function EditVideoPage() {
         return;
       }
 
-      if (!res.ok || !data.predictionId || !data.reservation) {
+      if (!res.ok || !data.predictionId || !data.reservation || !data.path) {
         setError(data.error ?? "Erreur pendant la transformation vidéo.");
         setLoading(false);
         return;
       }
 
-      activeJobRef.current = { predictionId: data.predictionId, reservation: data.reservation };
-      pollJobStatus(data.predictionId, data.reservation, 0);
+      activeJobRef.current = {
+        predictionId: data.predictionId,
+        reservation: data.reservation,
+        path: data.path,
+      };
+      pollJobStatus(data.predictionId, data.reservation, data.path, 0);
     } catch {
       setError("Impossible de contacter le serveur.");
       setLoading(false);
@@ -265,7 +276,7 @@ export default function EditVideoPage() {
       fetch(
         `/api/edit-video/status?id=${encodeURIComponent(job.predictionId)}&reservation=${encodeURIComponent(
           job.reservation
-        )}`,
+        )}&path=${encodeURIComponent(job.path)}`,
         { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } }
       )
         .catch(() => {})
