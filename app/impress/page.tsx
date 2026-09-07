@@ -64,7 +64,14 @@ function ImpressPageInner() {
   // already have sidesteps that entirely.
   const [referenceFile, setReferenceFile] = useState<File | null>(null);
   const [referencePreviewUrl, setReferencePreviewUrl] = useState<string | null>(null);
-  const [description, setDescription] = useState("");
+  // Prefills from the landing page's interactive hero CTA (see
+  // components/ImpressHeroCta.tsx), which sends the visitor here (through
+  // /login's `redirect` param when logged out) with the change they typed
+  // before ever creating an account already carried over — so signing up
+  // feels like unlocking something already in progress, not a wall.
+  const [description, setDescription] = useState(() =>
+    (searchParams.get("description") ?? "").slice(0, DESCRIPTION_MAX)
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
