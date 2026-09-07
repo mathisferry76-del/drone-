@@ -24,10 +24,18 @@ const EXAMPLES = [
 ];
 // Vidéo (Veo 3.1) : mêmes limites de longueur que la description image,
 // exemples orientés mouvement/caméra plutôt que remplacement d'objet.
+// L'orbite complète autour d'un véhicule est volontairement descendue en
+// dernier et reformulée en mouvement léger plutôt qu'une pleine rotation —
+// confirmé en production : révéler tout un côté/l'arrière jamais
+// photographié force l'IA à inventer cette partie de la carrosserie, et
+// elle peut dériver vers une silhouette différente (ex : un break qui
+// devient une berline une fois le côté révélé). Les deux premiers exemples
+// restent proches de l'angle réellement photographié (zoom, mouvement sur
+// place), donc rien à inventer.
 const VIDEO_EXAMPLES = [
-  "La caméra tourne lentement autour de la voiture, reflets qui bougent sur la carrosserie",
-  "Le vent fait légèrement bouger mes cheveux et mes vêtements",
   "Zoom avant lent et fluide vers le sujet principal",
+  "Le vent fait légèrement bouger mes cheveux et mes vêtements",
+  "La caméra pivote très légèrement autour de la voiture, reflets qui bougent sur la carrosserie",
 ];
 
 // Narration affichée pendant la génération (GeneratingCard) — donne

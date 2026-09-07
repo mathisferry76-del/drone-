@@ -27,6 +27,32 @@ const MAX_DESCRIPTION = 1200;
 // works, without needing to revisit /historique for the same result.
 const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
 
+// The user's raw description used to be sent to Veo completely unwrapped —
+// unlike /api/impress's buildImpressPrompt, no system-level guidance at
+// all. Confirmed in production: a "camera orbits around the car" request
+// (the exact motion suggested by this page's own example prompts) reveals
+// the car's sides and rear, which were never in the source photo — Veo has
+// no real data for that geometry and has to invent it outright, and it
+// drifted to a visibly different body style (an invented 4-door-sedan
+// silhouette with a different roofline, for a source photo that showed
+// wagon-style roof rails). This wrapper doesn't forbid reveal-style camera
+// moves the user explicitly asks for, but steers toward motion that stays
+// close to the one angle actually photographed (push-in, subtle parallax,
+// vertical tilt) by default, and — when a reveal does happen — requires
+// whatever new geometry appears to stay strictly consistent with the body
+// style, proportions and design cues already visible, rather than drifting
+// to a different, more "generic" looking vehicle shape.
+function buildAnimatePrompt(userDescription: string): string {
+  return `Tu animes une photo réelle fixe en un clip vidéo court et réaliste, pas une scène générée de zéro. Un seul angle de caméra a été réellement photographié — tout le reste (côtés, arrière, dessous) n'existe dans aucune donnée réelle et doit être traité avec prudence.
+
+Règles de mouvement de caméra :
+- Par défaut, privilégie un mouvement qui reste proche de l'angle réellement photographié : léger zoom avant/arrière, très léger travelling, parallaxe subtile, ou inclinaison verticale douce (vers le haut/bas) sur les éléments déjà visibles — ce sont des mouvements que la caméra peut restituer fidèlement puisqu'ils ne demandent pas d'inventer une partie de la scène jamais vue.
+- Si la description demande explicitement de tourner autour du sujet ou de révéler un côté/l'arrière non visible sur la photo d'origine, tu peux le faire, mais toute partie nouvellement visible (carrosserie, silhouette, structure) doit rester STRICTEMENT cohérente avec le style de carrosserie, les proportions et les lignes de design déjà visibles sur la photo (ex : une voiture qui a des barres de toit et l'allure d'un break/Avant sur la photo d'origine doit rester un break/Avant une fois le côté ou l'arrière révélé, jamais dériver vers une silhouette de berline ou de coupé). Ne change JAMAIS le type de carrosserie, le nombre de portes visibles ou les proportions générales du sujet entre le début et la fin du clip.
+- Garde le décor, la lumière, les couleurs et l'identité exacte du sujet (même véhicule/objet, mêmes finitions) cohérents sur toute la durée du clip — aucun élément ne doit se transformer, apparaître ou disparaître de façon incohérente.
+
+Mouvement demandé : ${userDescription}`;
+}
+
 export async function POST(req: NextRequest) {
   if (isRateLimited(`animate:${getClientIp(req)}`, 5, 10 * 60 * 1000)) {
     return NextResponse.json(
@@ -190,10 +216,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const prompt = buildAnimatePrompt(description);
     const rawVideoUrl =
       provider === "fal"
-        ? await animateImageToVideo(normalizedInput, description, req.signal)
-        : await animateImageToVideoReplicate(normalizedInput, description, req.signal);
+        ? await animateImageToVideo(normalizedInput, prompt, req.signal)
+        : await animateImageToVideoReplicate(normalizedInput, prompt, req.signal);
 
     // fal.ai/Replicate's returned URL points at the provider's own hosted
     // copy, which isn't guaranteed to stay reachable indefinitely
