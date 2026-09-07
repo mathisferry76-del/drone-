@@ -64,15 +64,15 @@ const GENERATION_DEADLINE_MS = 105_000;
 // improve the odds, at the cost of a roughly proportional increase in AI
 // spend per generation.
 //
-// Two different counts, not one: gpt-image-2 (~0.17-0.21$/image at "high"
+// Two different counts, not one: gpt-image-1 (~0.17-0.25$/image at "high"
 // quality — used for the masked full-replacement path below) costs roughly
-// 3x what Gemini 3.1 Flash Image costs (~0.067$/image). 3 was already
+// 3-4x what Gemini 3.1 Flash Image costs (~0.067$/image). 3 was already
 // tuned down from 4 for that pricier path specifically, after it pushed
 // requests past even a 105s internal deadline in production (each attempt
 // also gets its own verifyChangeApplied pass after generation, so the
 // slowest-of-N generation time is only part of the critical path). Gemini's
 // lower cost buys room for more rolls of the dice at roughly the same
-// total spend as 3 gpt-image-2 attempts, without touching the deadline math
+// total spend as 3 gpt-image-1 attempts, without touching the deadline math
 // that's already tuned around 3 concurrent generations.
 const CANDIDATE_COUNT_REPLACEMENT = 3;
 const CANDIDATE_COUNT_GENERAL = 6;
@@ -514,21 +514,22 @@ export async function POST(req: NextRequest) {
           : undefined;
         const result = await openai.images.edit(
           {
-            // Upgraded from gpt-image-1: same mask edit API (confirmed in
-            // the installed `openai` SDK's type defs), ranked ahead of it on
-            // blind-vote editing leaderboards, at a comparable ~0.17-0.21$/
-            // image cost at "high" quality — see CANDIDATE_COUNT_REPLACEMENT's
-            // cost comment above. input_fidelity dropped: despite the SDK's
-            // type comment claiming support "for gpt-image-1 and gpt-image-1.5
-            // and later models", the live API rejects it outright for
-            // gpt-image-2 with a 400 (confirmed in production) — the SDK's
-            // types are simply wrong/stale on this point for this model.
-            model: "gpt-image-2",
+            // Reverted from a brief gpt-image-2 trial: two full-replacement
+            // requests in a row failed verifyChangeApplied right after that
+            // switch (recolor without actually becoming the requested
+            // model), on requests of a kind that had reliably succeeded on
+            // gpt-image-1 all session. Not conclusively proven as a
+            // gpt-image-2 regression rather than bad luck on 3 candidates,
+            // but gpt-image-1 is the proven-reliable choice for this path,
+            // so reverting rather than accumulating more production
+            // failures while investigating further.
+            model: "gpt-image-1",
             image,
             ...(maskUploadable ? { mask: maskUploadable } : {}),
             prompt,
             size: openAiEditSize,
             quality: "high",
+            input_fidelity: "high",
           },
           { signal }
         );
