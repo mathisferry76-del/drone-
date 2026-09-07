@@ -7,7 +7,7 @@ import { join } from "path";
 import ffprobePath from "@ffprobe-installer/ffprobe";
 import { getReplicateKey } from "@/lib/replicate";
 import { startVideoEdit, describeReplicateVideoEditError } from "@/lib/replicate-video-edit";
-import { compressVideoIfNeeded } from "@/lib/video-compress";
+import { normalizeVideoForAleph } from "@/lib/video-compress";
 import { VIDEO_EDIT_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
@@ -163,19 +163,20 @@ export async function POST(req: NextRequest) {
     }
     const rawVideoBuffer = Buffer.from(await downloaded.arrayBuffer());
 
-    // A phone shooting 4K/60fps or ProRes can easily produce a multi-
-    // second clip over Aleph 2.0's 16MB input cap for reasons that have
-    // nothing to do with how long the clip is — re-encoded down instead of
-    // just rejected, so the user doesn't have to go fight their camera
-    // settings for a 2-4s clip.
+    // Every upload is normalized before being sent to Aleph — see
+    // lib/video-compress.ts's file-level comment for why: it both handles
+    // a phone shooting 4K/60fps or ProRes well over Aleph's 16MB input cap,
+    // and strips the leftover rotation metadata that made a live test's
+    // video fail inside Aleph itself ("Failed to parse video resolution:
+    // too many values to unpack").
     let videoBuffer: Buffer;
     try {
-      videoBuffer = await compressVideoIfNeeded(rawVideoBuffer, MAX_UPLOAD_BYTES);
+      videoBuffer = await normalizeVideoForAleph(rawVideoBuffer);
     } catch (err) {
       console.error("edit-video compress error", err);
       await cleanupUpload();
       return NextResponse.json(
-        { error: "Cette vidéo n'a pas pu être compressée par le serveur. Essaie une autre vidéo." },
+        { error: "Cette vidéo n'a pas pu être traitée par le serveur. Essaie une autre vidéo." },
         { status: 400 }
       );
     }
