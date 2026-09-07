@@ -62,8 +62,8 @@ function ImpressPageInner() {
   // either side.
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Vidéo (Veo 3.1, bêta réservée au compte propriétaire — voir
-  // app/api/animate/route.ts) : partage la même photo que le mode image
+  // Vidéo (Veo 3.1, voir app/api/animate/route.ts) : partage la même photo
+  // que le mode image
   // (state `file`/`previewUrl` ci-dessus) mais avec sa propre description,
   // son propre résultat et son propre statut de chargement/erreur, puisque
   // les deux modes appellent des routes différentes et peuvent échouer
@@ -499,7 +499,7 @@ function ImpressPageInner() {
             mode === "video" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
           }`}
         >
-          🎬 Vidéo (bêta)
+          🎬 Vidéo
         </button>
       </div>
 
