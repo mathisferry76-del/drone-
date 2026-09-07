@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { SUBSCRIPTION_TIERS, CREDIT_PACKS, GENERATION_CREDIT_COST } from "@/lib/presets";
+import { SUBSCRIPTION_TIERS, CREDIT_PACKS, GENERATION_CREDIT_COST, VIDEO_CREDIT_COST } from "@/lib/presets";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
 export default function PricingPage() {
@@ -173,12 +173,13 @@ export default function PricingPage() {
           <h3 className="font-bold text-zinc-100">Styles filtres gratuits, IA générative sur crédits</h3>
           <p className="mt-2 text-sm text-zinc-400">
             Les styles filtres (recadrage, couleurs, texte) sont gratuits et
-            illimités pour tout compte connecté. Chaque génération avec l&apos;IA
-            générative — miniature ou &laquo;&nbsp;Impressionne tes potes&nbsp;&raquo; — coûte{" "}
-            {GENERATION_CREDIT_COST} crédits, débités de ton solde au moment de
-            la génération. L&apos;abonnement recharge ce solde chaque mois ; les
-            packs le rechargent ponctuellement. Dans les deux cas, les crédits
-            ne s&apos;expirent jamais.
+            illimités pour tout compte connecté. Une génération miniature ou{" "}
+            &laquo;&nbsp;Impressionne tes potes&nbsp;&raquo; (image) coûte{" "}
+            {GENERATION_CREDIT_COST} crédits ; une vidéo (Veo 3.1, 4 secondes,
+            1080p, avec son) coûte {VIDEO_CREDIT_COST} crédits — débités de ton
+            solde au moment de la génération. L&apos;abonnement recharge ce
+            solde chaque mois ; les packs le rechargent ponctuellement. Dans
+            les deux cas, les crédits ne s&apos;expirent jamais.
           </p>
         </div>
         <div className="rounded-xl border border-emerald-800/40 bg-emerald-400/5 p-6">
