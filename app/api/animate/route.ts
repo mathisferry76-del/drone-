@@ -19,7 +19,10 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
-const MAX_DESCRIPTION = 400;
+// Kept in sync with DESCRIPTION_MAX in app/impress/page.tsx (shared
+// textarea component for image and video mode) and MAX_DESCRIPTION in
+// app/api/impress/route.ts.
+const MAX_DESCRIPTION = 1200;
 // Long enough that leaving the tab open for a while and coming back still
 // works, without needing to revisit /historique for the same result.
 const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;

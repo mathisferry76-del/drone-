@@ -11,7 +11,11 @@ import { useEffect } from "react";
 import GeneratingCard from "@/components/motion/GeneratingCard";
 import ResultReveal from "@/components/motion/ResultReveal";
 
-const DESCRIPTION_MAX = 400;
+// Kept in sync with MAX_DESCRIPTION in app/api/impress/route.ts — raised
+// from 400 since a precise brand-fidelity description (exact wordmark
+// spelling, emblem placement, paddle shifters, drive-mode selector
+// labels...) routinely needs more room than that.
+const DESCRIPTION_MAX = 1200;
 const EXAMPLES = [
   "Remplace ma voiture par une Porsche 911 rouge, même angle, même lumière",
   "Ajoute une montre de luxe à mon poignet",
