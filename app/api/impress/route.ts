@@ -514,18 +514,21 @@ export async function POST(req: NextRequest) {
           : undefined;
         const result = await openai.images.edit(
           {
-            // Upgraded from gpt-image-1: same mask/input_fidelity edit API
-            // (confirmed in the installed `openai` SDK's type defs), ranked
-            // ahead of it on blind-vote editing leaderboards, at a
-            // comparable ~0.17-0.21$/image cost at "high" quality — see
-            // CANDIDATE_COUNT_REPLACEMENT's cost comment above.
+            // Upgraded from gpt-image-1: same mask edit API (confirmed in
+            // the installed `openai` SDK's type defs), ranked ahead of it on
+            // blind-vote editing leaderboards, at a comparable ~0.17-0.21$/
+            // image cost at "high" quality — see CANDIDATE_COUNT_REPLACEMENT's
+            // cost comment above. input_fidelity dropped: despite the SDK's
+            // type comment claiming support "for gpt-image-1 and gpt-image-1.5
+            // and later models", the live API rejects it outright for
+            // gpt-image-2 with a 400 (confirmed in production) — the SDK's
+            // types are simply wrong/stale on this point for this model.
             model: "gpt-image-2",
             image,
             ...(maskUploadable ? { mask: maskUploadable } : {}),
             prompt,
             size: openAiEditSize,
             quality: "high",
-            input_fidelity: "high",
           },
           { signal }
         );
