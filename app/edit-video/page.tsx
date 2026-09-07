@@ -1,0 +1,419 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { CREDIT_PACKS, VIDEO_EDIT_CREDIT_COST } from "@/lib/presets";
+import { getSupabaseBrowser, Profile } from "@/lib/supabase";
+import { downloadFile } from "@/lib/download";
+import { useSupabaseUser } from "@/lib/useSupabaseUser";
+import GeneratingCard from "@/components/motion/GeneratingCard";
+
+const DESCRIPTION_MAX = 1200;
+const MIN_DURATION_SECONDS = 2;
+const MAX_DURATION_SECONDS = 4;
+const MAX_UPLOAD_MB = 16;
+
+const EXAMPLES = [
+  "Remplace ma voiture par une Lamborghini Huracán verte, même angle et lumière",
+  "Change mes vêtements pour un costume noir élégant",
+  "Transforme le décor en rue de nuit avec des néons",
+];
+
+// Narration affichée pendant la génération — même principe que
+// IMAGE_GENERATION_STEPS/VIDEO_GENERATION_STEPS sur /impress (voir
+// app/impress/page.tsx), adaptée au video-to-video (Runway Aleph 2.0) :
+// l'IA part d'une vraie vidéo filmée, pas d'une simple photo, donc l'étape
+// d'analyse porte sur le mouvement déjà présent plutôt qu'à générer.
+const EDIT_VIDEO_STEPS = [
+  "Analyse de ta vidéo...",
+  "Détection du mouvement et de la caméra déjà filmés...",
+  "Application du changement demandé, image par image...",
+  "Vérification de la cohérence sur toute la durée du clip...",
+  "Encodage final (peut prendre plusieurs minutes)...",
+];
+
+export default function EditVideoPage() {
+  const { loading: authLoading, session } = useSupabaseUser();
+  const loggedIn = Boolean(session);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [upgradeLoadingTier, setUpgradeLoadingTier] = useState<string | null>(null);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [description, setDescription] = useState("");
+
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resultUrl, setResultUrl] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!session) {
+      setProfile(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const supabase = getSupabaseBrowser();
+      if (!supabase) return;
+      const { data } = await supabase.from("profiles").select("*").eq("id", session.user.id).single();
+      if (!cancelled && data) setProfile(data as Profile);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Object URL for the locally-selected video file, revoked on change/unmount
+  // to avoid leaking memory — same pattern as image previews elsewhere.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (!videoFile) {
+      setVideoPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(videoFile);
+    setVideoPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [videoFile]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const creditsBalance = profile?.credits_balance ?? 0;
+  const hasCredits = creditsBalance >= VIDEO_EDIT_CREDIT_COST;
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setError(null);
+    setResultUrl(null);
+    setVideoFile(f);
+  }
+
+  function handleRemoveVideo() {
+    setVideoFile(null);
+    setResultUrl(null);
+  }
+
+  async function handleGenerate() {
+    setError(null);
+    if (!videoFile) {
+      setError("Ajoute d'abord ta vidéo.");
+      return;
+    }
+    if (!description.trim()) {
+      setError("Décris le changement que tu veux voir sur ta vidéo.");
+      return;
+    }
+    if (!session) {
+      setError("Connecte-toi d'abord.");
+      return;
+    }
+
+    setResultUrl(null);
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("video", videoFile);
+      formData.append("description", description.trim());
+
+      const res = await fetch("/api/edit-video", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+        signal: controller.signal,
+      });
+
+      let data: { video?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setError(
+          "Le serveur a mis trop de temps à répondre ou a coupé la connexion. Réessaie."
+        );
+        return;
+      }
+
+      if (!res.ok || !data.video) {
+        setError(data.error ?? "Erreur pendant la transformation vidéo.");
+        return;
+      }
+      setResultUrl(data.video);
+
+      const supabase = getSupabaseBrowser();
+      const { data: fresh } = await supabase!
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .single();
+      if (fresh) setProfile(fresh as Profile);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setTimeout(async () => {
+          const supabase = getSupabaseBrowser();
+          const { data: fresh } = await supabase!
+            .from("profiles")
+            .select("*")
+            .eq("id", session.user.id)
+            .single();
+          if (fresh) setProfile(fresh as Profile);
+        }, 800);
+      } else {
+        setError("Impossible de contacter le serveur.");
+      }
+    } finally {
+      setLoading(false);
+      abortControllerRef.current = null;
+    }
+  }
+
+  function handleCancelGenerate() {
+    abortControllerRef.current?.abort();
+  }
+
+  async function handleDownload() {
+    if (!resultUrl) return;
+    setDownloading(true);
+    try {
+      await downloadFile(resultUrl, "video-transformee.mp4");
+    } catch {
+      setError("Le téléchargement a échoué. Réessaie.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function handleBuyCredits(packId: string, priceId: string | null) {
+    setUpgradeError(null);
+    if (!priceId) {
+      setUpgradeError("Ce pack n'est pas encore configuré (variable Stripe manquante).");
+      return;
+    }
+    if (!session) return;
+    setUpgradeLoadingTier(packId);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ priceId, packId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setUpgradeError(data.error ?? "Erreur inconnue.");
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setUpgradeError("Impossible de contacter le serveur de paiement.");
+    } finally {
+      setUpgradeLoadingTier(null);
+    }
+  }
+
+  if (authLoading || (loggedIn && !profile)) {
+    return <div className="mx-auto w-full max-w-6xl px-6 py-16 text-zinc-500">Chargement...</div>;
+  }
+
+  if (!loggedIn) {
+    return (
+      <div className="mx-auto flex min-h-[50vh] w-full max-w-xl flex-col items-center justify-center px-6 py-20 text-center">
+        <h1 className="text-2xl font-extrabold">🎥 Transformer ma vidéo</h1>
+        <p className="mt-3 text-zinc-400">
+          Connecte-toi pour transformer une vidéo que tu as filmée toi-même —
+          en gardant ton mouvement réel, ton geste, ta caméra — pendant que
+          l&apos;IA applique un changement précis dessus.
+        </p>
+        <Link
+          href="/login"
+          className="mt-6 rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300"
+        >
+          Se connecter
+        </Link>
+      </div>
+    );
+  }
+
+  if (!hasCredits) {
+    return (
+      <div className="mx-auto w-full max-w-6xl px-6 py-16">
+        <div className="mx-auto max-w-xl text-center">
+          <h1 className="text-2xl font-extrabold">🎥 Transformer ma vidéo</h1>
+          <p className="mt-3 text-zinc-400">
+            Cette fonctionnalité n&apos;a pas d&apos;essai gratuit — le
+            traitement d&apos;une vraie vidéo coûte nettement plus cher qu&apos;une
+            image. Achète des crédits pour continuer (
+            {VIDEO_EDIT_CREDIT_COST} crédits par transformation).
+          </p>
+        </div>
+
+        {upgradeError && (
+          <p className="mx-auto mt-6 max-w-lg rounded-lg border border-red-800 bg-red-950/50 p-3 text-center text-sm text-red-300">
+            {upgradeError}
+          </p>
+        )}
+
+        <div className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-3">
+          {CREDIT_PACKS.map((pack) => (
+            <div
+              key={pack.id}
+              className={`flex flex-col rounded-2xl border p-6 ${
+                pack.highlighted ? "border-emerald-400 bg-emerald-400/5" : "border-zinc-800 bg-zinc-900/40"
+              }`}
+            >
+              {pack.highlighted && (
+                <span className="mb-3 w-fit rounded-full bg-emerald-400 px-3 py-1 text-xs font-bold text-black">
+                  Le plus choisi
+                </span>
+              )}
+              <h2 className="text-lg font-bold">{pack.credits} crédits</h2>
+              <p className="mt-1 text-sm text-zinc-400">{pack.tagline}</p>
+              <div className="mt-3 flex items-baseline gap-1">
+                <span className="text-3xl font-extrabold">{pack.price}</span>
+              </div>
+              <div className="flex-1" />
+              <button
+                onClick={() => handleBuyCredits(pack.id, pack.priceId)}
+                disabled={upgradeLoadingTier === pack.id}
+                className={`mt-6 rounded-full px-6 py-3 text-center font-bold transition disabled:opacity-60 ${
+                  pack.highlighted
+                    ? "bg-emerald-400 text-black hover:bg-emerald-300"
+                    : "border border-zinc-600 text-white hover:border-zinc-400"
+                }`}
+              >
+                {upgradeLoadingTier === pack.id ? "Redirection..." : "Acheter"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-5xl px-6 py-16">
+      <h1 className="text-3xl font-extrabold">🎥 Transformer ma vidéo</h1>
+      <p className="mt-2 text-zinc-400">
+        Filme-toi toi-même — un geste, une présentation à la main — et décris
+        un changement précis. L&apos;IA garde ton mouvement réel et applique
+        exactement ce changement, comme pour une vraie vidéo montée à la main.
+      </p>
+      <p className="mt-3 text-sm text-zinc-500">
+        {creditsBalance} crédits disponibles (
+        {Math.floor(creditsBalance / VIDEO_EDIT_CREDIT_COST)} transformation(s)).
+      </p>
+
+      <div className="mt-8 grid grid-cols-1 gap-8 md:grid-cols-2">
+        <div className="flex flex-col gap-5">
+          <div>
+            <label className="mb-2 block text-sm font-semibold text-zinc-300">
+              1. Ta vidéo ({MIN_DURATION_SECONDS}-{MAX_DURATION_SECONDS} secondes,{" "}
+              {MAX_UPLOAD_MB} Mo max)
+            </label>
+            {videoPreviewUrl ? (
+              <div className="flex flex-col gap-2">
+                <video
+                  src={videoPreviewUrl}
+                  controls
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900/50"
+                />
+                <button
+                  type="button"
+                  onClick={handleRemoveVideo}
+                  className="w-fit text-xs font-semibold text-zinc-400 hover:text-white"
+                >
+                  Retirer
+                </button>
+              </div>
+            ) : (
+              <label className="flex aspect-video w-full cursor-pointer items-center justify-center rounded-xl border border-dashed border-zinc-700 text-sm text-zinc-500 transition hover:border-zinc-500 hover:text-zinc-300">
+                + Ajouter ma vidéo
+                <input type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
+              </label>
+            )}
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="block text-sm font-semibold text-zinc-300">
+                2. Décris LE changement à apporter
+              </label>
+              <span className="text-xs text-zinc-500">
+                {description.length}/{DESCRIPTION_MAX}
+              </span>
+            </div>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
+              rows={3}
+              placeholder="Ex : remplace ma voiture par une Lamborghini Huracán verte, même angle, même lumière"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
+            />
+            <div className="mt-2 flex flex-wrap gap-2">
+              {EXAMPLES.map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  onClick={() => setDescription(ex)}
+                  className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+                >
+                  {ex.length > 40 ? ex.slice(0, 40) + "…" : ex}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-red-400">{error}</p>}
+
+          {loading ? (
+            <button
+              onClick={handleCancelGenerate}
+              className="w-full rounded-full border border-red-500/60 px-6 py-3 font-bold text-red-400 transition hover:bg-red-500/10"
+            >
+              Annuler
+            </button>
+          ) : (
+            <button
+              onClick={handleGenerate}
+              disabled={!videoFile}
+              className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Transformer la vidéo → {VIDEO_EDIT_CREDIT_COST} crédits
+            </button>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div
+            className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 ${
+              resultUrl ? "" : "aspect-video"
+            }`}
+          >
+            {loading ? (
+              <GeneratingCard steps={EDIT_VIDEO_STEPS} />
+            ) : resultUrl ? (
+              <video src={resultUrl} controls autoPlay loop className="h-full w-full object-contain" />
+            ) : (
+              <p className="px-6 text-center text-sm text-zinc-600">
+                Le résultat apparaîtra ici après transformation.
+              </p>
+            )}
+          </div>
+          {resultUrl && (
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400 disabled:opacity-60"
+            >
+              {downloading ? "Téléchargement..." : "Télécharger la vidéo"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
