@@ -25,6 +25,11 @@ function LoginForm() {
   const [forgotStatus, setForgotStatus] = useState<"idle" | "sending" | "sent">("idle");
   const searchParams = useSearchParams();
   const refCode = searchParams.get("ref");
+  // Lets an entry point other than the navbar (e.g. the landing page's
+  // interactive hero CTA) send the user back to a specific page — and with
+  // whatever query string it had (a typed description, a chosen mode) —
+  // once they're authenticated, instead of always landing on /generate.
+  const redirectTo = searchParams.get("redirect") || "/generate";
   const router = useRouter();
 
   const supabase = getSupabaseBrowser();
@@ -51,7 +56,7 @@ function LoginForm() {
     const { error: authError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
-        emailRedirectTo: window.location.origin + "/generate",
+        emailRedirectTo: window.location.origin + redirectTo,
         // Read by the profiles trigger on first signup only — has no
         // effect for an email that already has an account.
         data: refCode ? { referral_code: refCode } : undefined,
@@ -80,7 +85,7 @@ function LoginForm() {
     // reads referral_code on first signup wouldn't see it anyway.
     const { error: authError } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin + "/generate" },
+      options: { redirectTo: window.location.origin + redirectTo },
     });
     if (authError) setError(authError.message);
     // On success the browser navigates away to Google immediately — no
@@ -128,7 +133,7 @@ function LoginForm() {
         email: email.trim(),
         password,
         options: {
-          emailRedirectTo: window.location.origin + "/generate",
+          emailRedirectTo: window.location.origin + redirectTo,
           data: refCode ? { referral_code: refCode } : undefined,
         },
       });
@@ -139,7 +144,7 @@ function LoginForm() {
       }
       if (data.session) {
         // Email confirmation disabled on this project — signed in right away.
-        router.push("/generate");
+        router.push(redirectTo);
         return;
       }
       setStatus("sent");
@@ -155,7 +160,7 @@ function LoginForm() {
       setStatus("error");
       return;
     }
-    router.push("/generate");
+    router.push(redirectTo);
   }
 
   return (

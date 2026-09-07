@@ -9,6 +9,7 @@ import TiltCard from "@/components/motion/TiltCard";
 import CountUp from "@/components/motion/CountUp";
 import GradientOrb from "@/components/motion/GradientOrb";
 import FaqAccordion from "@/components/FaqAccordion";
+import ImpressHeroCta from "@/components/ImpressHeroCta";
 
 const RESULT_ACCENTS = [
   { border: "border-emerald-400/30 hover:border-emerald-400/60", tag: "bg-emerald-400 text-black" },
@@ -114,20 +115,16 @@ export default function Home() {
             l&apos;IA l&apos;applique en 10 secondes sans toucher au reste de
             la photo. Résultat ultra-réaliste, pas un effet IA qui se voit.
           </p>
-          <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-            <Link
-              href="/impress"
-              className="rounded-full bg-emerald-400 px-8 py-3 text-base font-bold text-black shadow-[0_0_40px_-8px_theme(colors.emerald.400)] transition hover:scale-105 hover:bg-emerald-300"
-            >
-              Essayer avec ma photo →
-            </Link>
-            <Link
-              href="/generate"
-              className="rounded-full border border-zinc-700 px-8 py-3 text-base font-semibold text-white transition hover:scale-105 hover:border-zinc-500"
-            >
-              Je veux des miniatures YouTube
-            </Link>
-          </div>
+          <p className="mt-8 text-sm font-semibold text-zinc-300">
+            Décris LE changement que tu veux voir sur une photo — vas-y, essaie :
+          </p>
+          <ImpressHeroCta />
+          <Link
+            href="/generate"
+            className="mt-4 text-sm font-semibold text-zinc-500 underline-offset-4 transition hover:text-zinc-300 hover:underline"
+          >
+            Plutôt envie de miniatures YouTube ? →
+          </Link>
 
           <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-zinc-500">
             <span className="flex items-center gap-1.5">
