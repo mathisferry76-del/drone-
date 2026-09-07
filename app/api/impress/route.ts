@@ -75,12 +75,7 @@ const GENERATION_DEADLINE_MS = 105_000;
 // total spend as 3 gpt-image-1 attempts, without touching the deadline math
 // that's already tuned around 3 concurrent generations.
 const CANDIDATE_COUNT_REPLACEMENT = 3;
-// Raised from 6: at ~0.039$/image this path has real cost headroom left
-// (8 candidates is still ~0.31$ total, comfortably inside margin even on
-// the base 2€ pack), and unlike CANDIDATE_COUNT_REPLACEMENT above, this
-// path isn't deadline-constrained — Gemini calls are fast (~10-15s) and
-// run in parallel, so more candidates barely moves total request time.
-const CANDIDATE_COUNT_GENERAL = 8;
+const CANDIDATE_COUNT_GENERAL = 6;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
 // thumbnail presets: those push dramatic, stylized regeneration. Here the
@@ -519,15 +514,6 @@ export async function POST(req: NextRequest) {
           : undefined;
         const result = await openai.images.edit(
           {
-            // Reverted from a brief gpt-image-2 trial: two full-replacement
-            // requests in a row failed verifyChangeApplied right after that
-            // switch (recolor without actually becoming the requested
-            // model), on requests of a kind that had reliably succeeded on
-            // gpt-image-1 all session. Not conclusively proven as a
-            // gpt-image-2 regression rather than bad luck on 3 candidates,
-            // but gpt-image-1 is the proven-reliable choice for this path,
-            // so reverting rather than accumulating more production
-            // failures while investigating further.
             model: "gpt-image-1",
             image,
             ...(maskUploadable ? { mask: maskUploadable } : {}),

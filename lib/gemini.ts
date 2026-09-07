@@ -7,12 +7,6 @@ import { buildVideoThumbnailInstruction } from "./youtube";
 // strong (verified against the same face-lock phrasing used here), which is
 // why the pixel-mask machinery built for OpenAI (see buildFaceMask in
 // app/api/generate/route.ts) isn't replicated for this provider.
-// Reverted from a brief gemini-3.1-flash-image trial the same night as a
-// run of production quality regressions on /impress (see the git history
-// around this line) — rolling the whole night's model/prompt changes back
-// together rather than trying to isolate which one was actually at fault,
-// since gemini-2.5-flash-image is the version with a long, proven track
-// record of good results this session.
 const GEMINI_MODEL = "gemini-2.5-flash-image";
 
 export function getGeminiKey(): string | null {
