@@ -30,6 +30,22 @@ const MAX_DURATION_SECONDS = 4;
 // Long enough that leaving the tab open for a while and coming back still
 // works, without needing to revisit /historique for the same result.
 const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
+// Vercel's *actual* enforced function timeout depends on the account's plan
+// and dashboard/project settings, which `maxDuration` above can only ever
+// request, not guarantee (same caveat as /api/impress) — if the real
+// ceiling turns out lower than requested, the platform kills the function
+// outright and the client gets a non-JSON error page, which crashes
+// `await res.json()` client-side (confirmed in production: a real
+// transformation attempt failed with the generic "le serveur a mis trop de
+// temps" fallback, consistent with a platform-level kill rather than a
+// clean application error). This internal deadline fires comfortably
+// before that, so a slow (or genuinely too-long) transformation always
+// gets a clean, specific JSON error and its in-flight Replicate call
+// aborted, instead of an opaque crash. A full video-to-video edit is
+// plausibly slower than Veo's image-to-video (every frame of real footage
+// has to stay consistent, not just one fresh generation), which is the
+// likely reason /api/animate hasn't needed this same guard yet.
+const EDIT_VIDEO_DEADLINE_MS = 270_000;
 
 const execFileAsync = promisify(execFile);
 
@@ -175,7 +191,46 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const rawVideoUrl = await editVideoWithReplicate(videoBuffer, description, req.signal);
+    // Merges the client's own cancel (req.signal) with our internal deadline
+    // into one signal, same pattern as /api/impress — either way, the
+    // in-flight Replicate call gets aborted instead of left running after
+    // we've already told the client it failed.
+    const internalController = new AbortController();
+    if (req.signal.aborted) {
+      internalController.abort(req.signal.reason);
+    } else {
+      req.signal.addEventListener("abort", () => internalController.abort(req.signal.reason), {
+        once: true,
+      });
+    }
+    let timedOut = false;
+    const deadlineTimer = setTimeout(() => {
+      timedOut = true;
+      internalController.abort(new DOMException("Délai interne dépassé", "TimeoutError"));
+    }, EDIT_VIDEO_DEADLINE_MS);
+
+    let rawVideoUrl: string;
+    try {
+      rawVideoUrl = await editVideoWithReplicate(videoBuffer, description, internalController.signal);
+      clearTimeout(deadlineTimer);
+    } catch (err) {
+      clearTimeout(deadlineTimer);
+      await releaseReservationIfNeeded();
+      if (timedOut) {
+        return NextResponse.json(
+          {
+            error:
+              "La transformation a pris trop de temps et a été interrompue. Réessaie avec une vidéo plus courte ou une description plus simple.",
+          },
+          { status: 504 }
+        );
+      }
+      if (req.signal.aborted) {
+        return NextResponse.json({ error: "Transformation annulée." }, { status: 499 });
+      }
+      console.error("edit-video error", err);
+      return NextResponse.json({ error: describeReplicateVideoEditError(err) }, { status: 502 });
+    }
 
     // Re-downloaded and persisted to our own 'videos' bucket for the same
     // reason as /api/animate: Replicate's own hosted URL isn't guaranteed
