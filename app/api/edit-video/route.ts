@@ -101,17 +101,34 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  try {
-    const formData = await req.formData();
-    const file = formData.get("video");
-    const description = String(formData.get("description") ?? "").trim().slice(0, MAX_DESCRIPTION);
+  // The path to the video the client already uploaded straight to Supabase
+  // Storage (see app/api/edit-video/upload-url/route.ts) — cleaned up here
+  // once it's been downloaded server-side, regardless of outcome.
+  let uploadPath: string | null = null;
+  async function cleanupUpload() {
+    if (!uploadPath) return;
+    try {
+      await admin!.storage.from("videos").remove([uploadPath]);
+    } catch (err) {
+      console.error("edit-video upload cleanup error", err);
+    }
+  }
 
-    if (!(file instanceof File)) {
+  try {
+    const body = (await req.json()) as { path?: string; description?: string };
+    const path = body.path;
+    const description = String(body.description ?? "").trim().slice(0, MAX_DESCRIPTION);
+
+    if (!path) {
       return NextResponse.json({ error: "Aucune vidéo reçue." }, { status: 400 });
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ error: "Vidéo trop lourde (16 Mo max)." }, { status: 400 });
+    // Defense in depth: only ever download a path this same route's own
+    // upload-url endpoint could have handed out for this user, never an
+    // arbitrary caller-supplied storage path.
+    if (!path.startsWith(`uploads/${authUser.id}/`)) {
+      return NextResponse.json({ error: "Vidéo invalide." }, { status: 400 });
     }
+    uploadPath = path;
     if (!description) {
       return NextResponse.json(
         { error: "Décris le changement que tu veux voir sur ta vidéo." },
@@ -126,18 +143,40 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const videoBuffer = Buffer.from(await file.arrayBuffer());
+    // Downloaded server-to-server via the Supabase Storage SDK, not
+    // received as this request's own body — Vercel's 4.5MB inbound request
+    // body cap (platform-level, not something maxDuration/config can
+    // change) doesn't apply to a download our own server initiates, which
+    // is exactly why the video is uploaded to Storage directly by the
+    // browser instead of sent through this route.
+    const { data: downloaded, error: downloadError } = await admin.storage
+      .from("videos")
+      .download(path);
+    if (downloadError || !downloaded) {
+      console.error("edit-video download error", downloadError);
+      return NextResponse.json(
+        { error: "Impossible de récupérer la vidéo envoyée. Réessaie." },
+        { status: 400 }
+      );
+    }
+    const videoBuffer = Buffer.from(await downloaded.arrayBuffer());
+    if (videoBuffer.byteLength > MAX_UPLOAD_BYTES) {
+      await cleanupUpload();
+      return NextResponse.json({ error: "Vidéo trop lourde (16 Mo max)." }, { status: 400 });
+    }
 
     let duration: number;
     try {
       duration = await getVideoDurationSeconds(videoBuffer);
     } catch {
+      await cleanupUpload();
       return NextResponse.json(
         { error: "Cette vidéo n'a pas pu être lue par le serveur. Essaie de la réexporter en MP4." },
         { status: 400 }
       );
     }
     if (duration < MIN_DURATION_SECONDS || duration > MAX_DURATION_SECONDS) {
+      await cleanupUpload();
       return NextResponse.json(
         {
           error: `La vidéo doit durer entre ${MIN_DURATION_SECONDS} et ${MAX_DURATION_SECONDS} secondes (${duration.toFixed(
@@ -176,6 +215,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const { id } = await startVideoEdit(videoBuffer, description);
+      await cleanupUpload();
       // The client polls app/api/edit-video/status/route.ts with both of
       // these — `reservation` has to round-trip through the client (not
       // stored server-side) since this route and the polling route are
@@ -184,11 +224,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ predictionId: id, reservation });
     } catch (err) {
       await releaseReservationIfNeeded();
+      await cleanupUpload();
       console.error("edit-video start error", err);
       return NextResponse.json({ error: describeReplicateVideoEditError(err) }, { status: 502 });
     }
   } catch (err) {
     await releaseReservationIfNeeded();
+    await cleanupUpload();
     console.error("edit-video error", err);
     return NextResponse.json({ error: describeReplicateVideoEditError(err) }, { status: 502 });
   }

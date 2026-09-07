@@ -194,14 +194,41 @@ export default function EditVideoPage() {
     setResultUrl(null);
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("video", videoFile);
-      formData.append("description", description.trim());
+      // Uploaded straight to Supabase Storage, not through our own API
+      // route — Vercel Functions hard-cap the request body they can
+      // receive at 4.5MB, platform-level, which a phone-filmed video
+      // routinely exceeds even at just a few seconds long. That's exactly
+      // why every earlier version of this feature (blocking, then the
+      // async start/poll rewrite) kept failing identically: the upload
+      // itself was being rejected before any of our own code ever ran.
+      const urlRes = await fetch("/api/edit-video/upload-url", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const urlData: { path?: string; token?: string; error?: string } = await urlRes.json();
+      if (!urlRes.ok || !urlData.path || !urlData.token) {
+        setError(urlData.error ?? "Impossible de préparer l'envoi de la vidéo.");
+        setLoading(false);
+        return;
+      }
+
+      const supabase = getSupabaseBrowser();
+      const { error: uploadError } = await supabase!.storage
+        .from("videos")
+        .uploadToSignedUrl(urlData.path, urlData.token, videoFile);
+      if (uploadError) {
+        setError("L'envoi de la vidéo a échoué. Réessaie.");
+        setLoading(false);
+        return;
+      }
 
       const res = await fetch("/api/edit-video", {
         method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ path: urlData.path, description: description.trim() }),
       });
 
       let data: { predictionId?: string; reservation?: string; error?: string };
