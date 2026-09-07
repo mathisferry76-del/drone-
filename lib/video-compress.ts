@@ -29,6 +29,14 @@ const execFileAsync = promisify(execFile);
 //    filtergraph (the -vf scale below) is present — so the output's own
 //    width/height always directly match what's actually visible, with
 //    nothing left for any parser to misread.
+// 3. A later live test failed with a genuinely precise error straight from
+//    Replicate's own logs (visible on replicate.com/predictions, not
+//    surfaced by our own error message): "Input video exceeds the 30fps
+//    limit: source is 59.94fps. Use a source video at or below 30fps."
+//    (failureCode INPUT_VALIDATION.VIDEO.UNSUPPORTED_FPS) — a modern phone
+//    commonly defaults to 60fps for casual video capture, which Aleph 2.0
+//    hard-rejects outright. `fps=30` in the filtergraph below forces the
+//    output to 30fps regardless of the source's own frame rate.
 //
 // Always running this (not just when oversized) means every upload Aleph
 // ever sees has the same clean, unambiguous shape — worth the modest fixed
@@ -45,10 +53,13 @@ export async function normalizeVideoForAleph(video: Buffer): Promise<Buffer> {
     // at a moderate, broadly-compatible bitrate — for a clip this short,
     // this reliably lands at a few MB regardless of how the source was
     // shot, with no perceptible quality loss at the scale Aleph analyzes
-    // anyway. yuv420p is the most broadly-compatible pixel format (some
-    // phones default to 10-bit/4:2:2 variants a stricter decoder can choke
-    // on); +faststart is just good MP4 hygiene for anything served over
-    // HTTP, unrelated to the bug this fixes.
+    // anyway. fps=30 caps the frame rate at Aleph's own hard limit
+    // (chained after scale in the same filtergraph, standard ffmpeg
+    // syntax) — a clip already at or below 30fps passes through
+    // unaffected. yuv420p is the most broadly-compatible pixel format
+    // (some phones default to 10-bit/4:2:2 variants a stricter decoder can
+    // choke on); +faststart is just good MP4 hygiene for anything served
+    // over HTTP, unrelated to the bugs this fixes.
     await execFileAsync(ffmpegPath.path, [
       "-y",
       "-i",
@@ -56,7 +67,7 @@ export async function normalizeVideoForAleph(video: Buffer): Promise<Buffer> {
       "-map_metadata",
       "-1",
       "-vf",
-      "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease",
+      "scale='min(1920,iw)':'min(1080,ih)':force_original_aspect_ratio=decrease,fps=30",
       "-pix_fmt",
       "yuv420p",
       "-c:v",
