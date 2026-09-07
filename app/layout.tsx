@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
+import { Analytics } from "@vercel/analytics/next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
@@ -79,6 +80,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Navbar />
         <main className="flex flex-1 flex-col">{children}</main>
         <Footer />
+        {/* Compte de pages vues/visiteurs (Vercel Analytics — visible dans
+            l'onglet Analytics du dashboard Vercel du projet). Aucune
+            variable d'environnement requise, actif automatiquement dès le
+            déploiement sur Vercel ; c'était le chiffre manquant pour
+            calculer le taux de conversion visiteurs → inscriptions. */}
+        <Analytics />
       </body>
     </html>
   );
