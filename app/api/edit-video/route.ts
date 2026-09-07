@@ -38,6 +38,30 @@ const ALEPH_FETCH_URL_TTL_SECONDS = 60 * 60;
 
 const execFileAsync = promisify(execFile);
 
+// The user's raw description used to go to Aleph completely unwrapped —
+// unlike buildImpressPrompt (app/api/impress/route.ts) and buildAnimatePrompt
+// (app/api/animate/route.ts), no brand/model fidelity guidance at all. A
+// live test replacing a car with a named Ferrari model came back a
+// generically-shaped supercar (mid-engine short-hood proportions instead of
+// the named model's actual front-engine long-hood layout) with a blurry
+// smudge instead of the prancing-horse logo — the exact class of failure
+// buildImpressPrompt's own fidelity rules were built to catch, just never
+// ported to this feature. This wrapper borrows the parts of that proven
+// approach that still apply to editing a real filmed clip (body style/
+// proportions, logo precision or omission, real material texture) without
+// the physical-lighting-integration rules that only make sense for
+// compositing a new photo, not editing existing footage.
+function buildEditVideoPrompt(userDescription: string): string {
+  return `Tu édites une vraie vidéo filmée, image par image, pas une scène générée de zéro. Garde absolument identiques le décor, l'éclairage, le mouvement de caméra déjà filmé et tout élément non concerné par le changement demandé (y compris une main ou une personne visible à l'écran) — seul l'objet désigné par la description ci-dessous doit changer.
+
+Fidélité de marque/modèle si la description nomme une marque et un modèle précis (voiture, montre, sac...) — ne généralise JAMAIS vers un modèle générique de la catégorie :
+- Respecte exactement la silhouette et la catégorie de carrosserie du modèle réel. Pour une voiture : un modèle à moteur avant (ex : Ferrari 812 Superfast, une GT V12) a un capot long et un habitacle reculé vers l'arrière — jamais le capot court et l'habitacle avancé typique d'un modèle à moteur central (ex : Ferrari 296, F8) même si la marque demandée est correcte. Ne confonds jamais ces deux catégories.
+- Le logo/emblème de la marque doit être net et fidèle au vrai design (ex : le cheval cabré net sur écusson jaune de Ferrari, pas une tache de couleur floue). Si tu ne peux pas le rendre net et reconnaissable à cette taille, ne l'affiche pas du tout plutôt que d'afficher une forme approximative ou un texte de marque mal orthographié.
+- Matière et texture réalistes : peinture avec de vrais reflets qui bougent de façon cohérente avec le mouvement de caméra déjà filmé, jamais un aspect plat ou "rendu 3D".
+
+Changement demandé : ${userDescription}`;
+}
+
 async function getVideoDurationSeconds(video: Buffer): Promise<number> {
   const dir = await mkdtemp(join(tmpdir(), "edit-video-probe-"));
   const inputPath = join(dir, "input.mp4");
@@ -280,7 +304,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const { id } = await startVideoEdit(signedForAleph.signedUrl, description);
+      const { id } = await startVideoEdit(signedForAleph.signedUrl, buildEditVideoPrompt(description));
       // NOT cleaned up here — Aleph fetches the video sometime during its
       // own processing, not synchronously during this call, so the file
       // has to stay in Storage until app/api/edit-video/status/route.ts
