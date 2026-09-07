@@ -117,6 +117,7 @@ Fidélité de marque/modèle (si l'utilisateur nomme une marque et un modèle pr
 - Pour tout objet ayant un FORMAT STANDARD connu et fixe dans la vraie vie (une carte bancaire/de fidélité fait toujours le même format rectangulaire ID-1 en orientation paysage, un smartphone/ordinateur portable a des proportions, une épaisseur et des ports/connecteurs réels précis à ce modèle) : respecte ce format et cette orientation réels exactement, ne les déforme ni ne les fais deviner approximativement. Un objet dont les proportions générales ou l'orientation ne correspondent pas à l'objet réel (ex : une carte bancaire trop carrée, ou tournée dans le mauvais sens) est un échec au même titre qu'une mauvaise catégorie de carrosserie pour une voiture — ce n'est pas un détail de finition secondaire.
 - Le logo/emblème de la marque doit être présent, net, correctement positionné (calandre et volant/jantes pour une voiture, cadran/fermoir pour une montre) et fidèle au vrai logo de cette marque — jamais flouté, déformé, générique ou omis. Un logo à demi-lisible, aux contours qui bavent ou à la forme approximative (ex : un cheval cabré qui ressemble à une tache plutôt qu'à un cheval net sur l'écusson Ferrari) est un échec visible au premier coup d'œil pour n'importe qui connaît la marque — vise la précision d'un logo vectoriel reproduit à la main, pas une suggestion approximative de logo. Si tu ne peux pas rendre le logo net et reconnaissable à cette taille, privilégie une taille/zone où il l'est plutôt que de le rendre illisible.
 - Pour une voiture, s'il y a un badge/inscription du nom du modèle sur la carrosserie (ex : "RS6", "M4 Competition", "GTI", "quattro", "Turbo S") : reproduis ces lettres/chiffres EXACTEMENT comme ils s'écrivent réellement, dans la bonne police (généralement des majuscules épaisses et nettes, jamais une police décorative ou manuscrite) — un badge qui ressemble à la bonne suite de lettres sans l'être précisément (ex : "RSC" au lieu de "RS6") est un échec au même titre qu'un logo flouté, pas un détail mineur qu'on peut approximer.
+- Règle générale sur TOUT texte de marque (nom de la marque écrit en toutes lettres sur un écusson/emblème, un badge de modèle, un cadran...) : si tu n'es pas certain de pouvoir épeler CHAQUE lettre exactement comme le vrai nom de la marque (ex : "LAMBORGHINI", pas "LAMPOCHINI" ni aucune autre variante approximative), privilégie un rendu du logo/écusson SANS ce texte, ou avec un texte volontairement trop petit/stylisé pour être lu distinctement, plutôt que d'inventer une suite de lettres qui ressemble au bon mot sans l'être. Un texte de marque faux ou baragouiné, même sur un détail par ailleurs réussi, est un échec pire qu'un logo simplifié sans texte du tout — ne prends jamais ce risque quand un doute existe.
 - Pour une montre : forme et matière EXACTES du boîtier (rond/carré/tonneau, acier/or/céramique), style et couleur précis du cadran (index, aiguilles, éventuel guichet de date, complications comme un chronographe ou une lunette tournante), et type de bracelet/maillons caractéristique du modèle réel (ex : le bracelet Oyster ou Jubilee à maillons massifs d'une Rolex, pas un bracelet fin générique) — une montre qui a la bonne couleur générale mais un boîtier/cadran/bracelet de forme différente n'est pas identifiable comme ce modèle précis.
 - Pour un sac ou un article en cuir de marque : matière, couleur et surtout quincaillerie (fermoirs, boucles, couleur du métal) et motif de surface EXACTS du modèle réel (ex : le monogramme ou le damier caractéristique d'une marque, le motif matelassé d'une autre) — jamais un sac uni générique avec juste la bonne couleur et un logo approximatif dessus.
 - Pour un volant de voiture de marque : forme exacte de la jante (ronde classique ou méplate en bas façon volant de sport), taille et position précises de l'emblème sur le moyeu central, présence et forme des palettes au volant si le modèle réel en a, disposition et étiquetage exacts des boutons/molettes/sélecteurs de mode de conduite montés sur le volant (ex : le sélecteur "STRADA/SPORT/CORSA" d'une Lamborghini), et couleur/matière du revêtement (cuir, alcantara) avec ses surpiqûres — un volant à la bonne couleur générale mais avec une jante, un emblème ou des commandes différents de forme n'est pas identifiable comme ce modèle précis, au même titre qu'une mauvaise calandre pour une voiture entière.
@@ -306,6 +307,45 @@ export async function POST(req: NextRequest) {
     const openAiEditSize: "1024x1024" | "1024x1536" | "1536x1024" =
       inputAspect > 1.15 ? "1536x1024" : inputAspect < 0.87 ? "1024x1536" : "1024x1024";
 
+    const openai = getOpenAI();
+
+    // Even the *closest* of those 3 fixed canvases is still a real mismatch
+    // for almost any real photo (a 4:3 or 16:9 phone shot is never exactly
+    // 3:2) — and gpt-image-1 doesn't stretch the photo to fill that
+    // mismatch, it pads the leftover space with black, baked directly into
+    // the result (confirmed in production: a landscape steering-wheel
+    // close-up came back with visible black bars top and bottom).
+    // Centered-cropping the photo to the exact target ratio ourselves
+    // first — the same fix already applied to the video pipeline for Veo's
+    // analogous fixed-canvas limitation, see lib/video-crop.ts — trades a
+    // sliver off the long edge for a real full-bleed result with no
+    // padding. Only computed when OpenAI is even configured, since
+    // whether it ends up used depends on the mask/provider logic below.
+    let openAiInput = normalizedInput;
+    let openAiInputMeta = inputMeta;
+    if (openai) {
+      const targetRatio =
+        openAiEditSize === "1536x1024" ? 1536 / 1024 : openAiEditSize === "1024x1536" ? 1024 / 1536 : 1;
+      const { width, height } = inputMeta;
+      if (width && height) {
+        const currentRatio = width / height;
+        let cropWidth = width;
+        let cropHeight = height;
+        if (currentRatio > targetRatio) {
+          cropWidth = Math.round(height * targetRatio);
+        } else {
+          cropHeight = Math.round(width / targetRatio);
+        }
+        const left = Math.round((width - cropWidth) / 2);
+        const top = Math.round((height - cropHeight) / 2);
+        openAiInput = await sharp(normalizedInput)
+          .extract({ left, top, width: cropWidth, height: cropHeight })
+          .png()
+          .toBuffer();
+        openAiInputMeta = await sharp(openAiInput).metadata();
+      }
+    }
+
     // Provider priority for this route, most-to-least realistic for "insert
     // one real-world object into an existing photo without touching the
     // rest": FLUX.1 Kontext [Max] first — the exact same model hosted on
@@ -327,7 +367,6 @@ export async function POST(req: NextRequest) {
     // starved it of ever actually running here). Only takes effect where
     // GEMINI_API_KEY is actually configured; falls through to the same
     // order as before otherwise.
-    const openai = getOpenAI();
     const provider: "flux-fal" | "flux-replicate" | "openai" | "gemini" | null = getGeminiKey()
       ? "gemini"
       : getFalKey()
@@ -363,15 +402,26 @@ export async function POST(req: NextRequest) {
     // existing provider flow below, unchanged.
     let replacementMask: Buffer | null = null;
     if (openai) {
-      const region = await detectReplacementRegion(normalizedInput, description);
+      const region = await detectReplacementRegion(openAiInput, description);
       if (region) {
         replacementMask = await buildReplacementMask(
-          inputMeta.width ?? 1024,
-          inputMeta.height ?? 1024,
+          openAiInputMeta.width ?? 1024,
+          openAiInputMeta.height ?? 1024,
           region
         );
       }
     }
+
+    // Whichever "original" this request's candidates will actually be
+    // generated from — the OpenAI-canvas-cropped photo whenever generation
+    // goes through gpt-image-1 (masked replacement or as the plain
+    // provider), the untouched photo otherwise (FLUX Kontext/Gemini both
+    // accept the photo's native aspect ratio, no fixed-canvas constraint).
+    // Used consistently below for the actual generation call, the
+    // pixel-diff gate and the fidelity judge, so every comparison is made
+    // against the same frame the model actually saw.
+    const usesOpenAiEditPath = Boolean(replacementMask) || provider === "openai";
+    const generationInput = usesOpenAiEditPath ? openAiInput : normalizedInput;
 
     // Merges the client's own cancel (req.signal) with our internal deadline
     // into one signal so generateOnce doesn't need to know which one fired —
@@ -399,7 +449,7 @@ export async function POST(req: NextRequest) {
       // the better tool for a full object-replacement request specifically.
       if (replacementMask || provider === "openai") {
         if (!openai) throw new Error("OpenAI n'est pas configuré (OPENAI_API_KEY manquante).");
-        const uploadable = await toFile(normalizedInput, "photo.png", { type: "image/png" });
+        const uploadable = await toFile(generationInput, "photo.png", { type: "image/png" });
         // gpt-image-1's edit endpoint natively accepts multiple input images
         // (image: Uploadable | Array<Uploadable>) — a documented, stable
         // capability, not the "experimental" multi-image mode that caused
@@ -482,7 +532,7 @@ export async function POST(req: NextRequest) {
       // before the judge ever sees them rather than trusting its rubric for
       // this specific case too.
       const changedFlags = await Promise.all(
-        successes.map((buf) => looksUnchanged(normalizedInput, buf).then((u) => !u))
+        successes.map((buf) => looksUnchanged(generationInput, buf).then((u) => !u))
       );
       const changedSuccesses = successes.filter((_, i) => changedFlags[i]);
 
@@ -518,7 +568,7 @@ export async function POST(req: NextRequest) {
       }
 
       const { index: bestIndex, imperfect } = await pickBestImage(
-        normalizedInput,
+        generationInput,
         verifiedSuccesses,
         description
       );
