@@ -13,16 +13,17 @@ import { getGeminiKey, GEMINI_TEXT_MODEL } from "./gemini";
 // vision-capable model is already configured on this deployment (gpt-4o-mini
 // mirrors the model already used elsewhere for text — see lib/openai.ts —
 // so no new provider account is required).
-// REJECT_ALL is what the judge is asked to answer with "0" — a scene-fidelity
-// gate, not just a tie-breaker: it exists because the tie-breaking criteria
-// alone (logo crispness, realism) say nothing about whether a candidate is
-// even still a retouch of the original photo. FLUX Kontext occasionally
-// ignores the input image entirely and hallucinates an unrelated scene on
-// every single candidate — e.g. asking for a watch on a wrist coming back
-// with a photo of pool-deck clutter, no wrist or watch anywhere in it. Aim
-// judgment at that failure mode explicitly, since "most realistic of 4
-// hallucinations" would otherwise still confidently ship one.
-const REJECT_ALL = -1;
+export interface PickBestResult {
+  index: number;
+  // true when no judge that actually answered could confirm this candidate
+  // passes the scene-fidelity/correct-change criteria — every judge that
+  // answered flagged every candidate as failing at least one of them. The
+  // index still points at the least-bad candidate (the judge is asked to
+  // name one even when rejecting) so the caller can show it with a warning
+  // instead of discarding the generation the user already paid for and
+  // leaving the failure undiagnosable.
+  imperfect: boolean;
+}
 
 function buildJudgeInstruction(candidateCount: number, description: string): string {
   return `L'image 0 est la photo originale (AVANT retouche). Les ${candidateCount} images suivantes, numérotées 1 à ${candidateCount}, sont des tentatives séparées de retouche IA de cette même photo pour ce changement demandé : "${description}".
@@ -35,18 +36,25 @@ Important : le critère (a) porte sur le DÉCOR/CONTEXTE autour de l'objet conce
 
 Parmi les images qui passent ces deux critères, la netteté et la fidélité du logo/badge de marque ET des inscriptions de modèle (ex : "RS6", "GTI", "M4") sont le critère de classement LE PLUS IMPORTANT, avant même le réalisme général — une image dont le logo/texte est nettement plus net et plus fidèle doit être préférée à une autre plus réaliste ailleurs mais dont le logo est flou/approximatif (ex : un cheval cabré Ferrari qui ressemble à une tache) ou dont le texte du badge est presque juste sans être exact (ex : "RSC" au lieu de "RS6"). Choisis celle qui a l'air la plus réaliste et physiquement intégrée à la scène en départageant à partir de ces critères.
 
-Réponds UNIQUEMENT avec le numéro (1, 2, ...) de la meilleure image restante, ou avec "0" si TOUTES les images échouent (a) ou (b). Réponds seulement avec ce chiffre, sans aucun autre mot.`;
+Réponds sur une seule ligne avec deux éléments séparés par un espace : d'abord le numéro (1 à ${candidateCount}) de la meilleure image — même si AUCUNE ne passe vraiment (a) et (b), désigne quand même la moins mauvaise, la plus proche de réussir, ne réponds jamais "0" ou "aucune" — puis le mot OK si cette image passe réellement (a) et (b), ou BAD si elle y échoue quand même malgré tout (c'est juste la moins pire des ratées). Exemple de réponse : "2 OK" ou "3 BAD". Réponds uniquement ces deux mots, rien d'autre.`;
 }
 
-function parseIndexFromJudgeReply(text: string, candidateCount: number): number | null {
-  const match = text.match(/\d+/);
+// Parses a judge reply expected to look like "2 OK" or "3 BAD" — always a
+// 1-based candidate index (the judge is told to name one even when
+// rejecting every candidate), plus whether that candidate actually passed
+// the fidelity criteria. Falls back to treating a bare/malformed verdict
+// word as a pass, matching the older bare-number-means-pass reply shape in
+// case a judge model doesn't follow the two-token format exactly.
+function parseJudgeVerdict(
+  text: string,
+  candidateCount: number
+): { index: number; passed: boolean } | null {
+  const match = text.match(/(\d+)\D*(OK|BAD)?/i);
   if (!match) return null;
-  const n = parseInt(match[0], 10);
-  if (n === 0) return REJECT_ALL;
-  if (Number.isInteger(n) && n >= 1 && n <= candidateCount) {
-    return n - 1;
-  }
-  return null;
+  const n = parseInt(match[1], 10);
+  if (!Number.isInteger(n) || n < 1 || n > candidateCount) return null;
+  const passed = match[2]?.toUpperCase() !== "BAD";
+  return { index: n - 1, passed };
 }
 
 async function judgeWithOpenAI(
@@ -54,7 +62,7 @@ async function judgeWithOpenAI(
   original: Buffer,
   candidates: Buffer[],
   description: string
-): Promise<number | null> {
+): Promise<{ index: number; passed: boolean } | null> {
   const content: OpenAI.ChatCompletionContentPart[] = [
     { type: "text", text: buildJudgeInstruction(candidates.length, description) },
   ];
@@ -78,18 +86,18 @@ async function judgeWithOpenAI(
   const result = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [{ role: "user", content }],
-    max_tokens: 5,
+    max_tokens: 8,
   });
 
   const text = result.choices[0]?.message?.content?.trim() ?? "";
-  return parseIndexFromJudgeReply(text, candidates.length);
+  return parseJudgeVerdict(text, candidates.length);
 }
 
 async function judgeWithGemini(
   original: Buffer,
   candidates: Buffer[],
   description: string
-): Promise<number | null> {
+): Promise<{ index: number; passed: boolean } | null> {
   const key = getGeminiKey();
   if (!key) return null;
 
@@ -117,32 +125,40 @@ async function judgeWithGemini(
     candidates?: { content?: { parts?: { text?: string }[] } }[];
   };
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  return parseIndexFromJudgeReply(text, candidates.length);
+  return parseJudgeVerdict(text, candidates.length);
 }
 
-// Returns the index of the best candidate, or null if every judge that
-// managed to answer explicitly rejected all candidates as unfaithful to the
-// original photo (see REJECT_ALL above) — that's the caller's cue to error
-// out and refund instead of shipping a hallucinated result. A judge that
-// fails outright (provider error, unparseable reply) just falls back to the
-// next judge, and ultimately to candidate 0 if none could answer at all, so
-// a flaky judge call never costs the user the generation they already paid
-// credits for — only a genuine "none of these are usable" verdict does.
+// Returns the best candidate along with whether any judge that actually
+// answered confirmed it's faithful to the original photo. Previously, a
+// judge explicitly rejecting every candidate (none faithful to the original
+// photo / requested change not correctly applied) made this return null,
+// which the caller treated as a hard failure — refunding credits and
+// discarding every candidate with no way for anyone to see what went wrong.
+// Now the judge is always asked to name a best-of-a-bad-lot candidate even
+// when rejecting, so that verdict surfaces as `imperfect: true` on the
+// least-bad candidate instead of erasing the attempt entirely — the caller
+// decides whether to ship it with a warning. A judge that fails outright
+// (provider error, unparseable reply) just falls back to the next judge, and
+// ultimately to candidate 0 marked as not imperfect if neither could answer
+// at all, so a flaky judge call never costs the user the generation they
+// already paid credits for.
 export async function pickBestImage(
   original: Buffer,
   candidates: Buffer[],
   description: string
-): Promise<number | null> {
-  if (candidates.length <= 1) return 0;
+): Promise<PickBestResult> {
+  if (candidates.length <= 1) return { index: 0, imperfect: false };
 
-  let sawRejectAll = false;
+  let bestGuess: number | null = null;
 
   const openai = getOpenAI();
   if (openai) {
     try {
-      const idx = await judgeWithOpenAI(openai, original, candidates, description);
-      if (idx !== null && idx !== REJECT_ALL) return idx;
-      if (idx === REJECT_ALL) sawRejectAll = true;
+      const verdict = await judgeWithOpenAI(openai, original, candidates, description);
+      if (verdict) {
+        if (verdict.passed) return { index: verdict.index, imperfect: false };
+        if (bestGuess === null) bestGuess = verdict.index;
+      }
     } catch (err) {
       console.error("pickBestImage openai judge error", err);
     }
@@ -150,13 +166,17 @@ export async function pickBestImage(
 
   if (getGeminiKey()) {
     try {
-      const idx = await judgeWithGemini(original, candidates, description);
-      if (idx !== null && idx !== REJECT_ALL) return idx;
-      if (idx === REJECT_ALL) sawRejectAll = true;
+      const verdict = await judgeWithGemini(original, candidates, description);
+      if (verdict) {
+        if (verdict.passed) return { index: verdict.index, imperfect: false };
+        if (bestGuess === null) bestGuess = verdict.index;
+      }
     } catch (err) {
       console.error("pickBestImage gemini judge error", err);
     }
   }
 
-  return sawRejectAll ? null : 0;
+  if (bestGuess !== null) return { index: bestGuess, imperfect: true };
+
+  return { index: 0, imperfect: false };
 }

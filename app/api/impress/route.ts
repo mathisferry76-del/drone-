@@ -445,6 +445,7 @@ export async function POST(req: NextRequest) {
     }
 
     let resultBuffer: Buffer;
+    let resultImperfect = false;
 
     try {
       // Runs several independent generations in parallel and keeps the best
@@ -516,17 +517,19 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const bestIndex = await pickBestImage(normalizedInput, verifiedSuccesses, description);
-      // null means the judge(s) agreed none of the attempts actually kept
-      // the original photo's scene — e.g. the model
-      // hallucinated an unrelated image instead of editing the real one.
-      // Erroring out (and refunding below) beats silently shipping and
-      // charging for a result that has nothing to do with the user's photo.
-      if (bestIndex === null) {
-        throw new Error(
-          "Aucune des tentatives ne respecte assez la photo d'origine. Réessaie avec une description plus précise ou une autre photo."
-        );
-      }
+      const { index: bestIndex, imperfect } = await pickBestImage(
+        normalizedInput,
+        verifiedSuccesses,
+        description
+      );
+      // imperfect means every judge that actually answered flagged every
+      // candidate as failing the fidelity/correct-change criteria — e.g. the
+      // model didn't quite nail the exact requested model/brand. Previously
+      // this hard-failed and refunded, discarding every candidate with no
+      // way to tell what went wrong. Now the least-bad candidate still ships,
+      // flagged for the client to show with a warning, so the user gets a
+      // result instead of nothing and the failure stays diagnosable.
+      resultImperfect = imperfect;
       resultBuffer = verifiedSuccesses[bestIndex];
       clearTimeout(deadlineTimer);
     } catch (err) {
@@ -604,7 +607,13 @@ export async function POST(req: NextRequest) {
       console.error("impress history save error", err);
     }
 
-    return NextResponse.json({ image: `data:image/png;base64,${base64}` });
+    return NextResponse.json({
+      image: `data:image/png;base64,${base64}`,
+      // Set when no judge could confirm this result actually respects the
+      // original photo / the exact requested change — the client shows a
+      // warning banner instead of presenting it as a clean success.
+      imperfect: resultImperfect || undefined,
+    });
   } catch (err) {
     await releaseReservationIfNeeded();
     console.error("impress error", err);
