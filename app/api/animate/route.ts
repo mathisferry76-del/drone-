@@ -128,8 +128,27 @@ export async function POST(req: NextRequest) {
     }
 
     let normalizedInput: Buffer;
+    let aspectRatio: "16:9" | "9:16" = "16:9";
     try {
-      normalizedInput = await sharp(Buffer.from(await file.arrayBuffer())).rotate().png().toBuffer();
+      const rotated = sharp(Buffer.from(await file.arrayBuffer())).rotate();
+      const meta = await rotated.metadata();
+      // metadata() reports the file's raw pixel dimensions, not the
+      // visually-correct ones — a phone photo commonly stores portrait
+      // pixels landscape-swapped plus an EXIF orientation tag (5-8 means a
+      // 90°/270° rotation), so width/height need swapping before comparing
+      // or every EXIF-rotated portrait photo would be misread as landscape.
+      let { width, height } = meta;
+      if (meta.orientation && meta.orientation >= 5 && width && height) {
+        [width, height] = [height, width];
+      }
+      // Matches the output video's orientation to the uploaded photo's own
+      // orientation instead of always defaulting to landscape — without
+      // this, a portrait photo got squeezed/shrunk into a 16:9 frame
+      // instead of producing a portrait video.
+      if (width && height && height > width) {
+        aspectRatio = "9:16";
+      }
+      normalizedInput = await rotated.png().toBuffer();
     } catch {
       await releaseReservationIfNeeded();
       return NextResponse.json(
@@ -140,8 +159,8 @@ export async function POST(req: NextRequest) {
 
     const rawVideoUrl =
       provider === "fal"
-        ? await animateImageToVideo(normalizedInput, description, req.signal)
-        : await animateImageToVideoReplicate(normalizedInput, description, req.signal);
+        ? await animateImageToVideo(normalizedInput, description, aspectRatio, req.signal)
+        : await animateImageToVideoReplicate(normalizedInput, description, aspectRatio, req.signal);
 
     // fal.ai/Replicate's returned URL points at the provider's own hosted
     // copy, which isn't guaranteed to stay reachable indefinitely
