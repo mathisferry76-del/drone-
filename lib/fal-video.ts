@@ -41,7 +41,6 @@ export class FalVideoApiError extends Error {
 export async function animateImageToVideo(
   image: Buffer,
   prompt: string,
-  aspectRatio: "16:9" | "9:16",
   signal?: AbortSignal
 ): Promise<string> {
   const key = getFalKey();
@@ -58,11 +57,16 @@ export async function animateImageToVideo(
         duration: "4s",
         resolution: "1080p",
         generate_audio: true,
-        // Explicit rather than "auto" — matched to the uploaded photo's own
-        // orientation (see app/api/animate/route.ts) so a portrait photo
-        // reliably produces a portrait video instead of being shrunk to fit
-        // a landscape frame.
-        aspect_ratio: aspectRatio,
+        // Always 16:9 — Veo 3.1's image-to-video mode only ever actually
+        // renders 16:9 internally regardless of what's requested here (per
+        // Google's own docs, 9:16 is explicitly excluded from this mode;
+        // confirmed independently by other users hitting the exact same
+        // "accepts 9:16, silently renders 16:9 anyway" behavior). Asking
+        // for "9:16" just gets that same 16:9 content letterboxed into a
+        // taller canvas — see app/api/animate/route.ts, which now always
+        // crops the source photo to real 16:9 instead of pretending
+        // portrait is possible.
+        aspect_ratio: "16:9",
       },
       abortSignal: signal,
     });

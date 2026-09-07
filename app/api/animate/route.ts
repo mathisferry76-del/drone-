@@ -128,7 +128,6 @@ export async function POST(req: NextRequest) {
     }
 
     let normalizedInput: Buffer;
-    let aspectRatio: "16:9" | "9:16" = "16:9";
     try {
       const rotated = sharp(Buffer.from(await file.arrayBuffer())).rotate();
       const meta = await rotated.metadata();
@@ -141,25 +140,22 @@ export async function POST(req: NextRequest) {
       if (meta.orientation && meta.orientation >= 5 && width && height) {
         [width, height] = [height, width];
       }
-      // Matches the output video's orientation to the uploaded photo's own
-      // orientation instead of always defaulting to landscape — without
-      // this, a portrait photo got squeezed/shrunk into a 16:9 frame
-      // instead of producing a portrait video.
-      if (width && height && height > width) {
-        aspectRatio = "9:16";
-      }
 
       if (width && height) {
-        // Veo only accepts a fixed 16:9 or 9:16 — a real phone photo is
-        // rarely exactly that ratio (a screenshot is often closer to
-        // 9:19.5). Left to the provider, a mismatched input gets padded or
-        // reframed to fit, which is what made a photo that filled the whole
-        // screen show up shrunk with the top and bottom cut in the
-        // generated video. Cropping to the exact target ratio ourselves —
-        // trimming only the minimum off whichever side is oversized,
-        // centered, no resampling/zoom — keeps the original framing intact
-        // instead of leaving that reinterpretation to the model.
-        const targetRatio = aspectRatio === "9:16" ? 9 / 16 : 16 / 9;
+        // Veo 3.1's image-to-video mode only ever actually renders 16:9
+        // internally — per Google's own docs, portrait 9:16 is explicitly
+        // excluded from that mode (only supported for text-to-video), and
+        // is independently confirmed by users hitting the same "accepts
+        // 9:16, silently renders 16:9 anyway" behavior on the official
+        // forum. Passing "9:16" to the provider doesn't produce a portrait
+        // video — it produces the same 16:9 content letterboxed into a
+        // taller canvas, which is what made a photo that filled the whole
+        // screen show up shrunk with black bars top and bottom. Always
+        // cropping to 16:9 ourselves first — trimming only the minimum off
+        // whichever side is oversized, centered, no resampling/zoom — is
+        // what actually fills the real (always-landscape) output frame
+        // with the source photo, whatever orientation it was shot in.
+        const targetRatio = 16 / 9;
         const currentRatio = width / height;
         let cropWidth = width;
         let cropHeight = height;
@@ -187,8 +183,8 @@ export async function POST(req: NextRequest) {
 
     const rawVideoUrl =
       provider === "fal"
-        ? await animateImageToVideo(normalizedInput, description, aspectRatio, req.signal)
-        : await animateImageToVideoReplicate(normalizedInput, description, aspectRatio, req.signal);
+        ? await animateImageToVideo(normalizedInput, description, req.signal)
+        : await animateImageToVideoReplicate(normalizedInput, description, req.signal);
 
     // fal.ai/Replicate's returned URL points at the provider's own hosted
     // copy, which isn't guaranteed to stay reachable indefinitely
