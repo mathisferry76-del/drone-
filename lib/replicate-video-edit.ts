@@ -71,11 +71,23 @@ export async function startVideoEdit(video: Buffer, prompt: string): Promise<{ i
   }
   const replicate = getClient(key);
 
+  // A live test failed inside Aleph itself with "Assets must use an
+  // approved Content-Type response header. We received
+  // application/octet-stream" — Replicate's client (lib/files.js's
+  // createFile) hardcodes that exact generic type whenever it's handed a
+  // raw Buffer/Blob with no type of its own, since transformFileInputs
+  // (node_modules/replicate/lib/util.js) auto-uploads any Buffer input it
+  // finds before this call ever runs. Wrapping it in a real File with an
+  // explicit "video/mp4" type instead makes the client preserve that type
+  // through the upload, which is what Aleph's own asset validation
+  // requires.
+  const videoFile = new File([new Uint8Array(video)], "video.mp4", { type: "video/mp4" });
+
   try {
     const prediction = await replicate.predictions.create({
       model: ALEPH_MODEL,
       input: {
-        video,
+        video: videoFile,
         prompt,
       },
     });
