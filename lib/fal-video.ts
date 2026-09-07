@@ -41,6 +41,7 @@ export class FalVideoApiError extends Error {
 export async function animateImageToVideo(
   image: Buffer,
   prompt: string,
+  aspectRatio: "16:9" | "9:16",
   signal?: AbortSignal
 ): Promise<string> {
   const key = getFalKey();
@@ -57,7 +58,11 @@ export async function animateImageToVideo(
         duration: "4s",
         resolution: "1080p",
         generate_audio: true,
-        aspect_ratio: "auto",
+        // Explicit rather than "auto" — matched to the uploaded photo's own
+        // orientation (see app/api/animate/route.ts) so a portrait photo
+        // reliably produces a portrait video instead of being shrunk to fit
+        // a landscape frame.
+        aspect_ratio: aspectRatio,
       },
       abortSignal: signal,
     });

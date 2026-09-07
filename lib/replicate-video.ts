@@ -9,9 +9,10 @@ import { getReplicateKey } from "./replicate";
 // the provider check in app/api/animate/route.ts).
 //
 // Schema confirmed only from Replicate's own published example (`image`,
-// `prompt`, `duration`: 4/6/8, `resolution`: "720p"/"1080p") — this
-// sandbox's network egress blocks replicate.com itself, so an
-// audio-generation flag or aspect_ratio field couldn't be verified and are
+// `prompt`, `duration`: 4/6/8, `resolution`: "720p"/"1080p") plus
+// `aspect_ratio` ("16:9"/"9:16", confirmed via Veo 3.1's own portrait-mode
+// announcement) — this sandbox's network egress blocks replicate.com
+// itself, so an audio-generation flag couldn't be verified and is
 // deliberately left out rather than guessed: Replicate's Cog-based schemas
 // reject unrecognized input fields outright, so an unconfirmed field risks
 // breaking every call instead of just this one. Pricing (~0.40$/s with
@@ -39,6 +40,7 @@ export class ReplicateVideoApiError extends Error {
 export async function animateImageToVideoReplicate(
   image: Buffer,
   prompt: string,
+  aspectRatio: "16:9" | "9:16",
   signal?: AbortSignal
 ): Promise<string> {
   const key = getReplicateKey();
@@ -56,6 +58,7 @@ export async function animateImageToVideoReplicate(
           prompt,
           duration: 4,
           resolution: "1080p",
+          aspect_ratio: aspectRatio,
         },
         signal,
       }
