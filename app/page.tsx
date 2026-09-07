@@ -17,9 +17,9 @@ const RESULT_ACCENTS = [
   { border: "border-cyan-400/30 hover:border-cyan-400/60", tag: "bg-cyan-400 text-black" },
 ];
 
-const RESULTS = [
-  { id: "high-contrast-drama", niche: "Business / SaaS" },
-];
+// Retiré temporairement (image pas assez représentative) — en attente
+// d'un remplacement.
+const RESULTS: { id: string; niche: string }[] = [];
 
 const FLEX_TAGS = [
   "🚗 Voiture de luxe",
