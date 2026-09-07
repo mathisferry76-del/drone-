@@ -47,6 +47,10 @@ const nextConfig: NextConfig = {
       "./node_modules/@ffmpeg-installer/**/*",
       "./node_modules/@ffprobe-installer/**/*",
     ],
+    // /api/edit-video (lib/replicate-video-edit.ts) only probes the
+    // uploaded video's duration with ffprobe — no ffmpeg re-encoding needed
+    // there, unlike /api/animate's portrait crop.
+    "/api/edit-video": ["./node_modules/@ffprobe-installer/**/*"],
   },
 };
 
