@@ -7,6 +7,7 @@ import { join } from "path";
 import ffprobePath from "@ffprobe-installer/ffprobe";
 import { getReplicateKey } from "@/lib/replicate";
 import { startVideoEdit, describeReplicateVideoEditError } from "@/lib/replicate-video-edit";
+import { compressVideoIfNeeded } from "@/lib/video-compress";
 import { VIDEO_EDIT_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
@@ -17,8 +18,9 @@ export const runtime = "nodejs";
 // deliberately doesn't wait for the edit itself to finish (that's
 // app/api/edit-video/status/route.ts's job, polled by the client). This
 // request should only ever take as long as reading the upload, probing its
-// duration, and one fast Replicate API call.
-export const maxDuration = 60;
+// duration, compressing it if it's oversized, and one fast Replicate API
+// call.
+export const maxDuration = 90;
 
 // Runway Aleph 2.0's own hard cap on input file size.
 const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
@@ -159,10 +161,30 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    const videoBuffer = Buffer.from(await downloaded.arrayBuffer());
+    const rawVideoBuffer = Buffer.from(await downloaded.arrayBuffer());
+
+    // A phone shooting 4K/60fps or ProRes can easily produce a multi-
+    // second clip over Aleph 2.0's 16MB input cap for reasons that have
+    // nothing to do with how long the clip is — re-encoded down instead of
+    // just rejected, so the user doesn't have to go fight their camera
+    // settings for a 2-4s clip.
+    let videoBuffer: Buffer;
+    try {
+      videoBuffer = await compressVideoIfNeeded(rawVideoBuffer, MAX_UPLOAD_BYTES);
+    } catch (err) {
+      console.error("edit-video compress error", err);
+      await cleanupUpload();
+      return NextResponse.json(
+        { error: "Cette vidéo n'a pas pu être compressée par le serveur. Essaie une autre vidéo." },
+        { status: 400 }
+      );
+    }
     if (videoBuffer.byteLength > MAX_UPLOAD_BYTES) {
       await cleanupUpload();
-      return NextResponse.json({ error: "Vidéo trop lourde (16 Mo max)." }, { status: 400 });
+      return NextResponse.json(
+        { error: "Vidéo trop lourde même après compression (16 Mo max). Essaie une vidéo plus courte." },
+        { status: 400 }
+      );
     }
 
     let duration: number;
