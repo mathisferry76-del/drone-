@@ -47,13 +47,6 @@ const nextConfig: NextConfig = {
       "./node_modules/@ffmpeg-installer/**/*",
       "./node_modules/@ffprobe-installer/**/*",
     ],
-    // /api/edit-video probes the uploaded video's duration with ffprobe
-    // and, when it's over Aleph 2.0's 16MB input cap, re-encodes it down
-    // with ffmpeg (see lib/video-compress.ts) instead of rejecting it.
-    "/api/edit-video": [
-      "./node_modules/@ffmpeg-installer/**/*",
-      "./node_modules/@ffprobe-installer/**/*",
-    ],
   },
 };
 

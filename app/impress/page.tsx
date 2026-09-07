@@ -574,18 +574,6 @@ function ImpressPageInner() {
         </button>
       </div>
 
-      {/* "Transformer ma vidéo" (Runway Aleph 2.0, video-to-video — voir
-          app/edit-video/page.tsx) part d'une vraie vidéo que l'utilisateur a
-          déjà filmée, pas d'une photo comme les deux modes ci-dessus — un
-          type d'entrée entièrement différent, donc une page à part plutôt
-          qu'un troisième bouton dans ce toggle. */}
-      <Link
-        href="/edit-video"
-        className="mt-3 block w-fit rounded-full border border-zinc-700 px-4 py-1.5 text-sm font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white"
-      >
-        🎥 Transformer ma propre vidéo (nouveau) →
-      </Link>
-
       {mode === "image" && hasFreeTrialAvailable && (
         <p className="mt-3 rounded-lg border border-emerald-800/40 bg-emerald-400/5 px-4 py-2 text-sm text-emerald-300">
           🎁 Ton essai gratuit — un vrai résultat, avec filigrane. Achète des

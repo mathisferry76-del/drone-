@@ -244,18 +244,6 @@ export const GENERATION_CREDIT_COST = 200;
 // fonctionnalité en conditions réelles avant ouverture à tous les comptes.
 export const VIDEO_CREDIT_COST = 1500;
 
-// Coût crédits pour "Transformer ma vidéo" (Runway Aleph 2.0, video-to-video
-// via Replicate — voir lib/replicate-video-edit.ts) : contrairement à
-// "Impressionne tes potes" en vidéo (Veo 3.1, qui anime une simple photo),
-// ici l'utilisateur fournit sa propre vidéo réelle (jusqu'à
-// MAX_DURATION_SECONDS dans app/api/edit-video/route.ts) et l'IA applique un
-// changement dessus en gardant le mouvement filmé. Coût réel API ≈ 0,28$/s ×
-// 4s ≈ 1,12$ (~1€) ; 1000 crédits (~10€ au tarif de base, voir
-// GENERATION_CREDIT_COST) garde une marge large (~9-10x) le temps de valider
-// la fonctionnalité en conditions réelles, comme pour VIDEO_CREDIT_COST à son
-// lancement.
-export const VIDEO_EDIT_CREDIT_COST = 1000;
-
 export interface CreditPack {
   id: string;
   credits: number;
