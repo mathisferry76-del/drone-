@@ -5,6 +5,7 @@ import { getFalKey } from "@/lib/fal";
 import { animateImageToVideo, describeFalVideoError } from "@/lib/fal-video";
 import { getReplicateKey } from "@/lib/replicate";
 import { animateImageToVideoReplicate, describeReplicateVideoError } from "@/lib/replicate-video";
+import { cropVideoToPortrait } from "@/lib/video-crop";
 import { VIDEO_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
@@ -73,6 +74,11 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("image");
     const description = String(formData.get("description") ?? "").trim().slice(0, MAX_DESCRIPTION);
+    // Veo itself only ever renders 16:9 (see the crop logic below and
+    // lib/fal-video.ts/lib/replicate-video.ts) — "portrait" here means
+    // cropping that real 16:9 output into 9:16 ourselves afterward, not
+    // requesting a different aspect ratio from the provider.
+    const wantsPortrait = formData.get("format") === "portrait";
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
@@ -201,7 +207,16 @@ export async function POST(req: NextRequest) {
       if (!videoRes.ok) {
         throw new Error(`download failed (${videoRes.status})`);
       }
-      const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+      let videoBuffer: Buffer<ArrayBufferLike> = Buffer.from(await videoRes.arrayBuffer());
+      if (wantsPortrait) {
+        try {
+          videoBuffer = await cropVideoToPortrait(videoBuffer);
+        } catch (err) {
+          // Falls back to the real 16:9 clip rather than losing an
+          // already-paid-for generation over a cropping failure.
+          console.error("cropVideoToPortrait error", err);
+        }
+      }
       const storagePath = `${authUser.id}/${randomUUID()}.mp4`;
 
       const { error: uploadError } = await admin.storage
