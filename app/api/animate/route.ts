@@ -148,7 +148,35 @@ export async function POST(req: NextRequest) {
       if (width && height && height > width) {
         aspectRatio = "9:16";
       }
-      normalizedInput = await rotated.png().toBuffer();
+
+      if (width && height) {
+        // Veo only accepts a fixed 16:9 or 9:16 — a real phone photo is
+        // rarely exactly that ratio (a screenshot is often closer to
+        // 9:19.5). Left to the provider, a mismatched input gets padded or
+        // reframed to fit, which is what made a photo that filled the whole
+        // screen show up shrunk with the top and bottom cut in the
+        // generated video. Cropping to the exact target ratio ourselves —
+        // trimming only the minimum off whichever side is oversized,
+        // centered, no resampling/zoom — keeps the original framing intact
+        // instead of leaving that reinterpretation to the model.
+        const targetRatio = aspectRatio === "9:16" ? 9 / 16 : 16 / 9;
+        const currentRatio = width / height;
+        let cropWidth = width;
+        let cropHeight = height;
+        if (currentRatio > targetRatio) {
+          cropWidth = Math.round(height * targetRatio);
+        } else {
+          cropHeight = Math.round(width / targetRatio);
+        }
+        const left = Math.round((width - cropWidth) / 2);
+        const top = Math.round((height - cropHeight) / 2);
+        normalizedInput = await rotated
+          .extract({ left, top, width: cropWidth, height: cropHeight })
+          .png()
+          .toBuffer();
+      } else {
+        normalizedInput = await rotated.png().toBuffer();
+      }
     } catch {
       await releaseReservationIfNeeded();
       return NextResponse.json(
