@@ -7,12 +7,13 @@ import { buildVideoThumbnailInstruction } from "./youtube";
 // strong (verified against the same face-lock phrasing used here), which is
 // why the pixel-mask machinery built for OpenAI (see buildFaceMask in
 // app/api/generate/route.ts) isn't replicated for this provider.
-// Upgraded from gemini-2.5-flash-image: this newer generation ("Nano Banana
-// 2") ranks ahead of it on blind-vote image-editing leaderboards, at a
-// still-cheap ~0.067$/image (vs ~0.039$ for 2.5 Flash) — see
-// CANDIDATE_COUNT_GENERAL's cost comment in app/api/impress/route.ts for how
-// that plays into the general path's per-generation cost.
-const GEMINI_MODEL = "gemini-3.1-flash-image";
+// Reverted from a brief gemini-3.1-flash-image trial the same night as a
+// run of production quality regressions on /impress (see the git history
+// around this line) — rolling the whole night's model/prompt changes back
+// together rather than trying to isolate which one was actually at fault,
+// since gemini-2.5-flash-image is the version with a long, proven track
+// record of good results this session.
+const GEMINI_MODEL = "gemini-2.5-flash-image";
 
 export function getGeminiKey(): string | null {
   return process.env.GEMINI_API_KEY || null;
