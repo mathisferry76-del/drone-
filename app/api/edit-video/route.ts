@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { mkdtemp, writeFile, rm } from "fs/promises";
@@ -7,16 +6,19 @@ import { tmpdir } from "os";
 import { join } from "path";
 import ffprobePath from "@ffprobe-installer/ffprobe";
 import { getReplicateKey } from "@/lib/replicate";
-import { editVideoWithReplicate, describeReplicateVideoEditError } from "@/lib/replicate-video-edit";
+import { startVideoEdit, describeReplicateVideoEditError } from "@/lib/replicate-video-edit";
 import { VIDEO_EDIT_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
-// Aleph 2.0 is a single, non-parallel call (no CANDIDATE_COUNT judging like
-// /api/impress) but a full video-to-video edit run commonly takes well over
-// a minute — same reasoning as /api/animate's maxDuration.
-export const maxDuration = 300;
+// Only starts the job and returns Replicate's prediction id — see
+// lib/replicate-video-edit.ts's file-level comment for why this route
+// deliberately doesn't wait for the edit itself to finish (that's
+// app/api/edit-video/status/route.ts's job, polled by the client). This
+// request should only ever take as long as reading the upload, probing its
+// duration, and one fast Replicate API call.
+export const maxDuration = 60;
 
 // Runway Aleph 2.0's own hard cap on input file size.
 const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
@@ -27,25 +29,6 @@ const MAX_DESCRIPTION = 1200;
 // cost. Capped tight rather than accepting the full 30s range Aleph allows.
 const MIN_DURATION_SECONDS = 2;
 const MAX_DURATION_SECONDS = 4;
-// Long enough that leaving the tab open for a while and coming back still
-// works, without needing to revisit /historique for the same result.
-const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
-// Vercel's *actual* enforced function timeout depends on the account's plan
-// and dashboard/project settings, which `maxDuration` above can only ever
-// request, not guarantee (same caveat as /api/impress) — if the real
-// ceiling turns out lower than requested, the platform kills the function
-// outright and the client gets a non-JSON error page, which crashes
-// `await res.json()` client-side (confirmed in production: a real
-// transformation attempt failed with the generic "le serveur a mis trop de
-// temps" fallback, consistent with a platform-level kill rather than a
-// clean application error). This internal deadline fires comfortably
-// before that, so a slow (or genuinely too-long) transformation always
-// gets a clean, specific JSON error and its in-flight Replicate call
-// aborted, instead of an opaque crash. A full video-to-video edit is
-// plausibly slower than Veo's image-to-video (every frame of real footage
-// has to stay consistent, not just one fresh generation), which is the
-// likely reason /api/animate hasn't needed this same guard yet.
-const EDIT_VIDEO_DEADLINE_MS = 270_000;
 
 const execFileAsync = promisify(execFile);
 
@@ -191,89 +174,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Merges the client's own cancel (req.signal) with our internal deadline
-    // into one signal, same pattern as /api/impress — either way, the
-    // in-flight Replicate call gets aborted instead of left running after
-    // we've already told the client it failed.
-    const internalController = new AbortController();
-    if (req.signal.aborted) {
-      internalController.abort(req.signal.reason);
-    } else {
-      req.signal.addEventListener("abort", () => internalController.abort(req.signal.reason), {
-        once: true,
-      });
-    }
-    let timedOut = false;
-    const deadlineTimer = setTimeout(() => {
-      timedOut = true;
-      internalController.abort(new DOMException("Délai interne dépassé", "TimeoutError"));
-    }, EDIT_VIDEO_DEADLINE_MS);
-
-    let rawVideoUrl: string;
     try {
-      rawVideoUrl = await editVideoWithReplicate(videoBuffer, description, internalController.signal);
-      clearTimeout(deadlineTimer);
+      const { id } = await startVideoEdit(videoBuffer, description);
+      // The client polls app/api/edit-video/status/route.ts with both of
+      // these — `reservation` has to round-trip through the client (not
+      // stored server-side) since this route and the polling route are
+      // separate, stateless serverless invocations with nothing else
+      // linking them beyond what the client passes back.
+      return NextResponse.json({ predictionId: id, reservation });
     } catch (err) {
-      clearTimeout(deadlineTimer);
       await releaseReservationIfNeeded();
-      if (timedOut) {
-        return NextResponse.json(
-          {
-            error:
-              "La transformation a pris trop de temps et a été interrompue. Réessaie avec une vidéo plus courte ou une description plus simple.",
-          },
-          { status: 504 }
-        );
-      }
-      if (req.signal.aborted) {
-        return NextResponse.json({ error: "Transformation annulée." }, { status: 499 });
-      }
-      console.error("edit-video error", err);
+      console.error("edit-video start error", err);
       return NextResponse.json({ error: describeReplicateVideoEditError(err) }, { status: 502 });
     }
-
-    // Re-downloaded and persisted to our own 'videos' bucket for the same
-    // reason as /api/animate: Replicate's own hosted URL isn't guaranteed
-    // to stay reachable indefinitely, and this makes the result show up in
-    // /historique like every other generation (same bucket/kind, so no
-    // schema or /historique changes needed).
-    let videoUrl = rawVideoUrl;
-    try {
-      const videoRes = await fetch(rawVideoUrl, { signal: req.signal });
-      if (!videoRes.ok) {
-        throw new Error(`download failed (${videoRes.status})`);
-      }
-      const resultBuffer = Buffer.from(await videoRes.arrayBuffer());
-      const storagePath = `${authUser.id}/${randomUUID()}.mp4`;
-
-      const { error: uploadError } = await admin.storage
-        .from("videos")
-        .upload(storagePath, resultBuffer, { contentType: "video/mp4" });
-      if (uploadError) throw uploadError;
-
-      const { data: signed } = await admin.storage
-        .from("videos")
-        .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
-      if (signed?.signedUrl) videoUrl = signed.signedUrl;
-
-      await admin.from("generations").insert({
-        user_id: authUser.id,
-        storage_path: storagePath,
-        storage_bucket: "videos",
-        kind: "video",
-        preset_id: "edit-video",
-        used_ai: true,
-      });
-    } catch (err) {
-      console.error("edit-video history save error", err);
-    }
-
-    return NextResponse.json({ video: videoUrl });
   } catch (err) {
     await releaseReservationIfNeeded();
-    if (req.signal.aborted) {
-      return NextResponse.json({ error: "Transformation annulée." }, { status: 499 });
-    }
     console.error("edit-video error", err);
     return NextResponse.json({ error: describeReplicateVideoEditError(err) }, { status: 502 });
   }

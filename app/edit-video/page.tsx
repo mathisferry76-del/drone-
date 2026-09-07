@@ -47,7 +47,6 @@ export default function EditVideoPage() {
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -98,6 +97,85 @@ export default function EditVideoPage() {
     setResultUrl(null);
   }
 
+  async function refreshProfile() {
+    if (!session) return;
+    const supabase = getSupabaseBrowser();
+    const { data: fresh } = await supabase!
+      .from("profiles")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+    if (fresh) setProfile(fresh as Profile);
+  }
+
+  // The actual transformation runs in the background on Replicate — a full
+  // video-to-video edit routinely takes longer than any single HTTP request
+  // can safely stay open for (confirmed in production: a blocking version
+  // of this call crashed with a non-JSON "server took too long" response
+  // once, even with a generous internal deadline). handleGenerate only
+  // starts the job (fast); pollJobStatus checks in on it every few seconds
+  // afterward, in a request of its own each time, so no single request's
+  // duration is ever a bottleneck. Gives up after MAX_POLLS as a safety net
+  // in case a job somehow never reaches a terminal state.
+  const POLL_INTERVAL_MS = 4000;
+  const MAX_POLLS = 180; // ~12 minutes
+  const activeJobRef = useRef<{ predictionId: string; reservation: string } | null>(null);
+  const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function pollJobStatus(predictionId: string, reservation: string, pollCount: number) {
+    if (!session) return;
+    // A newer job (or a cancel) superseded this poll loop — stop silently.
+    if (activeJobRef.current?.predictionId !== predictionId) return;
+
+    if (pollCount > MAX_POLLS) {
+      setError("La transformation prend anormalement longtemps. Réessaie plus tard.");
+      setLoading(false);
+      activeJobRef.current = null;
+      await refreshProfile();
+      return;
+    }
+
+    try {
+      const res = await fetch(
+        `/api/edit-video/status?id=${encodeURIComponent(predictionId)}&reservation=${encodeURIComponent(
+          reservation
+        )}`,
+        { headers: { Authorization: `Bearer ${session.access_token}` } }
+      );
+      const data: { status?: string; video?: string; error?: string } = await res.json();
+
+      if (activeJobRef.current?.predictionId !== predictionId) return;
+
+      if (data.status === "processing") {
+        pollTimeoutRef.current = setTimeout(
+          () => pollJobStatus(predictionId, reservation, pollCount + 1),
+          POLL_INTERVAL_MS
+        );
+        return;
+      }
+
+      if (data.status === "done" && data.video) {
+        setResultUrl(data.video);
+        setLoading(false);
+        activeJobRef.current = null;
+        await refreshProfile();
+        return;
+      }
+
+      setError(data.error ?? "Erreur pendant la transformation vidéo.");
+      setLoading(false);
+      activeJobRef.current = null;
+      await refreshProfile();
+    } catch {
+      // A transient network error on one poll shouldn't abandon an
+      // otherwise-healthy job — just try again on the next tick.
+      pollTimeoutRef.current = setTimeout(
+        () => pollJobStatus(predictionId, reservation, pollCount + 1),
+        POLL_INTERVAL_MS
+      );
+    }
+  }
+
   async function handleGenerate() {
     setError(null);
     if (!videoFile) {
@@ -114,8 +192,6 @@ export default function EditVideoPage() {
     }
 
     setResultUrl(null);
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
     setLoading(true);
     try {
       const formData = new FormData();
@@ -126,54 +202,48 @@ export default function EditVideoPage() {
         method: "POST",
         headers: { Authorization: `Bearer ${session.access_token}` },
         body: formData,
-        signal: controller.signal,
       });
 
-      let data: { video?: string; error?: string };
+      let data: { predictionId?: string; reservation?: string; error?: string };
       try {
         data = await res.json();
       } catch {
         setError(
           "Le serveur a mis trop de temps à répondre ou a coupé la connexion. Réessaie."
         );
+        setLoading(false);
         return;
       }
 
-      if (!res.ok || !data.video) {
+      if (!res.ok || !data.predictionId || !data.reservation) {
         setError(data.error ?? "Erreur pendant la transformation vidéo.");
+        setLoading(false);
         return;
       }
-      setResultUrl(data.video);
 
-      const supabase = getSupabaseBrowser();
-      const { data: fresh } = await supabase!
-        .from("profiles")
-        .select("*")
-        .eq("id", session.user.id)
-        .single();
-      if (fresh) setProfile(fresh as Profile);
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        setTimeout(async () => {
-          const supabase = getSupabaseBrowser();
-          const { data: fresh } = await supabase!
-            .from("profiles")
-            .select("*")
-            .eq("id", session.user.id)
-            .single();
-          if (fresh) setProfile(fresh as Profile);
-        }, 800);
-      } else {
-        setError("Impossible de contacter le serveur.");
-      }
-    } finally {
+      activeJobRef.current = { predictionId: data.predictionId, reservation: data.reservation };
+      pollJobStatus(data.predictionId, data.reservation, 0);
+    } catch {
+      setError("Impossible de contacter le serveur.");
       setLoading(false);
-      abortControllerRef.current = null;
     }
   }
 
   function handleCancelGenerate() {
-    abortControllerRef.current?.abort();
+    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    const job = activeJobRef.current;
+    activeJobRef.current = null;
+    setLoading(false);
+    if (job && session) {
+      fetch(
+        `/api/edit-video/status?id=${encodeURIComponent(job.predictionId)}&reservation=${encodeURIComponent(
+          job.reservation
+        )}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } }
+      )
+        .catch(() => {})
+        .finally(() => refreshProfile());
+    }
   }
 
   async function handleDownload() {
