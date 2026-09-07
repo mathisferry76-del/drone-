@@ -77,6 +77,11 @@ function ImpressPageInner() {
   const [error, setError] = useState<string | null>(null);
   const [resultUrl, setResultUrl] = useState<string | null>(null);
   const [resultWasTrial, setResultWasTrial] = useState(false);
+  // Set when the server shipped the least-bad candidate anyway despite no
+  // judge confirming it actually respects the original photo / the exact
+  // requested change (see app/api/impress/route.ts) — shown as a warning
+  // instead of silently presenting it as a clean success.
+  const [resultImperfect, setResultImperfect] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
   // Tracks each image's real aspect ratio so the preview/result boxes show
   // the photo as sent — portrait stays tall, landscape stays wide — instead
@@ -195,6 +200,7 @@ function ImpressPageInner() {
     // easy to mistake for the output of the new (failed) request.
     setResultUrl(null);
     setResultAspect(null);
+    setResultImperfect(false);
     setShowOriginal(false);
 
     const controller = new AbortController();
@@ -216,7 +222,7 @@ function ImpressPageInner() {
         signal: controller.signal,
       });
 
-      let data: { image?: string; error?: string };
+      let data: { image?: string; error?: string; imperfect?: boolean };
       try {
         data = await res.json();
       } catch {
@@ -239,6 +245,7 @@ function ImpressPageInner() {
       }
       setResultUrl(data.image ?? null);
       setResultWasTrial(usingTrial);
+      setResultImperfect(Boolean(data.imperfect));
       setShowOriginal(false);
 
       // Refresh the profile so free_generations_used/credits_balance reflect
@@ -829,6 +836,13 @@ function ImpressPageInner() {
                   >
                     Avant
                   </button>
+                </div>
+              )}
+              {resultUrl && resultImperfect && !loading && (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+                  ⚠️ Résultat imparfait : l&apos;IA n&apos;a pas totalement respecté ta photo ou le
+                  changement demandé sur cette tentative. Essaie une description plus précise
+                  (angle, couleur, modèle exact) ou une autre photo pour un meilleur rendu.
                 </div>
               )}
               <div
