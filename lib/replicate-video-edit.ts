@@ -64,30 +64,33 @@ function wrapApiError(err: unknown): never {
 // (defaults to false) so this call itself only ever takes as long as
 // Replicate's own API needs to accept the job, typically well under a
 // second.
-export async function startVideoEdit(video: Buffer, prompt: string): Promise<{ id: string }> {
+//
+// Takes a URL, not a Buffer/File — a first attempt handed a real File with
+// an explicit "video/mp4" type to predictions.create(), relying on
+// Replicate's own auto-upload (transformFileInputs in node_modules/
+// replicate/lib/util.js) to host it. That still failed inside Aleph with
+// "Assets must use an approved Content-Type response header. We received
+// application/octet-stream" — the *input* type was set correctly, but
+// Runway's backend fetches the file from Replicate's own storage URL
+// afterward, and whatever Replicate's storage serves back on that GET
+// wasn't preserving it. Since Replicate's own file-hosting behavior here
+// isn't ours to control, the caller instead uploads the video to our own
+// Supabase Storage first (where the served Content-Type is fully within
+// our control) and passes that URL straight through — a plain string
+// input is left untouched by transformFileInputs, so Runway fetches our
+// URL directly instead of Replicate's.
+export async function startVideoEdit(videoUrl: string, prompt: string): Promise<{ id: string }> {
   const key = getReplicateKey();
   if (!key) {
     throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
   }
   const replicate = getClient(key);
 
-  // A live test failed inside Aleph itself with "Assets must use an
-  // approved Content-Type response header. We received
-  // application/octet-stream" — Replicate's client (lib/files.js's
-  // createFile) hardcodes that exact generic type whenever it's handed a
-  // raw Buffer/Blob with no type of its own, since transformFileInputs
-  // (node_modules/replicate/lib/util.js) auto-uploads any Buffer input it
-  // finds before this call ever runs. Wrapping it in a real File with an
-  // explicit "video/mp4" type instead makes the client preserve that type
-  // through the upload, which is what Aleph's own asset validation
-  // requires.
-  const videoFile = new File([new Uint8Array(video)], "video.mp4", { type: "video/mp4" });
-
   try {
     const prediction = await replicate.predictions.create({
       model: ALEPH_MODEL,
       input: {
-        video: videoFile,
+        video: videoUrl,
         prompt,
       },
     });
