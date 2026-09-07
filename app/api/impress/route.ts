@@ -28,7 +28,13 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
-const MAX_DESCRIPTION = 400;
+// Raised from 400: a precise brand-fidelity description (exact spelling of
+// a wordmark, emblem placement, paddle shifters, drive-mode selector
+// labels...) routinely needs more room than 400 characters, and users
+// hitting that wall silently mid-typing were the ones actively trying to
+// give the AI more detail to work with — the opposite of what should be
+// discouraged.
+const MAX_DESCRIPTION = 1200;
 // Vercel's *actual* enforced function timeout depends on the account's plan
 // and dashboard/project settings, which `maxDuration` above can only ever
 // request, not guarantee — if the real ceiling turns out lower than 120s,
