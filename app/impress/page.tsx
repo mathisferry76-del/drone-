@@ -733,8 +733,9 @@ function ImpressPageInner() {
                 {videoFormat === "portrait" && (
                   <p className="mt-2 text-xs text-zinc-500">
                     Veo ne sait générer qu&apos;en paysage — le format portrait
-                    recadre ce résultat après coup pour remplir un écran de
-                    story, en perdant les bords gauche/droite de l&apos;image.
+                    remplit un écran de story en gardant l&apos;intégralité de
+                    l&apos;image (rien n&apos;est coupé), avec un fond flouté
+                    en haut et en bas.
                   </p>
                 )}
               </div>
