@@ -203,6 +203,39 @@ function describeAiError(err: unknown): string {
   return "Erreur inconnue pendant la retouche.";
 }
 
+// Every fix so far has targeted the actual generation call (mask, reference
+// handling, response size, timeouts on verify/judge...) and every one of
+// them still ran into the exact same "server timed out, no response body"
+// failure whenever a reference photo was attached — even after removing
+// every trace of the reference from that call entirely (see
+// lib/describe-reference.ts). That's only possible if whatever is actually
+// failing happens BEFORE any of that code ever runs: the reference photo's
+// own sharp() normalization below, which had no timeout of any kind, unlike
+// every step after it (see internalController/GENERATION_DEADLINE_MS
+// further down). sharp/libvips can hang rather than throw on certain
+// malformed or pathological inputs — a hang here would look identical to
+// everything downstream regardless of what that code does, since it would
+// never even be reached. Racing this against a plain timeout can't cancel
+// a genuinely stuck native call, but it doesn't need to: Node's event loop
+// stays free to send a real response while libvips' own thread pool grinds
+// away in the background, so the client gets a clean, fast, specific error
+// instead of an unexplained multi-minute hang either way.
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} : délai dépassé (${ms}ms).`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
+
 export async function POST(req: NextRequest) {
   if (isRateLimited(`impress:${getClientIp(req)}`, 15, 5 * 60 * 1000)) {
     return NextResponse.json(
@@ -346,16 +379,18 @@ export async function POST(req: NextRequest) {
         );
       }
       try {
-        normalizedReference = await sharp(Buffer.from(await referenceFile.arrayBuffer()))
-          .rotate()
-          .png()
-          .toBuffer();
-      } catch {
+        normalizedReference = await withTimeout(
+          sharp(Buffer.from(await referenceFile.arrayBuffer())).rotate().png().toBuffer(),
+          20_000,
+          "Traitement de la photo de référence"
+        );
+      } catch (err) {
+        console.error("reference image processing error", err);
         await releaseReservationIfNeeded();
         return NextResponse.json(
           {
             error:
-              "La photo de référence n'a pas pu être lue par le serveur. Essaie de la réexporter en JPEG ou PNG.",
+              "La photo de référence n'a pas pu être lue par le serveur. Essaie de la réexporter en JPEG ou PNG, ou réessaie sans photo de référence.",
           },
           { status: 400 }
         );
