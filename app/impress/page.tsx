@@ -10,6 +10,7 @@ import { useSupabaseUser } from "@/lib/useSupabaseUser";
 import { useEffect } from "react";
 import GeneratingCard from "@/components/motion/GeneratingCard";
 import ResultReveal from "@/components/motion/ResultReveal";
+import { compressImageFile } from "@/lib/compress-image";
 
 // Kept in sync with MAX_DESCRIPTION in app/api/impress/route.ts — raised
 // from 400 since a precise brand-fidelity description (exact wordmark
@@ -159,28 +160,34 @@ function ImpressPageInner() {
   const hasCredits = isOwnerAccount || creditsBalance >= GENERATION_CREDIT_COST;
   const canTryTool = hasFreeTrialAvailable || hasCredits;
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    setFile(f);
     setError(null);
     setResultUrl(null);
     setResultAspect(null);
     setPreviewAspect(null);
     setVideoError(null);
     setVideoUrl(null);
+    // Downscaled/re-encoded client-side before it ever reaches setFile —
+    // see lib/compress-image.ts for why (an uncompressed phone photo on a
+    // weak connection can, on its own, eat the whole upload+generation
+    // time budget).
+    const compressed = await compressImageFile(f);
+    setFile(compressed);
     const reader = new FileReader();
     reader.onload = () => setPreviewUrl(reader.result as string);
-    reader.readAsDataURL(f);
+    reader.readAsDataURL(compressed);
   }
 
-  function handleReferenceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleReferenceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
-    setReferenceFile(f);
+    const compressed = await compressImageFile(f);
+    setReferenceFile(compressed);
     const reader = new FileReader();
     reader.onload = () => setReferencePreviewUrl(reader.result as string);
-    reader.readAsDataURL(f);
+    reader.readAsDataURL(compressed);
   }
 
   function handleRemoveReference() {
