@@ -139,7 +139,7 @@ IMPORTANT — voici une description précise du vrai design exact de l'objet dem
 """
 ${reference.text}
 """
-Utilise cette description comme modèle fidèle UNIQUEMENT pour ces détails de design de l'objet — elle ne décrit ni le décor, ni l'arrière-plan, ni l'angle de la photo à modifier. Le résultat final garde entièrement le décor et la composition de la photo à modifier ; seul l'objet inséré/remplacé doit ressembler fidèlement à ce que décrit ce texte.`
+Utilise cette description comme modèle fidèle UNIQUEMENT pour ces détails de design de l'objet — elle ne décrit ni le décor, ni l'arrière-plan, ni l'angle de la photo à modifier. Le résultat final garde entièrement le décor et la composition de la photo à modifier ; seul l'objet inséré/remplacé doit ressembler fidèlement à ce que décrit ce texte. Cette description ne dit RIEN sur le cadrage, l'angle de caméra, la distance ou le zoom à utiliser pour le résultat final — ignore complètement cet aspect si le texte ci-dessus le mentionne par erreur. Le cadrage, la distance et le zoom du résultat final sont fixés UNIQUEMENT par les règles de cadrage strictes ci-dessous, qui s'appliquent exactement de la même façon que la photo de référence soit fournie ou non.`
       : "";
 
   return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.${referenceImageNote}

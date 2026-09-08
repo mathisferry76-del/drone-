@@ -31,7 +31,7 @@ export async function describeReferenceImage(
             content: [
               {
                 type: "text",
-                text: `Décris en détail, en français, le design visuel exact de l'objet/logo/motif montré sur cette photo de référence — assez précisément pour qu'un autre artiste puisse le redessiner fidèlement sans jamais voir cette photo. Concentre-toi sur : la forme et les proportions exactes du logo/emblème, ses couleurs précises, sa position/son cadrage sur l'objet, tout texte visible (orthographe exacte, police), et tout détail de matière/texture/finition visible. Réponds uniquement par cette description, sans phrase d'introduction ni commentaire.`,
+                text: `Décris en détail, en français, le design visuel exact de l'objet/logo/motif montré sur cette photo de référence — assez précisément pour qu'un autre artiste puisse le redessiner fidèlement sans jamais voir cette photo. Concentre-toi UNIQUEMENT sur l'objet lui-même : la forme et les proportions exactes du logo/emblème, ses couleurs précises, sa position sur l'objet (ex : centré sur la calandre, en haut du cadran), tout texte visible (orthographe exacte, police), et tout détail de matière/texture/finition visible. Ne décris JAMAIS le cadrage, l'angle de caméra, la distance, le zoom ou la mise en scène de CETTE PHOTO DE RÉFÉRENCE elle-même (que ce soit un gros plan, une photo large, etc.) — cette information ne sert à rien ici et ne doit jamais être mentionnée, uniquement le design physique de l'objet. Réponds uniquement par cette description, sans phrase d'introduction ni commentaire.`,
               },
               {
                 type: "image_url",
