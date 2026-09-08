@@ -310,8 +310,13 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
     name: "Creator",
     price: "40€",
     period: "/mois",
-    credits: 6000,
-    tagline: "≈ 30 générations par mois",
+    // Lowered from 6000 (≈30 générations) to keep worst-case gross margin
+    // comfortably above the 50% floor set on the Pro tier — see the cost
+    // comment there. 5200 credits (26 generations × 200) caps worst-case
+    // cost at ~18.20€, for ~54.5% margin even if every generation hit the
+    // expensive masked full-replacement path.
+    credits: 5200,
+    tagline: "≈ 26 générations par mois",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SUB_CREATOR ?? null,
     highlighted: true,
   },
@@ -320,8 +325,15 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
     name: "Pro",
     price: "90€",
     period: "/mois",
-    credits: 15000,
-    tagline: "≈ 75 générations par mois",
+    // Lowered from 15000 (≈75 générations): at the worst-case cost per
+    // generation (~0.70€, the masked full-replacement path) 75 generations
+    // only left ~42% gross margin. 12800 credits (64 generations × 200)
+    // caps the worst-case cost at ~44.80€, guaranteeing at least 50% gross
+    // margin on this tier even if every single generation happened to hit
+    // the expensive path — the real margin will usually be higher, since
+    // most generations use the much cheaper general (Gemini) path.
+    credits: 12800,
+    tagline: "≈ 64 générations par mois",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SUB_PRO ?? null,
   },
 ];
