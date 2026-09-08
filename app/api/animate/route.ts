@@ -176,48 +176,58 @@ export async function POST(req: NextRequest) {
         [width, height] = [height, width];
       }
 
+      const rotatedBuffer = await rotated.png().toBuffer();
+
       if (width && height) {
         // Veo 3.1's image-to-video mode only ever actually renders 16:9
         // internally — per Google's own docs, portrait 9:16 is explicitly
         // excluded from that mode (only supported for text-to-video), and
         // is independently confirmed by users hitting the same "accepts
         // 9:16, silently renders 16:9 anyway" behavior on the official
-        // forum. Passing "9:16" to the provider doesn't produce a portrait
-        // video — it produces the same 16:9 content letterboxed into a
-        // taller canvas, which is what made a photo that filled the whole
-        // screen show up shrunk with black bars top and bottom. Always
-        // cropping to 16:9 ourselves first — trimming only the minimum off
-        // whichever side is oversized, centered, no resampling/zoom — is
-        // what actually fills the real (always-landscape) output frame
-        // with the source photo, whatever orientation it was shot in.
+        // forum. So a portrait source photo has to become 16:9 before it
+        // reaches Veo one way or another.
+        //
+        // This used to CROP to 16:9 (trim the tall axis down, first
+        // centered, then anchored to the bottom). Both lost most of the
+        // subject: a portrait phone photo of a whole car is typically
+        // close to full-height (roof to ground), so trimming height down
+        // to the ~32% that actually fits a 16:9 slice — from ANY anchor —
+        // throws away most of the car, not just spare background.
+        // Confirmed in production: a full-car portrait photo came back
+        // from Veo showing only the rear bumper, because the crop kept
+        // just the bottom third of the frame and the roof/windows lived
+        // in the discarded two-thirds above. Padding instead of cropping
+        // is the only way to hand Veo a 16:9 frame without ever
+        // discarding part of the actual subject, wherever it sits in the
+        // original photo: the short axis is padded up to a 16:9 canvas
+        // instead of the long axis being trimmed down, with the added
+        // margin filled by a blurred, darkened copy of the same photo
+        // instead of dead black bars.
         const targetRatio = 16 / 9;
         const currentRatio = width / height;
-        let cropWidth = width;
-        let cropHeight = height;
-        let top = 0;
+        let canvasWidth = width;
+        let canvasHeight = height;
         if (currentRatio > targetRatio) {
-          cropWidth = Math.round(height * targetRatio);
-        } else {
-          cropHeight = Math.round(width / targetRatio);
-          // Anchor to the bottom rather than centering vertically: a
-          // portrait car photo typically has the subject — and its ground
-          // contact, plate, wheels — positioned toward the bottom of the
-          // frame, with "spare" sky/background above it. A centered crop
-          // trims equally off both sides, which cuts into the ground/plate
-          // even when there was unused headroom above to trim instead —
-          // confirmed in production (the generated clip's first frame lost
-          // the visible ground and the bottom of the plate that the source
-          // photo clearly showed). Trimming only from the top preserves
-          // whatever the bottom of the frame actually contains.
-          top = height - cropHeight;
+          canvasHeight = Math.round(width / targetRatio);
+        } else if (currentRatio < targetRatio) {
+          canvasWidth = Math.round(height * targetRatio);
         }
-        const left = Math.round((width - cropWidth) / 2);
-        normalizedInput = await rotated
-          .extract({ left, top, width: cropWidth, height: cropHeight })
-          .png()
-          .toBuffer();
+
+        if (canvasWidth === width && canvasHeight === height) {
+          normalizedInput = rotatedBuffer;
+        } else {
+          const background = await sharp(rotatedBuffer)
+            .resize(canvasWidth, canvasHeight, { fit: "cover" })
+            .blur(40)
+            .modulate({ brightness: 0.75, saturation: 0.55 })
+            .toBuffer();
+          normalizedInput = await sharp(background)
+            .composite([{ input: rotatedBuffer, gravity: "center" }])
+            .png()
+            .toBuffer();
+        }
       } else {
-        normalizedInput = await rotated.png().toBuffer();
+        normalizedInput = rotatedBuffer;
       }
     } catch {
       await releaseReservationIfNeeded();
