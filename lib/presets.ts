@@ -320,8 +320,15 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
     name: "Pro",
     price: "90€",
     period: "/mois",
-    credits: 15000,
-    tagline: "≈ 75 générations par mois",
+    // Lowered from 15000 (≈75 générations): at the worst-case cost per
+    // generation (~0.70€, the masked full-replacement path) 75 generations
+    // only left ~42% gross margin. 12800 credits (64 generations × 200)
+    // caps the worst-case cost at ~44.80€, guaranteeing at least 50% gross
+    // margin on this tier even if every single generation happened to hit
+    // the expensive path — the real margin will usually be higher, since
+    // most generations use the much cheaper general (Gemini) path.
+    credits: 12800,
+    tagline: "≈ 64 générations par mois",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SUB_PRO ?? null,
   },
 ];
