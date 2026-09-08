@@ -10,6 +10,7 @@ import { getReplicateKey, editImageWithReplicate, describeReplicateError } from 
 import { pickBestImage } from "@/lib/pick-best";
 import { looksUnchanged } from "@/lib/image-diff";
 import { verifyChangeApplied } from "@/lib/verify-change";
+import { verifyFramingPreserved } from "@/lib/verify-framing";
 import { detectReplacementRegion } from "@/lib/detect-replacement-region";
 import { buildReplacementMask } from "@/lib/mask";
 import { describeReferenceImage } from "@/lib/describe-reference";
@@ -769,9 +770,39 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Third, still-narrower pass specific to full-object-replacement
+      // requests: confirmed in production (twice, same request) that the
+      // replaced object can come back rendered visibly larger/closer than
+      // the original despite buildImpressPrompt's own explicit "exact same
+      // framing/zoom" rule — a real training bias toward tight, dramatic
+      // shots for certain vehicle types (supercars especially), not
+      // something prompt wording alone reliably overrides. Filters toward
+      // whichever candidate(s) actually kept the original scale/position
+      // instead of just trusting the prompt to prevent the drift. If every
+      // candidate has this problem (a systematic bias affects all of them
+      // equally, not just one), falls back to the unfiltered set rather
+      // than discarding an already-paid-for generation, but forces
+      // `imperfect` so the client shows the same warning it would for any
+      // other unresolved fidelity issue.
+      let framingCandidates = verifiedSuccesses;
+      let framingFailedForAll = false;
+      if (replacementMask) {
+        const framingFlags = await Promise.all(
+          verifiedSuccesses.map((buf) =>
+            verifyFramingPreserved(generationInput, buf, internalController.signal)
+          )
+        );
+        const framingOk = verifiedSuccesses.filter((_, i) => framingFlags[i] !== false);
+        if (framingOk.length > 0) {
+          framingCandidates = framingOk;
+        } else {
+          framingFailedForAll = true;
+        }
+      }
+
       const { index: bestIndex, imperfect } = await pickBestImage(
         generationInput,
-        verifiedSuccesses,
+        framingCandidates,
         description,
         internalController.signal
       );
@@ -782,8 +813,8 @@ export async function POST(req: NextRequest) {
       // way to tell what went wrong. Now the least-bad candidate still ships,
       // flagged for the client to show with a warning, so the user gets a
       // result instead of nothing and the failure stays diagnosable.
-      resultImperfect = imperfect;
-      resultBuffer = verifiedSuccesses[bestIndex];
+      resultImperfect = imperfect || framingFailedForAll;
+      resultBuffer = framingCandidates[bestIndex];
       clearTimeout(deadlineTimer);
     } catch (err) {
       clearTimeout(deadlineTimer);
