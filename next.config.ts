@@ -32,21 +32,18 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
-  // @ffmpeg-installer/@ffprobe-installer (lib/video-crop.ts, for the
-  // portrait-video crop) locate their platform binary via a computed
-  // `require(...)` at runtime — bundling that like ordinary JS makes the
-  // bundler try to statically trace through it and choke on the actual
-  // binary file it resolves to (not valid source). serverExternalPackages
-  // leaves them fully unbundled, using plain Node `require` instead.
-  serverExternalPackages: ["@ffmpeg-installer/ffmpeg", "@ffprobe-installer/ffprobe"],
+  // @ffmpeg-installer (lib/video-crop.ts, for the portrait-video
+  // reframing) locates its platform binary via a computed `require(...)`
+  // at runtime — bundling that like ordinary JS makes the bundler try to
+  // statically trace through it and choke on the actual binary file it
+  // resolves to (not valid source). serverExternalPackages leaves it
+  // fully unbundled, using plain Node `require` instead.
+  serverExternalPackages: ["@ffmpeg-installer/ffmpeg"],
   // Still needed alongside that: file tracing has to know to actually copy
   // the binary assets into the deployed function output, since being
   // "external" only means "don't bundle them as JS", not "find their files".
   outputFileTracingIncludes: {
-    "/api/animate": [
-      "./node_modules/@ffmpeg-installer/**/*",
-      "./node_modules/@ffprobe-installer/**/*",
-    ],
+    "/api/animate": ["./node_modules/@ffmpeg-installer/**/*"],
   },
 };
 
