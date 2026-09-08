@@ -17,15 +17,20 @@ import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
 
 export const runtime = "nodejs";
-// Generations run ~10-20s each; several of them run in parallel per request
-// (so total time is roughly the slowest one, not the sum — see
-// CANDIDATE_COUNT_REPLACEMENT/_GENERAL below), plus a judge call afterward.
-// Without raising this, Vercel's default function
-// timeout (10s on Hobby, 15s on Pro unless configured) could silently kill
-// an otherwise-successful request — this needs the higher ceiling Pro/
-// Enterprise plans allow. Capped automatically to whatever the plan
+// Generations run ~10-20s each on the cheap Gemini path, but the masked
+// full-replacement path (gpt-image-1, "high" quality, a mask plus two
+// input images) commonly takes 90-120s+ per OpenAI's own guidance, plus a
+// verify pass and a judge call afterward. 120s wasn't enough headroom for
+// that path in production — confirmed by the exact same "server timed out,
+// no response body" failure persisting even after every downstream step
+// was made to respect an internal deadline, which only makes sense if the
+// platform was killing the function during raw generation itself. Raised
+// to match app/api/animate/route.ts's already-proven-working ceiling
+// (same reasoning: Veo 3.1 also routinely takes over a minute, and that
+// route succeeds at 300s) rather than trading away "high" quality to fit
+// inside a smaller budget. Capped automatically to whatever the plan
 // actually supports if lower.
-export const maxDuration = 120;
+export const maxDuration = 300;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 // Raised from 400: a precise brand-fidelity description (exact spelling of
@@ -37,9 +42,9 @@ const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
 const MAX_DESCRIPTION = 1200;
 // Vercel's *actual* enforced function timeout depends on the account's plan
 // and dashboard/project settings, which `maxDuration` above can only ever
-// request, not guarantee — if the real ceiling turns out lower than 120s,
-// the platform kills the function outright and the client gets a
-// non-JSON error page, which crashes `await res.json()` client-side and
+// request, not guarantee — if the real ceiling turns out lower than
+// requested, the platform kills the function outright and the client gets
+// a non-JSON error page, which crashes `await res.json()` client-side and
 // surfaces as an opaque "Impossible de contacter le serveur" with no way to
 // tell a timeout from a real network failure (see app/impress/page.tsx).
 // This internal deadline fires comfortably before any plausible real
@@ -59,28 +64,26 @@ const MAX_DESCRIPTION = 1200;
 // the same deadline actually bounds the whole pipeline, not just the first
 // phase of it.
 //
-// Raised from 55s, then again from 90s: the pipeline runs two extra
-// vision-model passes after the parallel generations finish — the
-// pixel-diff gate is local/instant, but verifyChangeApplied
-// (lib/verify-change.ts) and pickBestImage's own judge call are each a real
-// network round-trip on top of however long the slowest of the 4 parallel
-// generations already took, and 90s still wasn't enough headroom in
-// production. Set close to the 120s ceiling requested above rather than
-// nudging it up again by guesswork — leaves the most margin this route can
-// have without exceeding what's already been asked of the platform.
-const GENERATION_DEADLINE_MS = 105_000;
+// Raised from 55s, then 90s, then 105s: even with the above fixed, the
+// masked full-replacement path's raw "high"-quality gpt-image-1 generation
+// alone commonly takes 90-120s+, which the 105s deadline (set for a 120s
+// ceiling) didn't leave room for on top of the verify+judge passes that
+// follow it. Raised together with `maxDuration` above to match
+// app/api/animate/route.ts's already-proven 300s ceiling instead of trading
+// away generation quality to fit a smaller budget — 270s leaves the same
+// proportional margin below the requested ceiling as before (105s below a
+// 120s request) for the watermark/upload/response work that happens after
+// this deadline is cleared.
+const GENERATION_DEADLINE_MS = 270_000;
 // Generates this many independent attempts per request and keeps the best
 // one (see pickBestImage) — brand/logo fidelity on named real-world objects
 // is inconsistent enough between attempts that more rolls measurably
 // improve the odds, at the cost of a roughly proportional increase in AI
 // spend per generation.
 //
-// Two different counts, not one: gpt-image-1 (used for the masked
-// full-replacement path below, ~0.11-0.17$/image now at "medium" quality —
-// was "high", ~0.17-0.25$/image, until that setting turned out to be the
-// actual cause of this path timing out in production; see the quality
-// comment at the openai.images.edit call below) still costs roughly 3-4x
-// what Gemini 2.5 Flash Image costs (~0.039$/image). Lowered from 3 to 2
+// Two different counts, not one: gpt-image-1 (~0.17-0.25$/image at "high"
+// quality — used for the masked full-replacement path below) costs roughly
+// 5x what Gemini 2.5 Flash Image costs (~0.039$/image). Lowered from 3 to 2
 // candidates specifically to bring this path's per-generation cost down
 // (explicit cost-reduction request) while keeping at least one backup
 // candidate — dropping to a single attempt would remove the best-of-N
@@ -544,20 +547,18 @@ export async function POST(req: NextRequest) {
             ...(maskUploadable ? { mask: maskUploadable } : {}),
             prompt,
             size: openAiEditSize,
-            // Lowered from "high": that setting, combined with a mask plus
-            // two input images (source + reference) on this path, is the
-            // single heaviest call this route makes — commonly 90-120s+ on
-            // its own per OpenAI's own guidance and confirmed in production
-            // (the exact request type that kept hitting the "server timed
-            // out, no response body" failure even after every downstream
-            // step was made to respect the internal deadline: raw
-            // generation itself was the bottleneck, finishing too slowly
-            // for any plausible real platform ceiling to matter). "medium"
-            // is meaningfully faster and, as a side effect, also cheaper —
-            // but the reason for this change is reliability, not cost: a
-            // working "medium" result beats a "high" one that never
-            // finishes.
-            quality: "medium",
+            // Kept at "high": that setting, combined with a mask plus two
+            // input images (source + reference) on this path, is the single
+            // heaviest call this route makes — commonly 90-120s+ on its own
+            // per OpenAI's own guidance, which is what was actually timing
+            // out here, not the request as a whole being unbounded. A brief
+            // detour dropped this to "medium" to fit inside a 120s function
+            // ceiling, but that traded away real quality for a problem this
+            // route didn't need to have: raised `maxDuration`/
+            // GENERATION_DEADLINE_MS above to match app/api/animate/
+            // route.ts's already-proven 300s ceiling instead, which gives
+            // "high" quality the time it actually needs.
+            quality: "high",
             input_fidelity: "high",
           },
           { signal }
