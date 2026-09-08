@@ -470,22 +470,21 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mask + reference photo together reliably breaks this request in
-    // production — confirmed directly by a user: the identical full-vehicle
-    // replacement request succeeds with no reference photo attached, and
-    // fails every time (a dead connection, no clean error at all — meaning
-    // something crashes hard enough to bypass this route's own error
-    // handling entirely) as soon as a reference photo is added. OpenAI's own
-    // API docs describe mask+multiple-images as a supported combination, so
-    // this isn't a documented incompatibility — the actual mechanism is
-    // still unconfirmed (no access to real server logs to see what's
-    // actually failing). Dropping the reference image specifically when a
-    // mask is in play is the narrowest change that matches the evidence:
-    // the mask-only and reference-only(no mask) cases both work, so this
-    // keeps both of those intact and only gives up the combination that's
-    // actually been shown to fail, rather than disabling the reference
-    // feature altogether.
-    const referenceWillBeAttached = normalizedReference !== null && !replacementMask;
+    // Mask + reference photo together had been reliably breaking this
+    // request in production — confirmed directly by a user: the identical
+    // full-vehicle replacement request succeeds with no reference photo
+    // attached, and fails every time (a dead connection, no clean error at
+    // all) as soon as a reference photo is added. That was worked around by
+    // dropping the reference whenever a mask is used, but a user flagged
+    // that as a real loss (the reference photo is the whole point when
+    // matching an exact model/logo) — see the referenceUploadable comment
+    // below for the new attempt: resizing the reference to the source
+    // photo's exact canvas before attaching it, since OpenAI's mask docs
+    // specifically call out a dimensions requirement this hadn't been
+    // meeting. Reference is attached on both paths again as of this
+    // change; only revert to dropping it on the mask path if this doesn't
+    // hold up in production.
+    const referenceWillBeAttached = normalizedReference !== null;
     const prompt = buildImpressPrompt(description, referenceWillBeAttached);
 
     // Whichever "original" this request's candidates will actually be
@@ -573,12 +572,38 @@ export async function POST(req: NextRequest) {
         // capability, not the "experimental" multi-image mode that caused
         // problems on FLUX Kontext. A mask, when present, always applies to
         // the first image (the user's own photo) regardless of how many
-        // follow it. Deliberately NOT attached when replacementMask is also
-        // set — see referenceWillBeAttached above for why.
-        const referenceUploadable =
-          normalizedReference && !replacementMask
-            ? await toFile(normalizedReference, "reference.png", { type: "image/png" })
-            : null;
+        // follow it.
+        //
+        // A mask must have "the same dimensions as image" per OpenAI's own
+        // docs — that's stated in the context of a single image, but a
+        // reference photo attached alongside one (a tight crop, often a very
+        // different aspect ratio/resolution from the source photo) had been
+        // reliably making this exact combination fail hard enough to bypass
+        // every error-handling path in this route (confirmed by a user:
+        // works with no reference, works with a mask and no reference, fails
+        // every time with both together — dropping the reference entirely
+        // was the interim fix). Resizing the reference to the source
+        // photo's exact canvas before attaching it (padded, not cropped, so
+        // none of its own content is lost) is the untried case that
+        // specifically matches what the docs call out about the mask - if
+        // this doesn't hold up, the safer fallback is a separate,
+        // mask-free follow-up edit pass using the reference instead of
+        // ever combining the two in one call again.
+        const referenceUploadable = normalizedReference
+          ? await toFile(
+              replacementMask
+                ? await sharp(normalizedReference)
+                    .resize(openAiInputMeta.width ?? 1024, openAiInputMeta.height ?? 1024, {
+                      fit: "contain",
+                      background: { r: 255, g: 255, b: 255, alpha: 1 },
+                    })
+                    .png()
+                    .toBuffer()
+                : normalizedReference,
+              "reference.png",
+              { type: "image/png" }
+            )
+          : null;
         const image = referenceUploadable ? [uploadable, referenceUploadable] : uploadable;
         const maskUploadable = replacementMask
           ? await toFile(replacementMask, "mask.png", { type: "image/png" })
