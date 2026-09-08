@@ -12,6 +12,7 @@ import { looksUnchanged } from "@/lib/image-diff";
 import { verifyChangeApplied } from "@/lib/verify-change";
 import { detectReplacementRegion } from "@/lib/detect-replacement-region";
 import { buildReplacementMask } from "@/lib/mask";
+import { describeReferenceImage } from "@/lib/describe-reference";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { loadFont, buildWatermarkSvg } from "@/lib/watermark";
@@ -114,12 +115,31 @@ const CANDIDATE_COUNT_GENERAL = 6;
 // more detailed AI_QUALITY_DIRECTIVE language already proven to work for
 // the thumbnail presets (see lib/presets.ts), adapted from "regenerate the
 // whole background" to "insert one object convincingly."
-function buildImpressPrompt(userDescription: string, hasReferenceImage: boolean): string {
-  const referenceImageNote = hasReferenceImage
-    ? `
+// `reference` is either the image itself being attached alongside the main
+// photo (Gemini's multi-image path, which has never shown the crash below),
+// or a text description of it (the OpenAI path — see
+// lib/describe-reference.ts for why: attaching a second image to
+// images.edit, mask or not, has reliably crashed this route hard enough to
+// bypass its own error handling, confirmed three separate times, while a
+// single-image call has never failed this way).
+function buildImpressPrompt(
+  userDescription: string,
+  reference: { kind: "image" } | { kind: "description"; text: string } | null
+): string {
+  const referenceImageNote =
+    reference?.kind === "image"
+      ? `
 
 IMPORTANT — une image de référence supplémentaire t'est fournie en plus de la photo à modifier : elle montre le vrai design exact de l'objet demandé (logo, motifs gravés, cadran, texte...). Utilise-la comme modèle fidèle UNIQUEMENT pour ces détails de design de l'objet — n'utilise JAMAIS son propre décor, arrière-plan, angle de caméra, lumière ou cadrage, qui n'ont aucun rapport avec la photo à modifier. Le résultat final garde entièrement le décor et la composition de la photo à modifier ; seul l'objet inséré/remplacé doit ressembler fidèlement à ce qui est montré sur cette image de référence.`
-    : "";
+      : reference?.kind === "description"
+      ? `
+
+IMPORTANT — voici une description précise du vrai design exact de l'objet demandé (logo, motifs gravés, cadran, texte...), établie à partir d'une vraie photo de référence fournie par l'utilisateur :
+"""
+${reference.text}
+"""
+Utilise cette description comme modèle fidèle UNIQUEMENT pour ces détails de design de l'objet — elle ne décrit ni le décor, ni l'arrière-plan, ni l'angle de la photo à modifier. Le résultat final garde entièrement le décor et la composition de la photo à modifier ; seul l'objet inséré/remplacé doit ressembler fidèlement à ce que décrit ce texte.`
+      : "";
 
   return `Tu es un retoucheur photo professionnel spécialisé en compositing photoréaliste niveau VFX cinéma, pas en génération d'image générique. L'utilisateur va décrire UN SEUL changement précis à apporter à cette photo réelle.${referenceImageNote}
 
@@ -470,19 +490,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mask + reference photo together reliably breaks this request in
-    // production — confirmed twice now by a user across two different
-    // fixes (dropping the reference outright, then resizing it to match
-    // the source canvas per OpenAI's stated mask dimension requirement),
-    // both of which still failed identically. Not treating this as
-    // something to keep guessing at: the two images just don't go in the
-    // same edit call together on this path. The reference is used instead
-    // in a separate, mask-free refinement pass on the winning candidate —
-    // see refineWithReference below — so buildImpressPrompt's own
-    // reference-image instructions only need to apply to the initial
-    // generation when there's no mask involved at all.
-    const referenceWillBeAttached = normalizedReference !== null && !replacementMask;
-    const prompt = buildImpressPrompt(description, referenceWillBeAttached);
+    // Attaching a reference photo as a second image in the SAME
+    // images.edit call has reliably crashed this route hard enough to
+    // bypass its own error handling — confirmed three separate times, on
+    // three different call shapes (mask + reference together, reference
+    // resized to match the mask's canvas, and a mask-free 2-image
+    // refinement pass on the finished result). Every single-image call has
+    // worked; every 2-image call to this endpoint has failed. Rather than
+    // keep guessing at another variant of the same broken shape, the
+    // reference photo never becomes a second `image` entry for OpenAI at
+    // all (mask or not): lib/describe-reference.ts describes it in text via
+    // a normal single-image vision call instead, and that text is folded
+    // into the prompt below. Gemini's multi-image path is untouched (a
+    // different provider, a different request shape, no evidence of the
+    // same failure) and still gets the reference as a real second image.
+    const willUseOpenAiEditPath = Boolean(replacementMask) || provider === "openai";
+    let referenceForPrompt: Parameters<typeof buildImpressPrompt>[1] = null;
+    if (normalizedReference && willUseOpenAiEditPath) {
+      const referenceText = await describeReferenceImage(normalizedReference);
+      referenceForPrompt = referenceText ? { kind: "description", text: referenceText } : null;
+    } else if (normalizedReference && provider === "gemini") {
+      referenceForPrompt = { kind: "image" };
+    }
+    const prompt = buildImpressPrompt(description, referenceForPrompt);
 
     // Whichever "original" this request's candidates will actually be
     // generated from — the OpenAI-canvas-cropped photo whenever generation
@@ -564,36 +594,19 @@ export async function POST(req: NextRequest) {
       if (replacementMask || provider === "openai") {
         if (!openai) throw new Error("OpenAI n'est pas configuré (OPENAI_API_KEY manquante).");
         const uploadable = await toFile(generationInput, "photo.png", { type: "image/png" });
-        // gpt-image-1's edit endpoint natively accepts multiple input images
-        // (image: Uploadable | Array<Uploadable>) — a documented, stable
-        // capability, not the "experimental" multi-image mode that caused
-        // problems on FLUX Kontext. A mask, when present, always applies to
-        // the first image (the user's own photo) regardless of how many
-        // follow it.
-        //
-        // Deliberately NOT attached when replacementMask is set: mask +
-        // reference together reliably crashed this call hard enough to
-        // bypass every error-handling path in this route. Two different
-        // fixes at that combination (dropping the reference outright, then
-        // resizing it to match the source canvas per OpenAI's stated mask
-        // dimension requirement) were each confirmed by the user to still
-        // fail identically — this isn't a guess anymore, the two images
-        // just can't go in the same edit call together on this path. The
-        // reference is instead used in a separate, mask-free refinement
-        // pass after the winning candidate is picked — see
-        // refineWithReference below.
-        const referenceUploadable =
-          normalizedReference && !replacementMask
-            ? await toFile(normalizedReference, "reference.png", { type: "image/png" })
-            : null;
-        const image = referenceUploadable ? [uploadable, referenceUploadable] : uploadable;
+        // Always a single image here, never `[uploadable, referenceUploadable]`
+        // — see the willUseOpenAiEditPath comment above for why: any
+        // images.edit call with a second image in the array has reliably
+        // crashed this route, mask or not. The reference photo (if any) is
+        // already folded into `prompt` as text via
+        // lib/describe-reference.ts, not attached here.
         const maskUploadable = replacementMask
           ? await toFile(replacementMask, "mask.png", { type: "image/png" })
           : undefined;
         const result = await openai.images.edit(
           {
             model: "gpt-image-1",
-            image,
+            image: uploadable,
             ...(maskUploadable ? { mask: maskUploadable } : {}),
             prompt,
             size: openAiEditSize,
@@ -736,48 +749,6 @@ export async function POST(req: NextRequest) {
       // result instead of nothing and the failure stays diagnosable.
       resultImperfect = imperfect;
       resultBuffer = verifiedSuccesses[bestIndex];
-
-      // Reference photos are never sent alongside a mask (see
-      // referenceUploadable above — that combination reliably crashes this
-      // route), so a full-replacement request with a reference photo gets
-      // it applied here instead: one extra, mask-free edit call on just the
-      // winning candidate, asking only for the logo/badge to be corrected
-      // against the reference — never the position/angle/lighting already
-      // locked in. Only one call per request (not per candidate), so this
-      // adds a fraction of the cost a second full candidate would. Fails
-      // open on any error (timeout included, via the same deadline signal)
-      // by keeping the unrefined-but-already-verified result rather than
-      // losing an already-paid-for generation over this extra step.
-      if (replacementMask && normalizedReference && openai) {
-        try {
-          const candidateUploadable = await toFile(resultBuffer, "result.png", {
-            type: "image/png",
-          });
-          const referenceUploadable = await toFile(normalizedReference, "reference.png", {
-            type: "image/png",
-          });
-          const refineResult = await openai.images.edit(
-            {
-              model: "gpt-image-1",
-              image: [candidateUploadable, referenceUploadable],
-              prompt: `La première image est une photo déjà retouchée avec succès — l'objet demandé a déjà été correctement inséré/remplacé, avec le bon angle, la bonne position, le bon éclairage et la bonne ombre. La deuxième image est une photo de référence qui montre le vrai design exact (logo, motifs gravés, texte) de cet objet.
-
-Ta SEULE tâche : compare le logo/l'emblème/les inscriptions de marque visibles sur l'objet dans la première image à ce que montre la photo de référence, et corrige-les UNIQUEMENT s'ils ne correspondent pas déjà fidèlement (mauvaise forme, texte flou ou approximatif). Ne change RIEN d'autre : la position, l'angle de caméra, la couleur, l'éclairage, l'ombre, le décor et le cadrage de la première image doivent rester exactement identiques au pixel près — seul le logo/l'emblème peut être ajusté. Si le logo correspond déjà bien à la référence, renvoie la première image sans aucun changement visible.`,
-              size: openAiEditSize,
-              quality: "high",
-              input_fidelity: "low",
-            },
-            { signal: internalController.signal }
-          );
-          const refinedB64 = refineResult.data?.[0]?.b64_json;
-          if (refinedB64) {
-            resultBuffer = await matchGenerationAspect(Buffer.from(refinedB64, "base64"));
-          }
-        } catch (err) {
-          console.error("reference refinement error", err);
-        }
-      }
-
       clearTimeout(deadlineTimer);
     } catch (err) {
       clearTimeout(deadlineTimer);
