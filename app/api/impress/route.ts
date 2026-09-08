@@ -87,14 +87,18 @@ const GENERATION_DEADLINE_MS = 270_000;
 //
 // Two different counts, not one: gpt-image-1 (~0.17-0.25$/image at "high"
 // quality — used for the masked full-replacement path below) costs roughly
-// 5x what Gemini 2.5 Flash Image costs (~0.039$/image). Lowered from 3 to 2
-// candidates specifically to bring this path's per-generation cost down
-// (explicit cost-reduction request) while keeping at least one backup
-// candidate — dropping to a single attempt would remove the best-of-N
-// safety net entirely on the path that most needs it (the hardest fidelity
-// requests: full model swaps). Gemini's much lower cost still buys room for
-// far more rolls of the dice on that path at a fraction of the spend.
-const CANDIDATE_COUNT_REPLACEMENT = 2;
+// 5x what Gemini 2.5 Flash Image costs (~0.039$/image). Was 3, then 2
+// candidates for cost reasons; dropped to 1 (temporarily, not a quality
+// decision) after every fix targeting response time/size failed to resolve
+// a real user's repeated failure on this exact path — a mask plus a
+// reference image, at "high" quality, run as 2 PARALLEL gpt-image-1 calls,
+// is a genuinely heavy concurrent memory/CPU load, and removing that
+// parallelism is the one lever left untried that could plausibly cause a
+// hard crash (as opposed to a slow-but-clean failure) severe enough to
+// bypass every response-handling fix already in place. Revisit once this
+// path is confirmed working again — losing the best-of-2 safety net on the
+// hardest fidelity requests is a real cost, not a free change.
+const CANDIDATE_COUNT_REPLACEMENT = 1;
 const CANDIDATE_COUNT_GENERAL = 6;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
