@@ -96,6 +96,11 @@ function ImpressPageInner() {
   // instead of silently presenting it as a clean success.
   const [resultImperfect, setResultImperfect] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
+  // Result images are now (see app/api/impress/route.ts) a signed Storage
+  // URL rather than a data: URI, same reasoning as videoUrl below — a plain
+  // <a download> only works for a same-origin/data: URI, not a cross-origin
+  // signed URL, so downloads go through the same fetch-into-blob helper.
+  const [downloadingImage, setDownloadingImage] = useState(false);
   // Tracks each image's real aspect ratio so the preview/result boxes show
   // the photo as sent — portrait stays tall, landscape stays wide — instead
   // of forcing every photo into a fixed 16:9 "YouTube" box.
@@ -306,6 +311,21 @@ function ImpressPageInner() {
 
   function handleCancelGenerate() {
     abortControllerRef.current?.abort();
+  }
+
+  // See the downloadingImage comment above — resultUrl is a cross-origin
+  // signed URL now, so a plain <a download> would just navigate to it
+  // instead of saving it.
+  async function handleDownloadImage() {
+    if (!resultUrl) return;
+    setDownloadingImage(true);
+    try {
+      await downloadFile(resultUrl, "impression.png");
+    } catch {
+      setError("Le téléchargement a échoué. Réessaie.");
+    } finally {
+      setDownloadingImage(false);
+    }
   }
 
   async function handleGenerateVideo() {
@@ -914,13 +934,13 @@ function ImpressPageInner() {
                 )}
               </div>
               {resultUrl && (!resultWasTrial ? (
-                <a
-                  href={resultUrl}
-                  download="impression.png"
-                  className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400"
+                <button
+                  onClick={handleDownloadImage}
+                  disabled={downloadingImage}
+                  className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400 disabled:opacity-60"
                 >
-                  Télécharger
-                </a>
+                  {downloadingImage ? "Téléchargement..." : "Télécharger"}
+                </button>
               ) : (
                 <Link
                   href="/pricing"

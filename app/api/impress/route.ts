@@ -33,6 +33,10 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+// Kept in sync with the same constant in app/api/animate/route.ts — long
+// enough that leaving the tab open for a while and coming back still works,
+// without needing to revisit /historique for the same result.
+const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
 // Raised from 400: a precise brand-fidelity description (exact spelling of
 // a wordmark, emblem placement, paddle shifters, drive-mode selector
 // labels...) routinely needs more room than 400 characters, and users
@@ -729,32 +733,68 @@ export async function POST(req: NextRequest) {
         .toBuffer();
     }
 
-    const base64 = resultBuffer.toString("base64");
-
-    // Best-effort history save, reusing the same table/storage as the
-    // thumbnail tool (marked with a distinct preset_id) so it shows up in
-    // /historique too, without a second history system.
+    // Returned as a signed Storage URL, not an inline base64 data: URI —
+    // Vercel serverless functions enforce a hard response body size limit
+    // (~4.5MB) that's completely separate from maxDuration/the deadline
+    // logic above, and a "high"-quality gpt-image-1 PNG at 1536x1024
+    // routinely lands well past that once base64-inflated (~37% larger)
+    // and wrapped in JSON. Confirmed as the actual cause in production:
+    // the exact same "server timed out, no response body" failure kept
+    // recurring on this specific request shape (high quality, landscape
+    // photo → the larger of the two OpenAI edit canvases) even after
+    // maxDuration/GENERATION_DEADLINE_MS were raised well past any
+    // plausible generation time — because the response was never slow to
+    // *produce*, it was too large to *return*. /api/animate never hit this
+    // because it already returns a signed video URL, never the raw file.
+    // Uploading to the same "thumbnails" bucket already used for history
+    // and reusing that URL for the actual response means every generation
+    // gets a small JSON payload regardless of image size.
+    let imageUrl: string;
+    let uploaded = false;
+    const storagePath = `${authUser.id}/${randomUUID()}.png`;
     try {
-      const storagePath = `${authUser.id}/${randomUUID()}.png`;
       const { error: uploadError } = await admin.storage
         .from("thumbnails")
         .upload(storagePath, resultBuffer, { contentType: "image/png" });
-      if (!uploadError) {
+      if (uploadError) throw uploadError;
+
+      const { data: signed, error: signError } = await admin.storage
+        .from("thumbnails")
+        .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+      if (signError || !signed?.signedUrl) throw signError ?? new Error("no signed URL");
+      imageUrl = signed.signedUrl;
+      uploaded = true;
+    } catch (err) {
+      // Falls back to the old inline-base64 response rather than losing an
+      // already-paid-for generation over a storage hiccup — this just
+      // reintroduces the size risk this whole change exists to avoid, but
+      // only for the rare case where Storage itself is unavailable.
+      console.error("impress history/upload error", err);
+      imageUrl = `data:image/png;base64,${resultBuffer.toString("base64")}`;
+    }
+
+    // Best-effort history save so this shows up in /historique — kept
+    // separate from the upload above so a DB hiccup here never forces the
+    // large base64 fallback when the actual image upload (what the
+    // response depends on) already succeeded fine. Gated on `uploaded`:
+    // storagePath was never actually written to when the try block above
+    // failed, so recording it here would leave /historique pointing at a
+    // file that doesn't exist.
+    if (uploaded) {
+      try {
         await admin.from("generations").insert({
           user_id: authUser.id,
           storage_path: storagePath,
           preset_id: "impress-tes-potes",
           used_ai: true,
         });
-      } else {
-        console.error("impress history upload error", uploadError);
+      } catch (err) {
+        console.error("impress history save error", err);
       }
-    } catch (err) {
-      console.error("impress history save error", err);
     }
 
     return NextResponse.json({
-      image: `data:image/png;base64,${base64}`,
+      image: imageUrl,
       // Set when no judge could confirm this result actually respects the
       // original photo / the exact requested change — the client shows a
       // warning banner instead of presenting it as a clean success.
