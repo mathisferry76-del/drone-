@@ -48,6 +48,7 @@ Règles de mouvement de caméra :
 - Sauf si la description ci-dessous demande explicitement un zoom prononcé, n'utilise PAS de zoom avant marqué — un zoom qui grossit trop le sujet finit par le faire sortir du cadre, ce qui est un échec pire que l'absence de mouvement. Privilégie par défaut un mouvement discret qui ne change presque rien au cadrage : très léger travelling ou parallaxe (quelques % de déplacement latéral maximum), inclinaison verticale à peine perceptible, ou simplement les reflets/lumières/éléments du décor (feuillage, cheveux, vêtements) qui bougent doucement pendant que la caméra reste quasiment fixe.
 - Si la description demande explicitement de tourner autour du sujet ou de révéler un côté/l'arrière non visible sur la photo d'origine, tu peux le faire, mais recule ou élargis le cadrage autant que nécessaire pour garder le sujet ENTIER visible à ce nouvel angle (voir règle ci-dessus) — ne reste jamais à une distance de caméra qui ne laissait de la place que pour la portion du sujet visible sur la photo d'origine. Toute partie nouvellement visible (carrosserie, silhouette, structure) doit aussi rester STRICTEMENT cohérente avec le style de carrosserie, les proportions et les lignes de design déjà visibles sur la photo (ex : une voiture qui a des barres de toit et l'allure d'un break/Avant sur la photo d'origine doit rester un break/Avant une fois le côté ou l'arrière révélé, jamais dériver vers une silhouette de berline ou de coupé). Ne change JAMAIS le type de carrosserie, le nombre de portes visibles ou les proportions générales du sujet entre le début et la fin du clip.
 - Garde le décor, la lumière, les couleurs et l'identité exacte du sujet (même véhicule/objet, mêmes finitions) cohérents sur toute la durée du clip — aucun élément ne doit se transformer, apparaître ou disparaître de façon incohérente.
+- Les logos, badges, plaques d'immatriculation et tout texte/inscription visibles sur la photo d'origine doivent rester exactement tels quels — même forme, mêmes proportions, même position relative — sur chaque photogramme du clip, y compris quand la caméra bouge légèrement. Ne les réinvente jamais, ne les fais jamais flouter, se déformer ou devenir illisibles au fil du mouvement : un logo qui se met à baver ou une plaque qui se déforme pendant l'animation est un échec, même si le reste du mouvement est réussi.
 
 Mouvement demandé : ${userDescription}`;
 }
@@ -175,48 +176,58 @@ export async function POST(req: NextRequest) {
         [width, height] = [height, width];
       }
 
+      const rotatedBuffer = await rotated.png().toBuffer();
+
       if (width && height) {
         // Veo 3.1's image-to-video mode only ever actually renders 16:9
         // internally — per Google's own docs, portrait 9:16 is explicitly
         // excluded from that mode (only supported for text-to-video), and
         // is independently confirmed by users hitting the same "accepts
         // 9:16, silently renders 16:9 anyway" behavior on the official
-        // forum. Passing "9:16" to the provider doesn't produce a portrait
-        // video — it produces the same 16:9 content letterboxed into a
-        // taller canvas, which is what made a photo that filled the whole
-        // screen show up shrunk with black bars top and bottom. Always
-        // cropping to 16:9 ourselves first — trimming only the minimum off
-        // whichever side is oversized, centered, no resampling/zoom — is
-        // what actually fills the real (always-landscape) output frame
-        // with the source photo, whatever orientation it was shot in.
+        // forum. So a portrait source photo has to become 16:9 before it
+        // reaches Veo one way or another.
+        //
+        // This used to CROP to 16:9 (trim the tall axis down, first
+        // centered, then anchored to the bottom). Both lost most of the
+        // subject: a portrait phone photo of a whole car is typically
+        // close to full-height (roof to ground), so trimming height down
+        // to the ~32% that actually fits a 16:9 slice — from ANY anchor —
+        // throws away most of the car, not just spare background.
+        // Confirmed in production: a full-car portrait photo came back
+        // from Veo showing only the rear bumper, because the crop kept
+        // just the bottom third of the frame and the roof/windows lived
+        // in the discarded two-thirds above. Padding instead of cropping
+        // is the only way to hand Veo a 16:9 frame without ever
+        // discarding part of the actual subject, wherever it sits in the
+        // original photo: the short axis is padded up to a 16:9 canvas
+        // instead of the long axis being trimmed down, with the added
+        // margin filled by a blurred, darkened copy of the same photo
+        // instead of dead black bars.
         const targetRatio = 16 / 9;
         const currentRatio = width / height;
-        let cropWidth = width;
-        let cropHeight = height;
-        let top = 0;
+        let canvasWidth = width;
+        let canvasHeight = height;
         if (currentRatio > targetRatio) {
-          cropWidth = Math.round(height * targetRatio);
-        } else {
-          cropHeight = Math.round(width / targetRatio);
-          // Anchor to the bottom rather than centering vertically: a
-          // portrait car photo typically has the subject — and its ground
-          // contact, plate, wheels — positioned toward the bottom of the
-          // frame, with "spare" sky/background above it. A centered crop
-          // trims equally off both sides, which cuts into the ground/plate
-          // even when there was unused headroom above to trim instead —
-          // confirmed in production (the generated clip's first frame lost
-          // the visible ground and the bottom of the plate that the source
-          // photo clearly showed). Trimming only from the top preserves
-          // whatever the bottom of the frame actually contains.
-          top = height - cropHeight;
+          canvasHeight = Math.round(width / targetRatio);
+        } else if (currentRatio < targetRatio) {
+          canvasWidth = Math.round(height * targetRatio);
         }
-        const left = Math.round((width - cropWidth) / 2);
-        normalizedInput = await rotated
-          .extract({ left, top, width: cropWidth, height: cropHeight })
-          .png()
-          .toBuffer();
+
+        if (canvasWidth === width && canvasHeight === height) {
+          normalizedInput = rotatedBuffer;
+        } else {
+          const background = await sharp(rotatedBuffer)
+            .resize(canvasWidth, canvasHeight, { fit: "cover" })
+            .blur(40)
+            .modulate({ brightness: 0.75, saturation: 0.55 })
+            .toBuffer();
+          normalizedInput = await sharp(background)
+            .composite([{ input: rotatedBuffer, gravity: "center" }])
+            .png()
+            .toBuffer();
+        }
       } else {
-        normalizedInput = await rotated.png().toBuffer();
+        normalizedInput = rotatedBuffer;
       }
     } catch {
       await releaseReservationIfNeeded();

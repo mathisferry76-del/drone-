@@ -27,6 +27,15 @@ const execFileAsync = promisify(execFile);
 // centered vertically, with the remaining top/bottom space filled by a
 // blurred, scaled-up copy of the same frame instead of solid black bars —
 // fills the whole screen without ever losing part of the subject.
+//
+// A close-up source crop (e.g. a car's rear bumper filling most of the
+// 16:9 width) leaves a lot of top/bottom canvas to fill, and a light blur
+// wasn't enough to hide what's back there: a plate or badge in that
+// region stayed just barely recognizable as a second, warped copy of
+// itself behind the sharp one — reads as a glitch, not a backdrop.
+// Stronger blur plus more darkening and desaturation pushes it past the
+// point where any text/logo shape survives, while still tracking the
+// clip's real colors instead of going flat black.
 export async function fitVideoToPortrait(video: Buffer): Promise<Buffer> {
   const dir = await mkdtemp(join(tmpdir(), "video-portrait-"));
   const inputPath = join(dir, "input.mp4");
@@ -40,7 +49,7 @@ export async function fitVideoToPortrait(video: Buffer): Promise<Buffer> {
       "-i",
       inputPath,
       "-filter_complex",
-      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=30,eq=brightness=-0.05[bg];" +
+      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,gblur=sigma=60,eq=brightness=-0.2:saturation=0.5[bg];" +
         "[0:v]scale=1080:-2[fg];" +
         "[bg][fg]overlay=(W-w)/2:(H-h)/2:eof_action=repeat[outv]",
       "-map",
