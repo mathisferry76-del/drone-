@@ -1,3 +1,5 @@
+import { SUBSCRIPTION_TIERS, CREDIT_PACKS } from "@/lib/presets";
+
 export const metadata = {
   title: "Conditions Générales de Vente",
   description: "Conditions générales de vente des abonnements et packs de crédits MIN IA.",
@@ -47,9 +49,11 @@ export default function CgvPage() {
           chaque renouvellement :
         </p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>Starter — 15 € / mois — 2000 crédits</li>
-          <li>Creator — 40 € / mois — 6000 crédits</li>
-          <li>Pro — 90 € / mois — 15 000 crédits</li>
+          {SUBSCRIPTION_TIERS.map((tier) => (
+            <li key={tier.id}>
+              {tier.name} — {tier.price} {tier.period} — {tier.credits.toLocaleString("fr-FR")} crédits
+            </li>
+          ))}
         </ul>
         <p>
           Des packs de crédits ponctuels, en paiement unique et sans
@@ -57,9 +61,11 @@ export default function CgvPage() {
           deux renouvellements ou sans souscrire d&apos;abonnement :
         </p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>200 crédits — 2 €</li>
-          <li>1000 crédits — 8,99 €</li>
-          <li>3000 crédits — 24,99 €</li>
+          {CREDIT_PACKS.map((pack) => (
+            <li key={pack.id}>
+              {pack.credits.toLocaleString("fr-FR")} crédits — {pack.price}
+            </li>
+          ))}
         </ul>
         <p>
           Les prix sont indiqués en euros, toutes taxes comprises. Chaque
