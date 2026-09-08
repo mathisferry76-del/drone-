@@ -46,9 +46,20 @@ const MAX_DESCRIPTION = 1200;
 // ceiling, so a slow generation always gets a clean, specific JSON error
 // (and its in-flight provider calls aborted, so nothing keeps burning
 // tokens after we've already told the user it failed) instead of risking
-// the platform doing it for us with no response body at all.
+// the platform doing it for us with no response body at all — PROVIDED
+// every slow step in the pipeline actually honors internalController's
+// signal. Confirmed missing in production for a while: verifyChangeApplied
+// and pickBestImage's own judge call (see below) had no timeout or abort
+// wiring of their own at all, so once generation itself finished, those two
+// real network round-trips ran fully unbounded — capable on their own of
+// pushing the request past the real platform ceiling with this deadline
+// timer still ticking uselessly in the background, producing exactly the
+// "connection cut, no JSON" failure this deadline exists to prevent. Both
+// now take internalController.signal too (see the call sites below), so
+// the same deadline actually bounds the whole pipeline, not just the first
+// phase of it.
 //
-// Raised from 55s, then again from 90s: the pipeline now runs two extra
+// Raised from 55s, then again from 90s: the pipeline runs two extra
 // vision-model passes after the parallel generations finish — the
 // pixel-diff gate is local/instant, but verifyChangeApplied
 // (lib/verify-change.ts) and pickBestImage's own judge call are each a real
@@ -623,7 +634,9 @@ export async function POST(req: NextRequest) {
       // let it through, so a flaky verification call never costs the user a
       // generation that would otherwise have been fine.
       const verifiedFlags = await Promise.all(
-        changedSuccesses.map((buf) => verifyChangeApplied(buf, description))
+        changedSuccesses.map((buf) =>
+          verifyChangeApplied(buf, description, internalController.signal)
+        )
       );
       const verifiedSuccesses = changedSuccesses.filter((_, i) => verifiedFlags[i] !== false);
 
@@ -636,7 +649,8 @@ export async function POST(req: NextRequest) {
       const { index: bestIndex, imperfect } = await pickBestImage(
         generationInput,
         verifiedSuccesses,
-        description
+        description,
+        internalController.signal
       );
       // imperfect means every judge that actually answered flagged every
       // candidate as failing the fidelity/correct-change criteria — e.g. the

@@ -61,7 +61,8 @@ async function judgeWithOpenAI(
   openai: OpenAI,
   original: Buffer,
   candidates: Buffer[],
-  description: string
+  description: string,
+  signal: AbortSignal | undefined
 ): Promise<{ index: number; passed: boolean } | null> {
   const content: OpenAI.ChatCompletionContentPart[] = [
     { type: "text", text: buildJudgeInstruction(candidates.length, description) },
@@ -83,11 +84,14 @@ async function judgeWithOpenAI(
     });
   });
 
-  const result = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content }],
-    max_tokens: 8,
-  });
+  const result = await openai.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content }],
+      max_tokens: 8,
+    },
+    { signal }
+  );
 
   const text = result.choices[0]?.message?.content?.trim() ?? "";
   return parseJudgeVerdict(text, candidates.length);
@@ -96,7 +100,8 @@ async function judgeWithOpenAI(
 async function judgeWithGemini(
   original: Buffer,
   candidates: Buffer[],
-  description: string
+  description: string,
+  signal: AbortSignal | undefined
 ): Promise<{ index: number; passed: boolean } | null> {
   const key = getGeminiKey();
   if (!key) return null;
@@ -117,6 +122,7 @@ async function judgeWithGemini(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ contents: [{ parts }] }),
+      signal,
     }
   );
   if (!res.ok) return null;
@@ -142,10 +148,19 @@ async function judgeWithGemini(
 // ultimately to candidate 0 marked as not imperfect if neither could answer
 // at all, so a flaky judge call never costs the user the generation they
 // already paid credits for.
+// `signal` is the same internal-deadline AbortSignal app/api/impress/
+// route.ts passes into the generation calls and into verifyChangeApplied —
+// without it, this judge (up to two sequential provider calls, each
+// sending "high"-detail images) ran fully unbounded, able on its own to
+// push a request well past the deadline meant to guarantee a clean JSON
+// error instead of the platform killing the function outright. An abort
+// here just falls through to the existing fail-open paths below (next
+// judge, then candidate 0) instead of hanging.
 export async function pickBestImage(
   original: Buffer,
   candidates: Buffer[],
-  description: string
+  description: string,
+  signal?: AbortSignal
 ): Promise<PickBestResult> {
   if (candidates.length <= 1) return { index: 0, imperfect: false };
 
@@ -154,7 +169,7 @@ export async function pickBestImage(
   const openai = getOpenAI();
   if (openai) {
     try {
-      const verdict = await judgeWithOpenAI(openai, original, candidates, description);
+      const verdict = await judgeWithOpenAI(openai, original, candidates, description, signal);
       if (verdict) {
         if (verdict.passed) return { index: verdict.index, imperfect: false };
         if (bestGuess === null) bestGuess = verdict.index;
@@ -166,7 +181,7 @@ export async function pickBestImage(
 
   if (getGeminiKey()) {
     try {
-      const verdict = await judgeWithGemini(original, candidates, description);
+      const verdict = await judgeWithGemini(original, candidates, description, signal);
       if (verdict) {
         if (verdict.passed) return { index: verdict.index, imperfect: false };
         if (bestGuess === null) bestGuess = verdict.index;

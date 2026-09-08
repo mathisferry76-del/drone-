@@ -40,41 +40,49 @@ function parseYesNo(text: string): boolean | null {
 async function verifyWithOpenAI(
   openai: OpenAI,
   candidate: Buffer,
-  description: string
+  description: string,
+  signal: AbortSignal | undefined
 ): Promise<boolean | null> {
-  const result = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      {
-        role: "user",
-        content: [
-          { type: "text", text: buildVerifyInstruction(description) },
-          {
-            type: "image_url",
-            // "low" (a fixed ~512x512 tile) is enough here and meaningfully
-            // faster than "high" — this check only needs to recognize
-            // overall shape/body-type (a Renault vs a BMW), not read fine
-            // logo detail the way pickBestImage's ranking judge does. This
-            // runs once per surviving candidate, in the critical path after
-            // all CANDIDATE_COUNT generations already finished (see
-            // GENERATION_DEADLINE_MS in app/api/impress/route.ts) — needless
-            // latency here directly risks the whole request timing out.
-            image_url: {
-              url: `data:image/png;base64,${candidate.toString("base64")}`,
-              detail: "low",
+  const result = await openai.chat.completions.create(
+    {
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: buildVerifyInstruction(description) },
+            {
+              type: "image_url",
+              // "low" (a fixed ~512x512 tile) is enough here and meaningfully
+              // faster than "high" — this check only needs to recognize
+              // overall shape/body-type (a Renault vs a BMW), not read fine
+              // logo detail the way pickBestImage's ranking judge does. This
+              // runs once per surviving candidate, in the critical path after
+              // all CANDIDATE_COUNT generations already finished (see
+              // GENERATION_DEADLINE_MS in app/api/impress/route.ts) — needless
+              // latency here directly risks the whole request timing out.
+              image_url: {
+                url: `data:image/png;base64,${candidate.toString("base64")}`,
+                detail: "low",
+              },
             },
-          },
-        ],
-      },
-    ],
-    max_tokens: 5,
-  });
+          ],
+        },
+      ],
+      max_tokens: 5,
+    },
+    { signal }
+  );
 
   const text = result.choices[0]?.message?.content ?? "";
   return parseYesNo(text);
 }
 
-async function verifyWithGemini(candidate: Buffer, description: string): Promise<boolean | null> {
+async function verifyWithGemini(
+  candidate: Buffer,
+  description: string,
+  signal: AbortSignal | undefined
+): Promise<boolean | null> {
   const key = getGeminiKey();
   if (!key) return null;
 
@@ -93,6 +101,7 @@ async function verifyWithGemini(candidate: Buffer, description: string): Promise
           },
         ],
       }),
+      signal,
     }
   );
   if (!res.ok) return null;
@@ -107,14 +116,26 @@ async function verifyWithGemini(candidate: Buffer, description: string): Promise
 // Returns true/false when a provider gave a clear answer, or null when
 // neither could (see file-level comment — null is treated as "don't reject
 // over this" by the caller).
+//
+// `signal` is the same internal-deadline AbortSignal app/api/impress/
+// route.ts passes into the generation calls — without it, this ran fully
+// unbounded: neither provider call below had ANY timeout of its own, so a
+// slow response here could keep the whole request alive well past the
+// deadline that's supposed to guarantee a clean JSON error, with the
+// platform eventually killing the function outright instead (confirmed in
+// production: a request that failed the same way before AND after fixing
+// upload size, pointing at this unprotected tail rather than upload speed).
+// Wiring the signal through means an abort here fails this specific check
+// open (returns null, same as any other provider error) instead of hanging.
 export async function verifyChangeApplied(
   candidate: Buffer,
-  description: string
+  description: string,
+  signal?: AbortSignal
 ): Promise<boolean | null> {
   const openai = getOpenAI();
   if (openai) {
     try {
-      const verdict = await verifyWithOpenAI(openai, candidate, description);
+      const verdict = await verifyWithOpenAI(openai, candidate, description, signal);
       if (verdict !== null) return verdict;
     } catch (err) {
       console.error("verifyChangeApplied openai error", err);
@@ -123,7 +144,7 @@ export async function verifyChangeApplied(
 
   if (getGeminiKey()) {
     try {
-      const verdict = await verifyWithGemini(candidate, description);
+      const verdict = await verifyWithGemini(candidate, description, signal);
       if (verdict !== null) return verdict;
     } catch (err) {
       console.error("verifyChangeApplied gemini error", err);
