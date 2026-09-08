@@ -19,6 +19,7 @@ import { compressImageFile } from "@/lib/compress-image";
 const DESCRIPTION_MAX = 1200;
 const EXAMPLES = [
   "Remplace ma voiture par une Porsche 911 rouge, même angle, même lumière",
+  "Remplace ma voiture par une Bugatti Chiron noire brillante, avec un reflet ultra réaliste et une finition/design premium, sans changer le fond, le décor ni la position de la voiture. Je te joins une image de référence pour le logo. Adapte les dimensions à celles de la vraie Bugatti Chiron.",
   "Ajoute une montre de luxe à mon poignet",
   "Change la façade de ma maison en pierre blanche moderne",
   "Remplace mon t-shirt par une veste en cuir noir",
