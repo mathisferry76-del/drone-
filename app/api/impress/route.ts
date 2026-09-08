@@ -75,16 +75,18 @@ const GENERATION_DEADLINE_MS = 105_000;
 // improve the odds, at the cost of a roughly proportional increase in AI
 // spend per generation.
 //
-// Two different counts, not one: gpt-image-1 (~0.17-0.25$/image at "high"
-// quality — used for the masked full-replacement path below) costs roughly
-// 5x what Gemini 2.5 Flash Image costs (~0.039$/image). Lowered from 3 to 2
-// specifically to bring this path's per-generation cost down toward
-// ~0.35-0.50$ (explicit cost-reduction request) while keeping at least one
-// backup candidate — dropping to a single attempt would remove the
-// best-of-N safety net entirely on the path that most needs it (the
-// hardest fidelity requests: full model swaps). Gemini's much lower cost
-// still buys room for far more rolls of the dice on that path at a
-// fraction of the spend.
+// Two different counts, not one: gpt-image-1 (used for the masked
+// full-replacement path below, ~0.11-0.17$/image now at "medium" quality —
+// was "high", ~0.17-0.25$/image, until that setting turned out to be the
+// actual cause of this path timing out in production; see the quality
+// comment at the openai.images.edit call below) still costs roughly 3-4x
+// what Gemini 2.5 Flash Image costs (~0.039$/image). Lowered from 3 to 2
+// candidates specifically to bring this path's per-generation cost down
+// (explicit cost-reduction request) while keeping at least one backup
+// candidate — dropping to a single attempt would remove the best-of-N
+// safety net entirely on the path that most needs it (the hardest fidelity
+// requests: full model swaps). Gemini's much lower cost still buys room for
+// far more rolls of the dice on that path at a fraction of the spend.
 const CANDIDATE_COUNT_REPLACEMENT = 2;
 const CANDIDATE_COUNT_GENERAL = 6;
 
@@ -542,7 +544,20 @@ export async function POST(req: NextRequest) {
             ...(maskUploadable ? { mask: maskUploadable } : {}),
             prompt,
             size: openAiEditSize,
-            quality: "high",
+            // Lowered from "high": that setting, combined with a mask plus
+            // two input images (source + reference) on this path, is the
+            // single heaviest call this route makes — commonly 90-120s+ on
+            // its own per OpenAI's own guidance and confirmed in production
+            // (the exact request type that kept hitting the "server timed
+            // out, no response body" failure even after every downstream
+            // step was made to respect the internal deadline: raw
+            // generation itself was the bottleneck, finishing too slowly
+            // for any plausible real platform ceiling to matter). "medium"
+            // is meaningfully faster and, as a side effect, also cheaper —
+            // but the reason for this change is reliability, not cost: a
+            // working "medium" result beats a "high" one that never
+            // finishes.
+            quality: "medium",
             input_fidelity: "high",
           },
           { signal }
