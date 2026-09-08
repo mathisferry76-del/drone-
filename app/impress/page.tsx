@@ -200,6 +200,42 @@ function ImpressPageInner() {
     setReferencePreviewUrl(null);
   }
 
+  // Recovers a result whose generation actually finished server-side even
+  // though the triggering request's own response never made it back to
+  // this tab — the exact failure a flaky mobile connection produces on a
+  // long-held request, indistinguishable client-side from the generation
+  // itself having failed. app/api/impress/route.ts writes the finished
+  // image to Storage under this same jobId regardless of whether anyone is
+  // still listening for its response, so polling for that file recovers an
+  // already-successful (and already-paid-for) generation instead of
+  // discarding it. Bounded to roughly the server's own worst case
+  // (GENERATION_DEADLINE_MS + margin) rather than polling forever; returns
+  // null if that budget runs out or the poll is cancelled (Annuler).
+  async function pollForImpressResult(
+    jobId: string,
+    signal: AbortSignal
+  ): Promise<{ image: string } | null> {
+    const deadline = Date.now() + 5 * 60 * 1000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      if (signal.aborted) return null;
+      try {
+        const res = await fetch(`/api/impress/status?jobId=${jobId}`, {
+          headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+          signal,
+        });
+        if (res.ok) {
+          const data: { status?: string; image?: string } = await res.json();
+          if (data.status === "done" && data.image) return { image: data.image };
+        }
+      } catch {
+        // Transient poll failure (same flaky connection) — just try again
+        // next tick rather than giving up on the first blip.
+      }
+    }
+    return null;
+  }
+
   async function handleGenerate() {
     setError(null);
     if (!file) {
@@ -230,11 +266,46 @@ function ImpressPageInner() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Generated client-side so it's known even if the POST below never
+    // gets a response back — see pollForImpressResult above.
+    const jobId = crypto.randomUUID();
+
+    async function applySuccess(image: string, imperfect: boolean) {
+      setResultUrl(image);
+      setResultWasTrial(usingTrial);
+      setResultImperfect(imperfect);
+      setShowOriginal(false);
+
+      // Refresh the profile so free_generations_used/credits_balance
+      // reflect what was just spent — otherwise the free banner or credit
+      // count would stay stale until a full page reload.
+      if (session) {
+        const supabase = getSupabaseBrowser();
+        const { data: fresh } = await supabase!
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        if (fresh) setProfile(fresh as Profile);
+      }
+    }
+
+    // Recovery polling is only attempted below when the request had
+    // clearly been running for a while first — an instant failure (no
+    // network at all, DNS failure, offline) is almost never "the
+    // generation actually finished, just the response got lost", and
+    // making that case wait out a multi-minute poll budget before showing
+    // an error would be a real regression for the ordinary "no signal"
+    // case. 15s comfortably clears normal request setup time.
+    const startedAt = Date.now();
+    const worthPolling = () => Date.now() - startedAt > 15_000;
+
     setLoading(true);
     try {
       const formData = new FormData();
       formData.append("image", file);
       formData.append("description", description.trim());
+      formData.append("jobId", jobId);
       if (referenceFile) {
         formData.append("reference", referenceFile);
       }
@@ -252,11 +323,17 @@ function ImpressPageInner() {
       } catch {
         // The server always responds with JSON, success or failure (see
         // app/api/impress/route.ts) — a body that fails to parse means
-        // something in front of it (Vercel, a proxy) cut the response short
-        // instead, almost always because the request ran too long. Surface
-        // that distinctly instead of falling into the generic
-        // "impossible de contacter le serveur" below, which reads like a
-        // network outage rather than a slow generation.
+        // something in front of it (Vercel, a proxy, or the phone's own
+        // connection) cut the response short. That doesn't necessarily
+        // mean the generation itself failed, so check for a recovered
+        // result before reporting a timeout.
+        const recovered = worthPolling()
+          ? await pollForImpressResult(jobId, controller.signal)
+          : null;
+        if (recovered) {
+          await applySuccess(recovered.image, false);
+          return;
+        }
         setError(
           "Le serveur a mis trop de temps à répondre ou a coupé la connexion. Réessaie avec une photo plus légère ou une description plus courte."
         );
@@ -267,23 +344,7 @@ function ImpressPageInner() {
         setError(data.error ?? "Erreur pendant la retouche.");
         return;
       }
-      setResultUrl(data.image ?? null);
-      setResultWasTrial(usingTrial);
-      setResultImperfect(Boolean(data.imperfect));
-      setShowOriginal(false);
-
-      // Refresh the profile so free_generations_used/credits_balance reflect
-      // what was just spent — otherwise the free banner or credit count
-      // would stay stale until a full page reload.
-      if (session) {
-        const supabase = getSupabaseBrowser();
-        const { data: fresh } = await supabase!
-          .from("profiles")
-          .select("*")
-          .eq("id", session.user.id)
-          .single();
-        if (fresh) setProfile(fresh as Profile);
-      }
+      await applySuccess(data.image ?? "", Boolean(data.imperfect));
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         // User-initiated cancel, not a real error — the server has already
@@ -301,7 +362,18 @@ function ImpressPageInner() {
           }, 800);
         }
       } else {
-        setError("Impossible de contacter le serveur. Réessaie.");
+        // A genuine fetch-level failure (connection dropped entirely, not
+        // just a truncated response) is the same recoverable situation as
+        // the JSON-parse failure above — see worthPolling above for why
+        // this is gated on the request having run a while first.
+        const recovered = worthPolling()
+          ? await pollForImpressResult(jobId, controller.signal)
+          : null;
+        if (recovered) {
+          await applySuccess(recovered.image, false);
+        } else {
+          setError("Impossible de contacter le serveur. Réessaie.");
+        }
       }
     } finally {
       setLoading(false);

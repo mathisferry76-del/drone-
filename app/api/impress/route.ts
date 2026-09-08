@@ -232,6 +232,17 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("image");
     const description = String(formData.get("description") ?? "").trim().slice(0, MAX_DESCRIPTION);
+    // Client-generated (see app/impress/page.tsx) so the client can start
+    // polling GET /api/impress/status?jobId=... for this exact result
+    // immediately, independently of whether THIS request's own response
+    // ever makes it back — a slow mobile connection can drop a
+    // long-held response without the server-side work having failed at
+    // all, and this lets the client recover the result anyway instead of
+    // just reporting a timeout. UUID-shaped check because it becomes part
+    // of the storage path below; a malformed value falls back to a
+    // server-generated one rather than 400ing the whole request over it.
+    const rawJobId = String(formData.get("jobId") ?? "");
+    const jobId = /^[0-9a-f-]{16,64}$/i.test(rawJobId) ? rawJobId : randomUUID();
 
     if (!(file instanceof File)) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
@@ -751,7 +762,11 @@ export async function POST(req: NextRequest) {
     // gets a small JSON payload regardless of image size.
     let imageUrl: string;
     let uploaded = false;
-    const storagePath = `${authUser.id}/${randomUUID()}.png`;
+    // Uses the client-generated jobId (see above), not a fresh randomUUID,
+    // specifically so /api/impress/status can find this exact file by the
+    // same id the client already has, without needing this response to
+    // ever arrive.
+    const storagePath = `${authUser.id}/${jobId}.png`;
     try {
       const { error: uploadError } = await admin.storage
         .from("thumbnails")
