@@ -342,13 +342,21 @@ export async function POST(req: NextRequest) {
         const currentRatio = width / height;
         let cropWidth = width;
         let cropHeight = height;
+        let top = 0;
         if (currentRatio > targetRatio) {
           cropWidth = Math.round(height * targetRatio);
         } else {
           cropHeight = Math.round(width / targetRatio);
+          // Anchor to the bottom rather than centering vertically — same
+          // fix and same reasoning as lib/video-crop.ts's source-photo
+          // pre-crop: a portrait photo of a car/object typically has the
+          // subject and its ground contact toward the bottom of the frame,
+          // with spare sky/background above it. Centering trims into that
+          // ground/subject even when there was unused headroom above to
+          // trim instead.
+          top = height - cropHeight;
         }
         const left = Math.round((width - cropWidth) / 2);
-        const top = Math.round((height - cropHeight) / 2);
         openAiInput = await sharp(normalizedInput)
           .extract({ left, top, width: cropWidth, height: cropHeight })
           .png()

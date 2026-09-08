@@ -193,13 +193,24 @@ export async function POST(req: NextRequest) {
         const currentRatio = width / height;
         let cropWidth = width;
         let cropHeight = height;
+        let top = 0;
         if (currentRatio > targetRatio) {
           cropWidth = Math.round(height * targetRatio);
         } else {
           cropHeight = Math.round(width / targetRatio);
+          // Anchor to the bottom rather than centering vertically: a
+          // portrait car photo typically has the subject — and its ground
+          // contact, plate, wheels — positioned toward the bottom of the
+          // frame, with "spare" sky/background above it. A centered crop
+          // trims equally off both sides, which cuts into the ground/plate
+          // even when there was unused headroom above to trim instead —
+          // confirmed in production (the generated clip's first frame lost
+          // the visible ground and the bottom of the plate that the source
+          // photo clearly showed). Trimming only from the top preserves
+          // whatever the bottom of the frame actually contains.
+          top = height - cropHeight;
         }
         const left = Math.round((width - cropWidth) / 2);
-        const top = Math.round((height - cropHeight) / 2);
         normalizedInput = await rotated
           .extract({ left, top, width: cropWidth, height: cropHeight })
           .png()
