@@ -470,21 +470,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mask + reference photo together had been reliably breaking this
-    // request in production — confirmed directly by a user: the identical
-    // full-vehicle replacement request succeeds with no reference photo
-    // attached, and fails every time (a dead connection, no clean error at
-    // all) as soon as a reference photo is added. That was worked around by
-    // dropping the reference whenever a mask is used, but a user flagged
-    // that as a real loss (the reference photo is the whole point when
-    // matching an exact model/logo) — see the referenceUploadable comment
-    // below for the new attempt: resizing the reference to the source
-    // photo's exact canvas before attaching it, since OpenAI's mask docs
-    // specifically call out a dimensions requirement this hadn't been
-    // meeting. Reference is attached on both paths again as of this
-    // change; only revert to dropping it on the mask path if this doesn't
-    // hold up in production.
-    const referenceWillBeAttached = normalizedReference !== null;
+    // Mask + reference photo together reliably breaks this request in
+    // production — confirmed twice now by a user across two different
+    // fixes (dropping the reference outright, then resizing it to match
+    // the source canvas per OpenAI's stated mask dimension requirement),
+    // both of which still failed identically. Not treating this as
+    // something to keep guessing at: the two images just don't go in the
+    // same edit call together on this path. The reference is used instead
+    // in a separate, mask-free refinement pass on the winning candidate —
+    // see refineWithReference below — so buildImpressPrompt's own
+    // reference-image instructions only need to apply to the initial
+    // generation when there's no mask involved at all.
+    const referenceWillBeAttached = normalizedReference !== null && !replacementMask;
     const prompt = buildImpressPrompt(description, referenceWillBeAttached);
 
     // Whichever "original" this request's candidates will actually be
@@ -574,36 +571,21 @@ export async function POST(req: NextRequest) {
         // the first image (the user's own photo) regardless of how many
         // follow it.
         //
-        // A mask must have "the same dimensions as image" per OpenAI's own
-        // docs — that's stated in the context of a single image, but a
-        // reference photo attached alongside one (a tight crop, often a very
-        // different aspect ratio/resolution from the source photo) had been
-        // reliably making this exact combination fail hard enough to bypass
-        // every error-handling path in this route (confirmed by a user:
-        // works with no reference, works with a mask and no reference, fails
-        // every time with both together — dropping the reference entirely
-        // was the interim fix). Resizing the reference to the source
-        // photo's exact canvas before attaching it (padded, not cropped, so
-        // none of its own content is lost) is the untried case that
-        // specifically matches what the docs call out about the mask - if
-        // this doesn't hold up, the safer fallback is a separate,
-        // mask-free follow-up edit pass using the reference instead of
-        // ever combining the two in one call again.
-        const referenceUploadable = normalizedReference
-          ? await toFile(
-              replacementMask
-                ? await sharp(normalizedReference)
-                    .resize(openAiInputMeta.width ?? 1024, openAiInputMeta.height ?? 1024, {
-                      fit: "contain",
-                      background: { r: 255, g: 255, b: 255, alpha: 1 },
-                    })
-                    .png()
-                    .toBuffer()
-                : normalizedReference,
-              "reference.png",
-              { type: "image/png" }
-            )
-          : null;
+        // Deliberately NOT attached when replacementMask is set: mask +
+        // reference together reliably crashed this call hard enough to
+        // bypass every error-handling path in this route. Two different
+        // fixes at that combination (dropping the reference outright, then
+        // resizing it to match the source canvas per OpenAI's stated mask
+        // dimension requirement) were each confirmed by the user to still
+        // fail identically — this isn't a guess anymore, the two images
+        // just can't go in the same edit call together on this path. The
+        // reference is instead used in a separate, mask-free refinement
+        // pass after the winning candidate is picked — see
+        // refineWithReference below.
+        const referenceUploadable =
+          normalizedReference && !replacementMask
+            ? await toFile(normalizedReference, "reference.png", { type: "image/png" })
+            : null;
         const image = referenceUploadable ? [uploadable, referenceUploadable] : uploadable;
         const maskUploadable = replacementMask
           ? await toFile(replacementMask, "mask.png", { type: "image/png" })
@@ -754,6 +736,48 @@ export async function POST(req: NextRequest) {
       // result instead of nothing and the failure stays diagnosable.
       resultImperfect = imperfect;
       resultBuffer = verifiedSuccesses[bestIndex];
+
+      // Reference photos are never sent alongside a mask (see
+      // referenceUploadable above — that combination reliably crashes this
+      // route), so a full-replacement request with a reference photo gets
+      // it applied here instead: one extra, mask-free edit call on just the
+      // winning candidate, asking only for the logo/badge to be corrected
+      // against the reference — never the position/angle/lighting already
+      // locked in. Only one call per request (not per candidate), so this
+      // adds a fraction of the cost a second full candidate would. Fails
+      // open on any error (timeout included, via the same deadline signal)
+      // by keeping the unrefined-but-already-verified result rather than
+      // losing an already-paid-for generation over this extra step.
+      if (replacementMask && normalizedReference && openai) {
+        try {
+          const candidateUploadable = await toFile(resultBuffer, "result.png", {
+            type: "image/png",
+          });
+          const referenceUploadable = await toFile(normalizedReference, "reference.png", {
+            type: "image/png",
+          });
+          const refineResult = await openai.images.edit(
+            {
+              model: "gpt-image-1",
+              image: [candidateUploadable, referenceUploadable],
+              prompt: `La première image est une photo déjà retouchée avec succès — l'objet demandé a déjà été correctement inséré/remplacé, avec le bon angle, la bonne position, le bon éclairage et la bonne ombre. La deuxième image est une photo de référence qui montre le vrai design exact (logo, motifs gravés, texte) de cet objet.
+
+Ta SEULE tâche : compare le logo/l'emblème/les inscriptions de marque visibles sur l'objet dans la première image à ce que montre la photo de référence, et corrige-les UNIQUEMENT s'ils ne correspondent pas déjà fidèlement (mauvaise forme, texte flou ou approximatif). Ne change RIEN d'autre : la position, l'angle de caméra, la couleur, l'éclairage, l'ombre, le décor et le cadrage de la première image doivent rester exactement identiques au pixel près — seul le logo/l'emblème peut être ajusté. Si le logo correspond déjà bien à la référence, renvoie la première image sans aucun changement visible.`,
+              size: openAiEditSize,
+              quality: "high",
+              input_fidelity: "low",
+            },
+            { signal: internalController.signal }
+          );
+          const refinedB64 = refineResult.data?.[0]?.b64_json;
+          if (refinedB64) {
+            resultBuffer = await matchGenerationAspect(Buffer.from(refinedB64, "base64"));
+          }
+        } catch (err) {
+          console.error("reference refinement error", err);
+        }
+      }
+
       clearTimeout(deadlineTimer);
     } catch (err) {
       clearTimeout(deadlineTimer);
