@@ -439,8 +439,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const prompt = buildImpressPrompt(description, normalizedReference !== null);
-
     // For a full object-replacement request (most often a car swapped for a
     // different, differently-shaped model), route generation through
     // gpt-image-1's actual inpainting mask instead of whichever provider was
@@ -454,6 +452,11 @@ export async function POST(req: NextRequest) {
     // type and the object's location (lib/detect-replacement-region.ts);
     // anything less than that and this silently falls through to the
     // existing provider flow below, unchanged.
+    //
+    // Computed before buildImpressPrompt below (moved up from after it) so
+    // the reference-photo flag passed into the prompt can reflect whether a
+    // reference will actually be attached to the call — see
+    // referenceWillBeAttached below.
     let replacementMask: Buffer | null = null;
     if (openai) {
       const region = await detectReplacementRegion(openAiInput, description);
@@ -465,6 +468,24 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
+    // Mask + reference photo together reliably breaks this request in
+    // production — confirmed directly by a user: the identical full-vehicle
+    // replacement request succeeds with no reference photo attached, and
+    // fails every time (a dead connection, no clean error at all — meaning
+    // something crashes hard enough to bypass this route's own error
+    // handling entirely) as soon as a reference photo is added. OpenAI's own
+    // API docs describe mask+multiple-images as a supported combination, so
+    // this isn't a documented incompatibility — the actual mechanism is
+    // still unconfirmed (no access to real server logs to see what's
+    // actually failing). Dropping the reference image specifically when a
+    // mask is in play is the narrowest change that matches the evidence:
+    // the mask-only and reference-only(no mask) cases both work, so this
+    // keeps both of those intact and only gives up the combination that's
+    // actually been shown to fail, rather than disabling the reference
+    // feature altogether.
+    const referenceWillBeAttached = normalizedReference !== null && !replacementMask;
+    const prompt = buildImpressPrompt(description, referenceWillBeAttached);
 
     // Whichever "original" this request's candidates will actually be
     // generated from — the OpenAI-canvas-cropped photo whenever generation
@@ -551,10 +572,12 @@ export async function POST(req: NextRequest) {
         // capability, not the "experimental" multi-image mode that caused
         // problems on FLUX Kontext. A mask, when present, always applies to
         // the first image (the user's own photo) regardless of how many
-        // follow it.
-        const referenceUploadable = normalizedReference
-          ? await toFile(normalizedReference, "reference.png", { type: "image/png" })
-          : null;
+        // follow it. Deliberately NOT attached when replacementMask is also
+        // set — see referenceWillBeAttached above for why.
+        const referenceUploadable =
+          normalizedReference && !replacementMask
+            ? await toFile(normalizedReference, "reference.png", { type: "image/png" })
+            : null;
         const image = referenceUploadable ? [uploadable, referenceUploadable] : uploadable;
         const maskUploadable = replacementMask
           ? await toFile(replacementMask, "mask.png", { type: "image/png" })
