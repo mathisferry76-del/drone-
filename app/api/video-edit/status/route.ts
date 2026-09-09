@@ -5,7 +5,6 @@ import {
   cancelVideoEditPrediction,
   describeReplicateVideoError,
 } from "@/lib/replicate-video";
-import { VIDEO_EDIT_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
@@ -23,6 +22,7 @@ type Row = {
   prediction_id: string;
   user_id: string;
   reservation: string;
+  cost: number;
   status: "processing" | "finalizing" | "done" | "failed";
   storage_path: string | null;
   error_message: string | null;
@@ -51,7 +51,7 @@ async function refund(
     await admin.rpc("release_credits_reservation", {
       p_user_id: row.user_id,
       p_reservation: row.reservation,
-      p_cost: VIDEO_EDIT_CREDIT_COST,
+      p_cost: row.cost,
     });
   } catch (err) {
     console.error("release_credits_reservation error", err);

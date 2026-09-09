@@ -100,6 +100,14 @@ alter table public.video_edit_jobs enable row level security;
 -- lu ou écrit depuis le navigateur, seulement par le serveur via le client
 -- admin (service_role, qui contourne RLS) dans les deux routes ci-dessus.
 
+-- Le prix de cette fonctionnalité est passé d'un forfait fixe à un tarif
+-- proportionnel à la durée réelle de la vidéo (retour explicite : une
+-- vidéo de 4s ne doit pas coûter le même prix qu'une vidéo de 7s). Ce
+-- montant doit être mémorisé par job pour que le remboursement en cas
+-- d'échec (app/api/video-edit/status/route.ts) rembourse exactement ce qui
+-- a été réservé, pas un forfait qui ne correspond plus au prix réel.
+alter table public.video_edit_jobs add column if not exists cost int not null default 6000;
+
 alter table public.profiles enable row level security;
 alter table public.generations enable row level security;
 

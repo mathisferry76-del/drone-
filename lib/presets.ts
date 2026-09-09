@@ -255,14 +255,28 @@ export const VIDEO_CREDIT_COST = 2500;
 // Replicate le plus cher pour ce modèle ("video_in", car une vidéo de
 // référence est utilisée) : 0,9676$/s en 720p contre 0,2312$/s pour
 // l'image-vers-vidéo classique. La durée de sortie suit celle de la vidéo
-// envoyée (duration: -1 imposé par ce mode, voir lib/replicate-video.ts).
-// Seedance impose lui-même un minimum de 4s pour ce mode (confirmé en
-// production par son propre message d'erreur — pas un choix produit) ;
-// l'upload est plafonné à 7s côté serveur (app/api/video-edit/route.ts),
-// donc le pire cas reste ~6,77$/génération. 6000 crédits (~50-60€ au
-// tarif du pack dédié ci-dessous) laisse une marge confortable (~7,5-8,5x,
-// ~87-88%) sur ce pire cas.
-export const VIDEO_EDIT_CREDIT_COST = 6000;
+// envoyée (duration: -1 imposé par ce mode, voir lib/replicate-video.ts) —
+// le coût réel dépend donc directement de la durée uploadée, pas d'un
+// forfait fixe. Facturer un prix plat aurait sur-facturé une vidéo de 4s
+// et sous-facturé une vidéo de 7s (retour explicite de l'utilisateur après
+// avoir testé la fonctionnalité) : le prix suit maintenant la durée réelle,
+// au prorata. Seedance impose lui-même un minimum de 4s pour ce mode
+// (confirmé en production par son propre message d'erreur — pas un choix
+// produit) ; MAX_EDIT_VIDEO_SECONDS plafonne le pire cas côté coût.
+//
+// 1000 crédits/seconde ≈ 0,90-0,92€ de coût réel par seconde au tarif du
+// pack dédié le moins cher (0,0075€/crédit) — même ordre de marge
+// (~7,5-8,5x) que le forfait plat précédent, mais appliqué
+// proportionnellement plutôt qu'au pire cas systématiquement.
+export const VIDEO_EDIT_CREDIT_COST_PER_SECOND = 1000;
+export const MIN_EDIT_VIDEO_SECONDS = 4;
+export const MAX_EDIT_VIDEO_SECONDS = 7;
+
+// Arrondi au crédit supérieur — jamais sous-facturer une fraction de
+// seconde réellement consommée côté API.
+export function getVideoEditCreditCost(durationSeconds: number): number {
+  return Math.ceil(durationSeconds * VIDEO_EDIT_CREDIT_COST_PER_SECOND);
+}
 
 export interface CreditPack {
   id: string;

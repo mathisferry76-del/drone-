@@ -7,7 +7,11 @@ import {
 } from "@/lib/replicate-video";
 import { getVideoDurationSeconds } from "@/lib/probe-video";
 import { normalizeVideoForSeedance } from "@/lib/video-normalize";
-import { VIDEO_EDIT_CREDIT_COST } from "@/lib/presets";
+import {
+  MIN_EDIT_VIDEO_SECONDS,
+  MAX_EDIT_VIDEO_SECONDS,
+  getVideoEditCreditCost,
+} from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
@@ -23,21 +27,6 @@ export const maxDuration = 60;
 // Kept in sync with MAX_DESCRIPTION in app/api/impress/route.ts and
 // app/api/animate/route.ts.
 const MAX_DESCRIPTION = 1200;
-// This mode's `duration: -1` requirement (lib/replicate-video.ts) means the
-// output follows the input clip's own length, and billing follows it too —
-// at Replicate's "video_in" 720p rate ($0.9676/s), a 30s upload (the
-// longest Seedance itself accepts as a reference) would cost ~29$ for a
-// single generation. MIN_EDIT_VIDEO_SECONDS is not our own choice — a live
-// test confirmed Seedance's editing mode hard-rejects any reference video
-// under 4s outright ("the video selected must satisfy the duration
-// requirement of 4 to 30 seconds", straight from its own error message),
-// so 4s is a real provider floor, not a design decision. MAX_EDIT_VIDEO_
-// SECONDS keeps the worst case around ~6.77$ (still a healthy margin
-// against VIDEO_EDIT_CREDIT_COST's cost basis, see lib/presets.ts) while
-// leaving enough room above the 4s floor for a real export to land inside
-// the window without users needing to trim to the exact second.
-const MIN_EDIT_VIDEO_SECONDS = 4;
-const MAX_EDIT_VIDEO_SECONDS = 7;
 
 // Mirrors Seedance 2.5's own documented convention for this mode (its
 // model README, not guessed): reference the uploaded clip as [Video1] and
@@ -88,7 +77,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Set once the video's real duration is known (before reservation) —
+  // pricing is proportional to actual duration, not a flat fee, so the
+  // exact amount reserved has to be known here to refund the right
+  // amount on any failure after that point.
   let reservation: string | null = null;
+  let cost = 0;
   async function releaseReservationIfNeeded() {
     if (!reservation) return;
     if (reservation !== "ok_trial" && reservation !== "ok_credits") return;
@@ -96,7 +90,7 @@ export async function POST(req: NextRequest) {
       await admin!.rpc("release_credits_reservation", {
         p_user_id: authUser!.id,
         p_reservation: reservation,
-        p_cost: VIDEO_EDIT_CREDIT_COST,
+        p_cost: cost,
       });
     } catch (err) {
       console.error("release_credits_reservation error", err);
@@ -208,12 +202,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Proportional to the real, measured duration — not a flat fee — so a
+    // 4s clip costs less than a 7s one, matching the real API cost this
+    // feature bills against (see lib/presets.ts's comment for the math).
+    cost = getVideoEditCreditCost(durationSeconds);
+
     // Real credit reservation — same as app/api/animate/route.ts, no
     // free-trial/owner bypass, since this always costs real money to
     // generate.
     const { data: reserved, error: reserveError } = await admin.rpc("reserve_credits", {
       p_user_id: authUser.id,
-      p_cost: VIDEO_EDIT_CREDIT_COST,
+      p_cost: cost,
     });
 
     if (reserveError) {
@@ -228,7 +227,7 @@ export async function POST(req: NextRequest) {
     if (reservation === "insufficient_credits") {
       return NextResponse.json(
         {
-          error: `Crédits insuffisants (il faut ${VIDEO_EDIT_CREDIT_COST} crédits pour éditer une vidéo). Achète un pack sur /pricing pour continuer.`,
+          error: `Crédits insuffisants (il faut ${cost} crédits pour éditer cette vidéo de ${durationSeconds.toFixed(1)}s). Achète un pack sur /pricing pour continuer.`,
         },
         { status: 403 }
       );
@@ -248,6 +247,7 @@ export async function POST(req: NextRequest) {
       prediction_id: predictionId,
       user_id: authUser.id,
       reservation,
+      cost,
     });
     if (insertError) {
       console.error("video_edit_jobs insert error", insertError);
@@ -265,7 +265,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ predictionId });
+    return NextResponse.json({ predictionId, cost });
   } catch (err) {
     await cleanupTempUpload();
     await releaseReservationIfNeeded();
