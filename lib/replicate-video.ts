@@ -1,32 +1,37 @@
 import Replicate, { type ApiError, type FileOutput } from "replicate";
 import { getReplicateKey } from "./replicate";
 
-// Veo 3.1 (Google), same model as lib/fal-video.ts's fal.ai integration —
-// just hosted on Replicate instead, for whoever only has REPLICATE_API_TOKEN
-// configured and not FAL_KEY. Mirrors the existing image pipeline's
-// precedent (lib/replicate.ts's FLUX.1 Kontext [Max]): same underlying
-// model, independent hosts, selected by whichever key is actually set (see
-// the provider check in app/api/animate/route.ts).
+// Switched from Veo 3.1 to Seedance 2.5 (ByteDance), hosted on Replicate —
+// explicit request to move providers, both for cost and because Seedance
+// 2.5 has a real video-to-video "editing" mode (via `reference_videos`,
+// "for motion transfer, style reference, editing, and extension") that Veo
+// never had — Veo only ever accepted an image, never an existing video.
+// This function only wires up the plain image-to-video path for now (same
+// feature as before, cheaper underlying model); a true video-to-video
+// "transform an existing clip" feature is a separate, larger addition
+// (new upload UI, new route, its own pricing) not built here yet.
 //
-// Schema confirmed only from Replicate's own published example (`image`,
-// `prompt`, `duration`: 4/6/8, `resolution`: "720p"/"1080p") plus
-// `aspect_ratio` ("16:9"/"9:16") — this sandbox's network egress blocks
-// replicate.com itself, so an audio-generation flag couldn't be verified
-// and is deliberately left out rather than guessed: Replicate's Cog-based
-// schemas reject unrecognized input fields outright, so an unconfirmed
-// field risks breaking every call instead of just this one. Always
-// requests "16:9": Veo 3.1's image-to-video mode only ever actually
-// renders 16:9 internally regardless of what's requested here — per
-// Google's own docs, 9:16 is explicitly excluded from this mode, and
-// independently confirmed by other users hitting the exact same "accepts
-// 9:16, silently renders 16:9 anyway" behavior. Requesting "9:16" doesn't
-// produce a portrait video, just that same 16:9 content letterboxed into a
-// taller canvas — see app/api/animate/route.ts, which now always crops the
-// source photo to real 16:9 instead of pretending portrait is possible.
-// Pricing (~0.40$/s with audio at 1080p on Replicate too, same ballpark as
-// fal.ai) matches VIDEO_CREDIT_COST's assumption in lib/presets.ts without
-// changes.
-const VEO_MODEL = "google/veo-3.1";
+// Schema confirmed directly from Replicate's own "API > Schema" page for
+// bytedance/seedance-2.5 (replicate.com/bytedance/seedance-2.5/api/schema)
+// — every field below is a real, verified input, not guessed: Replicate's
+// Cog-based schemas reject unrecognized fields outright, so an unconfirmed
+// one risks breaking every call. Confirmed fields relevant here: `image`
+// (uri — "first-frame image for image-to-video", exactly our case),
+// `prompt`, `duration` (integer, default 5, min -1/max 30 — -1 means
+// "intelligent duration" and is REQUIRED for editing/extension modes, not
+// used here since we're not using reference_videos), `resolution` (string,
+// default "720p" — no 1080p tier was visible in Replicate's own pricing
+// page for this model, so this is a real resolution drop from Veo's 1080p,
+// not just a cost optimization), `aspect_ratio` (string, default "16:9" —
+// "adaptive" is only required for first/last-frame/editing/extension
+// modes, plain image-to-video keeps explicit "16:9" like before), and
+// `generate_audio` (boolean, default true).
+//
+// Pricing confirmed on Replicate's own pricing page: this plain
+// image-to-video shape (no reference videos/images/audios attached) is
+// the cheaper "non_video_in" tier — $0.2312/s at 720p, so a 4s clip is
+// ~$0.92 — notably cheaper than Veo's ~$1.60/clip this was replacing.
+const SEEDANCE_MODEL = "bytedance/seedance-2.5";
 
 let client: Replicate | null = null;
 function getClient(key: string): Replicate {
@@ -58,14 +63,15 @@ export async function animateImageToVideoReplicate(
 
   try {
     const raw = await replicate.run(
-      VEO_MODEL,
+      SEEDANCE_MODEL,
       {
         input: {
           image,
           prompt,
           duration: 4,
-          resolution: "1080p",
+          resolution: "720p",
           aspect_ratio: "16:9",
+          generate_audio: true,
         },
         signal,
       }
@@ -95,7 +101,7 @@ export function describeReplicateVideoError(err: unknown): string {
       case 429:
         return "Quota Replicate atteint ou compte sans crédit. Vérifie la facturation sur replicate.com/account/billing.";
       default:
-        return `Erreur Replicate Veo 3.1 (${err.status}) : ${err.message}`;
+        return `Erreur Replicate Seedance 2.5 (${err.status}) : ${err.message}`;
     }
   }
   if (err instanceof Error) return err.message;

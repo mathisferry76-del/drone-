@@ -122,12 +122,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Same provider precedent as the image pipeline (app/api/impress/
-    // route.ts): fal.ai first if configured, else Replicate — whichever key
-    // is actually set decides which host serves Veo 3.1. Checked before the
-    // credit reservation below so a missing key never debits credits for a
-    // request that was never going to run.
-    provider = getFalKey() ? "fal" : getReplicateKey() ? "replicate" : null;
+    // Replicate first, fal.ai as fallback — reversed from the image
+    // pipeline's fal-first precedent (app/api/impress/route.ts) on purpose:
+    // switched the video model from Veo 3.1 to Seedance 2.5 (lib/replicate-
+    // video.ts has the full reasoning), confirmed and set up specifically
+    // on Replicate. If FAL_KEY were still checked first, a key left over
+    // from the old Veo/fal.ai setup would silently keep serving Veo instead
+    // of the new model with no error at all. lib/fal-video.ts's Veo
+    // integration is left in place as a fallback for a deployment with only
+    // FAL_KEY configured, not Seedance-equivalent — update it the same way
+    // as lib/replicate-video.ts if fal.ai's Seedance 2.5 schema ever gets
+    // confirmed. Checked before the credit reservation below so a missing
+    // key never debits credits for a request that was never going to run.
+    provider = getReplicateKey() ? "replicate" : getFalKey() ? "fal" : null;
     if (!provider) {
       return NextResponse.json(
         { error: "Aucun fournisseur vidéo configuré (FAL_KEY ou REPLICATE_API_TOKEN manquantes)." },
