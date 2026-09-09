@@ -87,21 +87,22 @@ const GENERATION_DEADLINE_MS = 270_000;
 // improve the odds, at the cost of a roughly proportional increase in AI
 // spend per generation.
 //
-// Two different counts, not one: gpt-image-1 (~0.17-0.25$/image at "high"
-// quality — used for the masked full-replacement path below) costs roughly
-// 5x what Gemini 2.5 Flash Image costs (~0.039$/image). Was briefly dropped
-// to 1 while a mask+reference-image combination was suspected of crashing
-// this path hard enough to bypass all of this route's own error handling —
-// since confirmed and fixed at the actual source (the mask branch no longer
-// attaches a reference image at all, see replacementMask/
-// referenceWillBeAttached above), so the crash risk that justified cutting
-// this to 1 no longer applies. Restored to 2: a plain single-image mask
-// call is a normal-weight request, and this is exactly the safety net that
-// matters most here — confirmed in production immediately after the crash
-// fix landed, a single candidate got legitimately rejected by
-// verifyChangeApplied (color-changed but not the right model) with no
-// second roll of the dice to fall back on.
-const CANDIDATE_COUNT_REPLACEMENT = 2;
+// Two different counts, not one: gpt-image-1 (~0.21-0.31$/image at "high"
+// quality + "high" input_fidelity — used for the masked full-replacement
+// path below) costs roughly 6-8x what Gemini 2.5 Flash Image costs
+// (~0.039$/image). Was briefly dropped to 1 while a mask+reference-image
+// combination was suspected of crashing this path hard enough to bypass all
+// of this route's own error handling — since confirmed and fixed at the
+// actual source (the mask branch no longer attaches a reference image at
+// all, see replacementMask/referenceWillBeAttached above), so the crash
+// risk that justified cutting this to 1 no longer applies. Raised from 2 to
+// 4: explicit request after real-world brand/logo fidelity on named models
+// (a Ferrari's badge/emblem specifically) came back inconsistent across
+// attempts — doubling the rolls of the dice roughly doubles the odds at
+// least one candidate nails the logo, at roughly double the spend per
+// generation (~4 x $0.21-0.31 ≈ $0.85-1.25/generation on this path alone,
+// vs ~$0.42-0.62 at 2).
+const CANDIDATE_COUNT_REPLACEMENT = 4;
 const CANDIDATE_COUNT_GENERAL = 6;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
@@ -744,16 +745,21 @@ export async function POST(req: NextRequest) {
             // route.ts's already-proven 300s ceiling instead, which gives
             // "high" quality the time it actually needs.
             quality: "high",
-            // Lowered from "high" (OpenAI's own default) as a cost lever
-            // that leaves visible output quality alone: `quality` above is
-            // what actually drives sharpness/detail/realism and the render
-            // cost tier, while `input_fidelity` only controls how much
-            // extra effort goes into matching the INPUT images' own style
-            // ("especially facial features" per OpenAI's docs — not the
-            // primary concern for a car/object replacement). Cheaper
-            // without touching the two things explicitly asked to be kept:
-            // "high" quality and the 2-candidate safety net.
-            input_fidelity: "low",
+            // Raised back to "high" (OpenAI's own default): had been
+            // lowered to "low" as a cost lever on the assumption that it
+            // only affects matching the INPUT images' own style ("especially
+            // facial features" per OpenAI's docs), not relevant to a car/
+            // object replacement — but confirmed in production this also
+            // measurably affects how faithfully the rest of the photo
+            // (background, ground, decor) is preserved outside the masked
+            // region, which "low" was visibly hurting. Costs real money:
+            // OpenAI documents "high" as adding ~4096 extra input image
+            // tokens for a square edit, ~6144 for non-square (this route's
+            // masked photos almost always are) — at $10/1M image input
+            // tokens, roughly +$0.04-0.06 per candidate on top of the
+            // ~$0.17-0.25 "high" quality output cost already spent per
+            // candidate either way.
+            input_fidelity: "high",
           },
           { signal }
         );
