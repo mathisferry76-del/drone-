@@ -5,7 +5,6 @@ import { randomUUID } from "crypto";
 import { GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, describeGeminiError } from "@/lib/gemini";
-import { editImageWithSeedream, describeSeedreamError } from "@/lib/seedream";
 import { getFalKey, editImageWithFlux, describeFalError } from "@/lib/fal";
 import { getReplicateKey, editImageWithReplicate, describeReplicateError } from "@/lib/replicate";
 import { pickBestImage } from "@/lib/pick-best";
@@ -529,38 +528,27 @@ export async function POST(req: NextRequest) {
 
     // Provider priority for this route, most-to-least realistic for "insert
     // one real-world object into an existing photo without touching the
-    // rest": Gemini 2.5 Flash Image first — strong reputation specifically
-    // for this kind of realistic object-in-photo compositing (reflections
-    // and lighting consistency on the inserted/replaced object in
-    // particular). Then FLUX.1 Kontext [Max] — the exact same model hosted
-    // on either fal.ai (see lib/fal.ts) or Replicate (see lib/replicate.ts),
+    // rest": FLUX.1 Kontext [Max] first — the exact same model hosted on
+    // either fal.ai (see lib/fal.ts) or Replicate (see lib/replicate.ts),
     // whichever has a working key configured; fal.ai wins if both are set,
     // for no reason other than it was wired up first. Then OpenAI's
     // gpt-image-1 (its input_fidelity "high" edit pipeline, still solid but
-    // boxed into 3 fixed canvases) as a last-resort fallback. Each is only
-    // used when the one(s) before it aren't configured on this deployment —
-    // not a runtime retry chain, so a mid-request failure surfaces as an
-    // error rather than silently billing a second provider. Full-vehicle-
-    // replacement requests always defer to gpt-image-1's real inpainting
-    // mask regardless of this order (see forceOpenAiMaskPath below).
+    // boxed into 3 fixed canvases), then Gemini as a last-resort fallback.
+    // Each is only used when the one(s) before it aren't configured on this
+    // deployment — not a runtime retry chain, so a mid-request failure
+    // surfaces as an error rather than silently billing a second provider.
     //
-    // Seedream 5 Pro (ByteDance, via Replicate) was tried as the top
-    // provider — comparative reviews (checked via web search) rated it
-    // closely against Google's "Nano Banana 2" on brand/logo fidelity, and
-    // Nano Banana 2 itself had already been tried and rolled back once —
-    // but rolled back to a fallback-only position (only used when Gemini
-    // isn't configured) after real production complaints on its actual
-    // output quality. See lib/seedream.ts.
-    const provider:
-      | "gemini"
-      | "seedream"
-      | "flux-fal"
-      | "flux-replicate"
-      | "openai"
-      | null = getGeminiKey()
+    // Gemini moved to the front: Gemini 2.5 Flash Image has a strong
+    // reputation specifically for this kind of realistic object-in-photo
+    // compositing — reflections and lighting consistency on the inserted/
+    // replaced object in particular — plausibly stronger than FLUX Kontext
+    // there, and it was sitting completely unused as a last-resort fallback
+    // on any deployment where FAL_KEY is set (which, until now, silently
+    // starved it of ever actually running here). Only takes effect where
+    // GEMINI_API_KEY is actually configured; falls through to the same
+    // order as before otherwise.
+    const provider: "flux-fal" | "flux-replicate" | "openai" | "gemini" | null = getGeminiKey()
       ? "gemini"
-      : getReplicateKey()
-      ? "seedream"
       : getFalKey()
       ? "flux-fal"
       : getReplicateKey()
@@ -641,19 +629,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // A detected full-replacement always forces gpt-image-1's real
-    // inpainting mask, regardless of provider. This briefly had a Seedream
-    // exception (letting it attempt full-vehicle-replacement unmasked,
-    // straight from its own understanding of the prompt) — reverted after
-    // confirming in production it wasn't a silhouette-preservation bias like
-    // FLUX Kontext's, but Seedream flatly refusing the request outright with
-    // a 422 ("photo ou description refusée"), reproduced twice, with and
-    // without a reference photo attached. Seedream stays the top provider
-    // for general edits (add/change one thing) below; full replacement goes
-    // back through the proven gpt-image-1 mask path unconditionally, same as
-    // before Seedream existed.
-    const forceOpenAiMaskPath = Boolean(replacementMask);
-
     // Attaching a reference photo as a second image in the SAME
     // images.edit call has reliably crashed this route hard enough to
     // bypass its own error handling — confirmed three separate times, on
@@ -665,21 +640,16 @@ export async function POST(req: NextRequest) {
     // reference photo never becomes a second `image` entry for OpenAI at
     // all (mask or not): lib/describe-reference.ts describes it in text via
     // a normal single-image vision call instead, and that text is folded
-    // into the prompt below. Gemini's and Seedream's multi-image paths are
-    // untouched (a different provider, a different request shape, no
-    // evidence of the same failure) and still get the reference as a real
-    // second image.
-    const willUseOpenAiEditPath = forceOpenAiMaskPath || provider === "openai";
+    // into the prompt below. Gemini's multi-image path is untouched (a
+    // different provider, a different request shape, no evidence of the
+    // same failure) and still gets the reference as a real second image.
+    const willUseOpenAiEditPath = Boolean(replacementMask) || provider === "openai";
     let referenceForPrompt: Parameters<typeof buildImpressPrompt>[1] = null;
     if (normalizedReference && willUseOpenAiEditPath) {
       referenceForPrompt = speculativeReferenceText
         ? { kind: "description", text: speculativeReferenceText }
         : null;
-    } else if (normalizedReference && (provider === "gemini" || provider === "seedream")) {
-      // Seedream's `image_input` natively accepts multiple reference images
-      // in one call (its own confirmed schema documents up to 10) — no
-      // evidence of the images.edit-specific crash above, same reasoning
-      // already established for Gemini's multi-image path.
+    } else if (normalizedReference && provider === "gemini") {
       referenceForPrompt = { kind: "image" };
     }
     const prompt = buildImpressPrompt(description, referenceForPrompt);
@@ -687,12 +657,12 @@ export async function POST(req: NextRequest) {
     // Whichever "original" this request's candidates will actually be
     // generated from — the OpenAI-canvas-cropped photo whenever generation
     // goes through gpt-image-1 (masked replacement or as the plain
-    // provider), the untouched photo otherwise (FLUX Kontext/Gemini/
-    // Seedream all accept the photo's native aspect ratio, no fixed-canvas
-    // constraint). Used consistently below for the actual generation call,
-    // the pixel-diff gate and the fidelity judge, so every comparison is
-    // made against the same frame the model actually saw.
-    const usesOpenAiEditPath = willUseOpenAiEditPath;
+    // provider), the untouched photo otherwise (FLUX Kontext/Gemini both
+    // accept the photo's native aspect ratio, no fixed-canvas constraint).
+    // Used consistently below for the actual generation call, the
+    // pixel-diff gate and the fidelity judge, so every comparison is made
+    // against the same frame the model actually saw.
+    const usesOpenAiEditPath = Boolean(replacementMask) || provider === "openai";
     const generationInput = usesOpenAiEditPath ? openAiInput : normalizedInput;
 
     // The true "before" frame every candidate is judged against — see
@@ -740,11 +710,10 @@ export async function POST(req: NextRequest) {
     async function generateOnceRaw(): Promise<Buffer> {
       const signal = internalController.signal;
       // The mask takes priority over normal provider selection whenever
-      // it's available AND the provider isn't Seedream (see
-      // forceOpenAiMaskPath above) — even when FLUX Kontext is the
-      // configured provider, gpt-image-1's real inpainting mask is the
-      // better tool for a full object-replacement request specifically.
-      if (forceOpenAiMaskPath || provider === "openai") {
+      // it's available (see replacementMask above) — even when FLUX Kontext
+      // is the configured provider, gpt-image-1's real inpainting mask is
+      // the better tool for a full object-replacement request specifically.
+      if (replacementMask || provider === "openai") {
         if (!openai) throw new Error("OpenAI n'est pas configuré (OPENAI_API_KEY manquante).");
         const uploadable = await toFile(generationInput, "photo.png", { type: "image/png" });
         // Always a single image here, never `[uploadable, referenceUploadable]`
@@ -797,15 +766,6 @@ export async function POST(req: NextRequest) {
       }
       if (provider === "flux-replicate") {
         return editImageWithReplicate(normalizedInput, prompt, signal);
-      }
-      if (provider === "seedream") {
-        // image_input accepts multiple images natively (see lib/seedream.ts
-        // and the referenceForPrompt branch above) — same reasoning as
-        // Gemini just below.
-        const seedreamImages = normalizedReference
-          ? [normalizedInput, normalizedReference]
-          : [normalizedInput];
-        return editImageWithSeedream(seedreamImages, prompt, signal);
       }
       // Gemini's generateContent natively takes multiple images in one
       // request too — same reasoning as gpt-image-1 above, just passed as a
@@ -972,8 +932,6 @@ export async function POST(req: NextRequest) {
           ? describeReplicateError(err)
           : provider === "gemini"
           ? describeGeminiError(err)
-          : provider === "seedream"
-          ? describeSeedreamError(err)
           : describeAiError(err);
       return NextResponse.json({ error: message }, { status: 502 });
     }
