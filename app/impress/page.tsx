@@ -610,14 +610,47 @@ function ImpressPageInner() {
     editVideoAbortControllerRef.current = controller;
     setEditVideoLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("video", editVideoFile);
-      formData.append("description", editVideoDescription.trim());
+      // The video file never goes through our own /api/video-edit request
+      // body — Vercel's serverless functions hard-cap inbound request size
+      // at a few MB, well under what even a 4-6s phone clip weighs, and a
+      // live test confirmed hitting exactly that ceiling (a silent,
+      // generic "server took too long" failure with no way to tell it
+      // apart from any other timeout). Uploading straight to Supabase
+      // Storage from the browser bypasses our server for the large binary
+      // entirely; only the resulting storage path (a few bytes) goes to
+      // /api/video-edit afterward. See app/api/video-edit/upload-url/
+      // route.ts for the full story.
+      const uploadUrlRes = await fetch("/api/video-edit/upload-url", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        signal: controller.signal,
+      });
+      const uploadUrlData: { path?: string; token?: string; error?: string } =
+        await uploadUrlRes.json();
+      if (!uploadUrlRes.ok || !uploadUrlData.path || !uploadUrlData.token) {
+        setEditVideoError(uploadUrlData.error ?? "Erreur pendant la préparation de l'upload.");
+        return;
+      }
+
+      const supabase = getSupabaseBrowser();
+      const { error: uploadError } = await supabase!.storage
+        .from("videos")
+        .uploadToSignedUrl(uploadUrlData.path, uploadUrlData.token, editVideoFile);
+      if (uploadError) {
+        setEditVideoError("L'envoi de la vidéo a échoué. Réessaie.");
+        return;
+      }
 
       const res = await fetch("/api/video-edit", {
         method: "POST",
-        headers: { Authorization: `Bearer ${session.access_token}` },
-        body: formData,
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          storagePath: uploadUrlData.path,
+          description: editVideoDescription.trim(),
+        }),
         signal: controller.signal,
       });
 
