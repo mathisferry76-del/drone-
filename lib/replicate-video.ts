@@ -112,11 +112,19 @@ export async function animateImageToVideoReplicate(
 // bills per second of the reference video at Replicate's priciest tier
 // ($0.9676/s at 720p, "video_in" pricing — 4x the plain image-to-video
 // rate).
-export async function editVideoReplicate(
-  video: Buffer,
-  prompt: string,
-  signal?: AbortSignal
-): Promise<string> {
+//
+// Started as a job (predictions.create), not a blocking replicate.run()
+// call: a live test hit the exact same "server took too long" failure this
+// session already root-caused once for a different video-editing feature
+// (the removed Runway Aleph integration) — analyzing and re-encoding a
+// whole existing video takes longer than generating from a single image,
+// and this project's Vercel plan enforces a real function-duration ceiling
+// below what a slow edit needs, regardless of the requested maxDuration. A
+// single request that blocks until the job finishes will always eventually
+// lose that race; starting the job and polling its status separately
+// (app/api/video-edit/route.ts + status/route.ts) is the only fix that
+// doesn't depend on the job finishing within one request's lifetime.
+export async function startVideoEdit(video: Buffer, prompt: string): Promise<string> {
   const key = getReplicateKey();
   if (!key) {
     throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
@@ -124,28 +132,49 @@ export async function editVideoReplicate(
   const replicate = getClient(key);
 
   try {
-    const raw = await replicate.run(
-      SEEDANCE_MODEL,
-      {
-        input: {
-          reference_videos: [video],
-          prompt,
-          duration: -1,
-          resolution: "720p",
-          aspect_ratio: "adaptive",
-          generate_audio: true,
-        },
-        signal,
-      }
-    );
-    const output = (Array.isArray(raw) ? raw[0] : raw) as FileOutput;
-    return output.url().toString();
+    const prediction = await replicate.predictions.create({
+      model: SEEDANCE_MODEL,
+      input: {
+        reference_videos: [video],
+        prompt,
+        duration: -1,
+        resolution: "720p",
+        aspect_ratio: "adaptive",
+        generate_audio: true,
+      },
+    });
+    return prediction.id;
   } catch (err) {
     if (err instanceof Error && "response" in err) {
       const apiErr = err as ApiError;
       throw new ReplicateVideoApiError(apiErr.response?.status ?? 500, apiErr.message);
     }
     throw err;
+  }
+}
+
+export type VideoEditPrediction = {
+  status: "starting" | "processing" | "succeeded" | "failed" | "canceled" | "aborted";
+  output?: unknown;
+  error?: unknown;
+};
+
+export async function getVideoEditPrediction(predictionId: string): Promise<VideoEditPrediction> {
+  const key = getReplicateKey();
+  if (!key) {
+    throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
+  }
+  const prediction = await getClient(key).predictions.get(predictionId);
+  return { status: prediction.status, output: prediction.output, error: prediction.error };
+}
+
+export async function cancelVideoEditPrediction(predictionId: string): Promise<void> {
+  const key = getReplicateKey();
+  if (!key) return;
+  try {
+    await getClient(key).predictions.cancel(predictionId);
+  } catch (err) {
+    console.error("cancelVideoEditPrediction error", err);
   }
 }
 
@@ -162,6 +191,18 @@ export function describeReplicateVideoError(err: unknown): string {
       default:
         return `Erreur Replicate Seedance 2.5 (${err.status}) : ${err.message}`;
     }
+  }
+  // A failed prediction (not an API-level error — the request succeeded,
+  // the generation itself was rejected) throws a plain Error from
+  // replicate.run()/predictions.get(), not a ReplicateVideoApiError, so it
+  // falls through to this branch instead of the switch above. ByteDance's
+  // own safety filter on Seedance 2.5 (error code E005) is the one
+  // confirmed in production so far — known to trigger on ordinary,
+  // non-violating content (a car swap request, a face in frame), not just
+  // genuinely disallowed material, so a clear "try again differently"
+  // message is more honest here than implying real policy content.
+  if (err instanceof Error && err.message.includes("flagged as sensitive")) {
+    return "Le contenu a été refusé par le filtre de sécurité automatique du modèle (souvent un faux positif, pas forcément un vrai problème). Réessaie avec une autre vidéo (sans visage en gros plan par exemple) ou reformule la description.";
   }
   if (err instanceof Error) return err.message;
   return "Erreur inconnue pendant l'animation vidéo (Replicate).";
