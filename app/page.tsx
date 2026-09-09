@@ -22,6 +22,15 @@ const SHOWCASE_EXAMPLES: ShowcaseExample[] = [
     title: "Peugeot 207 → Ferrari 812 Superfast",
     caption: "Même allée, même lumière, seule la voiture change.",
   },
+  {
+    id: "peugeot-ferrari-2",
+    kind: "video",
+    before: "/examples/impress/peugeot-ferrari-2-avant.mp4",
+    after: "/examples/impress/peugeot-ferrari-2-apres.mp4",
+    badge: "ULTRA-RÉALISTE",
+    title: "Peugeot 207 → Ferrari 812 Superfast",
+    caption: "Même parking, mêmes voitures autour, seule la voiture change.",
+  },
 ];
 
 const RESULT_ACCENTS = [
