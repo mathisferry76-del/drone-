@@ -96,13 +96,15 @@ const GENERATION_DEADLINE_MS = 270_000;
 // actual source (the mask branch no longer attaches a reference image at
 // all, see replacementMask/referenceWillBeAttached above), so the crash
 // risk that justified cutting this to 1 no longer applies. Raised from 2 to
-// 4: explicit request after real-world brand/logo fidelity on named models
-// (a Ferrari's badge/emblem specifically) came back inconsistent across
-// attempts — doubling the rolls of the dice roughly doubles the odds at
-// least one candidate nails the logo, at roughly double the spend per
-// generation (~4 x $0.21-0.31 ≈ $0.85-1.25/generation on this path alone,
-// vs ~$0.42-0.62 at 2).
-const CANDIDATE_COUNT_REPLACEMENT = 4;
+// 3 (not 4, briefly tried): explicit request after real-world brand/logo
+// fidelity on named models (a Ferrari's badge/emblem specifically) came
+// back inconsistent across attempts, but capped at a hard per-generation
+// ceiling of 1€ — at 4 candidates, ~4 x $0.21-0.31 ≈ $0.85-1.25/generation
+// converts (at ~1.16 $/€ this session) to ~0.73-1.07€, breaching that
+// ceiling on the high end. 3 candidates lands at ~$0.64-0.93 ≈ 0.55-0.80€,
+// comfortably inside the requested 0.70-1€ band once the route's other
+// small gpt-4o-mini calls (detection, verify, judge) are folded in.
+const CANDIDATE_COUNT_REPLACEMENT = 3;
 const CANDIDATE_COUNT_GENERAL = 6;
 
 // "Impressionne tes potes" is deliberately the opposite brief of the
