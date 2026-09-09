@@ -94,6 +94,57 @@ export async function animateImageToVideoReplicate(
   }
 }
 
+// First/last-frame keyframe interpolation: give Seedance 2.5 a start image
+// AND an end image and it generates the transition between them itself,
+// instead of trying to describe a mid-video scene change in a text prompt
+// (unreliable — video models generally don't obey precise timeline
+// instructions like "first half do X, second half do Y", confirmed via web
+// search rather than guessed, since this model postdates training data).
+// `last_image` confirmed as a real Seedance 2.5 field via web search
+// (Replicate/fal/reAPI docs all agree on the name and behavior) — not from
+// Replicate's own schema page directly like every other field in this file,
+// since this is a one-off experiment, not yet a shipped feature. Takes
+// plain URLs, not Buffers: this is only ever called with this site's own
+// already-public example assets, so there's nothing to upload.
+// `aspect_ratio: "adaptive"` and providing both images are per the
+// documented requirement for first/last-frame mode. `generate_audio: false`
+// since this is a silent background/hero loop, not a clip with its own
+// sound. Started as a job (predictions.create), not a blocking run() call,
+// same reasoning as startVideoEdit below.
+export async function startFirstLastFrameVideo(
+  imageUrl: string,
+  lastImageUrl: string,
+  prompt: string
+): Promise<string> {
+  const key = getReplicateKey();
+  if (!key) {
+    throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
+  }
+  const replicate = getClient(key);
+
+  try {
+    const prediction = await replicate.predictions.create({
+      model: SEEDANCE_MODEL,
+      input: {
+        image: imageUrl,
+        last_image: lastImageUrl,
+        prompt,
+        duration: 5,
+        resolution: "720p",
+        aspect_ratio: "adaptive",
+        generate_audio: false,
+      },
+    });
+    return prediction.id;
+  } catch (err) {
+    if (err instanceof Error && "response" in err) {
+      const apiErr = err as ApiError;
+      throw new ReplicateVideoApiError(apiErr.response?.status ?? 500, apiErr.message);
+    }
+    throw err;
+  }
+}
+
 // True video-to-video "editing": takes an existing video clip as a
 // reference instead of a still image, and applies a described change while
 // preserving the source clip's own motion/camera work — confirmed directly
