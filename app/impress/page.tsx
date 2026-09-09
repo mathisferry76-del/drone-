@@ -177,6 +177,11 @@ function ImpressPageInner() {
   const [editVideoResultUrl, setEditVideoResultUrl] = useState<string | null>(null);
   const [downloadingEditVideo, setDownloadingEditVideo] = useState(false);
   const editVideoAbortControllerRef = useRef<AbortController | null>(null);
+  // Holds the current Replicate prediction id so "Annuler" can tell the
+  // server which job to actually cancel (and refund) — see
+  // handleCancelVideoEditGenerate below and app/api/video-edit/status/
+  // route.ts's DELETE handler.
+  const editVideoPredictionIdRef = useRef<string | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -540,6 +545,51 @@ function ImpressPageInner() {
     videoAbortControllerRef.current?.abort();
   }
 
+  // Édition vidéo lance un job Replicate et le suit par polling séparé
+  // (app/api/video-edit/route.ts starts it, status/route.ts is polled here)
+  // instead of one blocking request — editing a whole existing video
+  // reliably takes longer than this app's other AI calls, long enough to
+  // outlast this project's real (lower than requested) Vercel function
+  // duration ceiling, the same failure this session already root-caused
+  // once for a similar feature. See lib/replicate-video.ts's
+  // startVideoEdit comment for the full story.
+  async function pollVideoEditStatus(
+    predictionId: string,
+    signal: AbortSignal
+  ): Promise<
+    { status: "done"; video: string } | { status: "failed"; error: string } | { status: "timeout" }
+  > {
+    // Generous relative to the image/animate polls — video editing has
+    // shown no reason to be fast, and a real result (or a real refund) is
+    // always better than giving up early.
+    const deadline = Date.now() + 8 * 60 * 1000;
+    while (Date.now() < deadline) {
+      if (signal.aborted) return { status: "timeout" };
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      if (signal.aborted) return { status: "timeout" };
+      try {
+        const res = await fetch(
+          `/api/video-edit/status?predictionId=${encodeURIComponent(predictionId)}`,
+          {
+            headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+            signal,
+          }
+        );
+        if (!res.ok) continue;
+        const data: { status?: string; video?: string; error?: string } = await res.json();
+        if (data.status === "done" && data.video) return { status: "done", video: data.video };
+        if (data.status === "failed") {
+          return { status: "failed", error: data.error ?? "Erreur pendant l'édition vidéo." };
+        }
+        // "processing" — keep polling.
+      } catch {
+        // Transient poll failure — try again next tick rather than giving
+        // up on the first blip.
+      }
+    }
+    return { status: "timeout" };
+  }
+
   async function handleGenerateVideoEdit() {
     setEditVideoError(null);
     if (!editVideoFile) {
@@ -571,7 +621,7 @@ function ImpressPageInner() {
         signal: controller.signal,
       });
 
-      let data: { video?: string; error?: string };
+      let data: { predictionId?: string; error?: string };
       try {
         data = await res.json();
       } catch {
@@ -581,11 +631,25 @@ function ImpressPageInner() {
         return;
       }
 
-      if (!res.ok || !data.video) {
+      if (!res.ok || !data.predictionId) {
         setEditVideoError(data.error ?? "Erreur pendant l'édition vidéo.");
         return;
       }
-      setEditVideoResultUrl(data.video);
+
+      editVideoPredictionIdRef.current = data.predictionId;
+      const result = await pollVideoEditStatus(data.predictionId, controller.signal);
+
+      if (!controller.signal.aborted) {
+        if (result.status === "done") {
+          setEditVideoResultUrl(result.video);
+        } else if (result.status === "failed") {
+          setEditVideoError(result.error);
+        } else {
+          setEditVideoError(
+            "L'édition prend plus de temps que prévu. Si elle finit par échouer, tes crédits seront remboursés automatiquement."
+          );
+        }
+      }
 
       if (session) {
         const supabase = getSupabaseBrowser();
@@ -596,30 +660,37 @@ function ImpressPageInner() {
           .single();
         if (fresh) setProfile(fresh as Profile);
       }
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        if (session) {
-          setTimeout(async () => {
-            const supabase = getSupabaseBrowser();
-            const { data: fresh } = await supabase!
-              .from("profiles")
-              .select("*")
-              .eq("id", session.user.id)
-              .single();
-            if (fresh) setProfile(fresh as Profile);
-          }, 800);
-        }
-      } else {
-        setEditVideoError("Impossible de contacter le serveur.");
-      }
+    } catch {
+      setEditVideoError("Impossible de contacter le serveur.");
     } finally {
       setEditVideoLoading(false);
       editVideoAbortControllerRef.current = null;
+      editVideoPredictionIdRef.current = null;
     }
   }
 
   function handleCancelVideoEditGenerate() {
+    const predictionId = editVideoPredictionIdRef.current;
     editVideoAbortControllerRef.current?.abort();
+    // Fire-and-forget: stops the actual Replicate job and refunds the
+    // reservation server-side (app/api/video-edit/status/route.ts's DELETE
+    // handler) — walking away client-side alone would leave the job
+    // running and billing for nothing credited back.
+    if (predictionId && session) {
+      fetch(`/api/video-edit/status?predictionId=${encodeURIComponent(predictionId)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      }).catch(() => {});
+      setTimeout(async () => {
+        const supabase = getSupabaseBrowser();
+        const { data: fresh } = await supabase!
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        if (fresh) setProfile(fresh as Profile);
+      }, 1500);
+    }
   }
 
   // A plain <a href download> silently fails here — videoUrl is a signed

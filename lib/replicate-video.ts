@@ -112,11 +112,19 @@ export async function animateImageToVideoReplicate(
 // bills per second of the reference video at Replicate's priciest tier
 // ($0.9676/s at 720p, "video_in" pricing — 4x the plain image-to-video
 // rate).
-export async function editVideoReplicate(
-  video: Buffer,
-  prompt: string,
-  signal?: AbortSignal
-): Promise<string> {
+//
+// Started as a job (predictions.create), not a blocking replicate.run()
+// call: a live test hit the exact same "server took too long" failure this
+// session already root-caused once for a different video-editing feature
+// (the removed Runway Aleph integration) — analyzing and re-encoding a
+// whole existing video takes longer than generating from a single image,
+// and this project's Vercel plan enforces a real function-duration ceiling
+// below what a slow edit needs, regardless of the requested maxDuration. A
+// single request that blocks until the job finishes will always eventually
+// lose that race; starting the job and polling its status separately
+// (app/api/video-edit/route.ts + status/route.ts) is the only fix that
+// doesn't depend on the job finishing within one request's lifetime.
+export async function startVideoEdit(video: Buffer, prompt: string): Promise<string> {
   const key = getReplicateKey();
   if (!key) {
     throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
@@ -124,28 +132,49 @@ export async function editVideoReplicate(
   const replicate = getClient(key);
 
   try {
-    const raw = await replicate.run(
-      SEEDANCE_MODEL,
-      {
-        input: {
-          reference_videos: [video],
-          prompt,
-          duration: -1,
-          resolution: "720p",
-          aspect_ratio: "adaptive",
-          generate_audio: true,
-        },
-        signal,
-      }
-    );
-    const output = (Array.isArray(raw) ? raw[0] : raw) as FileOutput;
-    return output.url().toString();
+    const prediction = await replicate.predictions.create({
+      model: SEEDANCE_MODEL,
+      input: {
+        reference_videos: [video],
+        prompt,
+        duration: -1,
+        resolution: "720p",
+        aspect_ratio: "adaptive",
+        generate_audio: true,
+      },
+    });
+    return prediction.id;
   } catch (err) {
     if (err instanceof Error && "response" in err) {
       const apiErr = err as ApiError;
       throw new ReplicateVideoApiError(apiErr.response?.status ?? 500, apiErr.message);
     }
     throw err;
+  }
+}
+
+export type VideoEditPrediction = {
+  status: "starting" | "processing" | "succeeded" | "failed" | "canceled" | "aborted";
+  output?: unknown;
+  error?: unknown;
+};
+
+export async function getVideoEditPrediction(predictionId: string): Promise<VideoEditPrediction> {
+  const key = getReplicateKey();
+  if (!key) {
+    throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
+  }
+  const prediction = await getClient(key).predictions.get(predictionId);
+  return { status: prediction.status, output: prediction.output, error: prediction.error };
+}
+
+export async function cancelVideoEditPrediction(predictionId: string): Promise<void> {
+  const key = getReplicateKey();
+  if (!key) return;
+  try {
+    await getClient(key).predictions.cancel(predictionId);
+  } catch (err) {
+    console.error("cancelVideoEditPrediction error", err);
   }
 }
 

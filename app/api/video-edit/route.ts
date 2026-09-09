@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "crypto";
 import { getReplicateKey } from "@/lib/replicate";
-import { editVideoReplicate, describeReplicateVideoError } from "@/lib/replicate-video";
+import {
+  startVideoEdit,
+  cancelVideoEditPrediction,
+  describeReplicateVideoError,
+} from "@/lib/replicate-video";
 import { getVideoDurationSeconds } from "@/lib/probe-video";
 import { VIDEO_EDIT_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
-// Same reasoning as app/api/animate/route.ts's maxDuration: video synthesis
-// commonly takes well over a minute, and editing an existing clip through
-// Seedance 2.5's reference_videos path has shown no reason to be faster.
-export const maxDuration = 300;
+// Only starts the Replicate job and returns its id — the actual generation
+// is polled separately (app/api/video-edit/status/route.ts), so this route
+// only ever needs long enough for validation, the ffprobe duration check,
+// and one fast predictions.create() call, not the whole edit's runtime. See
+// lib/replicate-video.ts's startVideoEdit comment for why this route can't
+// just block until the job finishes instead.
+export const maxDuration = 60;
 
 // Sanity ceiling against memory exhaustion in the serverless function, not
 // a deliberate product limit on its own — MAX_EDIT_VIDEO_SECONDS below is
@@ -30,7 +36,6 @@ const MAX_DESCRIPTION = 1200;
 // against. A small tolerance above 4 accounts for container/encoder
 // rounding on an export that's genuinely meant to be 4s.
 const MAX_EDIT_VIDEO_SECONDS = 4.5;
-const SIGNED_URL_TTL_SECONDS = 6 * 60 * 60;
 
 // Mirrors Seedance 2.5's own documented convention for this mode (its
 // model README, not guessed): reference the uploaded clip as [Video1] and
@@ -171,40 +176,37 @@ export async function POST(req: NextRequest) {
     }
 
     const prompt = buildVideoEditPrompt(description);
-    const rawVideoUrl = await editVideoReplicate(videoBuffer, prompt, req.signal);
+    const predictionId = await startVideoEdit(videoBuffer, prompt);
 
-    let videoUrl = rawVideoUrl;
-    try {
-      const videoRes = await fetch(rawVideoUrl, { signal: req.signal });
-      if (!videoRes.ok) {
-        throw new Error(`download failed (${videoRes.status})`);
-      }
-      const resultBuffer = Buffer.from(await videoRes.arrayBuffer());
-      const storagePath = `${authUser.id}/${randomUUID()}.mp4`;
-
-      const { error: uploadError } = await admin.storage
-        .from("videos")
-        .upload(storagePath, resultBuffer, { contentType: "video/mp4" });
-      if (uploadError) throw uploadError;
-
-      const { data: signed } = await admin.storage
-        .from("videos")
-        .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
-      if (signed?.signedUrl) videoUrl = signed.signedUrl;
-
-      await admin.from("generations").insert({
-        user_id: authUser.id,
-        storage_path: storagePath,
-        storage_bucket: "videos",
-        kind: "video",
-        preset_id: "video-edit",
-        used_ai: true,
-      });
-    } catch (err) {
-      console.error("video-edit history save error", err);
+    // Ownership + reservation are recorded server-side (video_edit_jobs),
+    // not carried by the client as a token — status/route.ts is a separate,
+    // stateless request with no memory of this one, and trusting a
+    // client-supplied reservation there would let anyone replay it against
+    // the same predictionId to refund credits repeatedly. This row is both
+    // the ownership check (only this user's polls can act on this job) and
+    // the single source of truth for whether it's already been settled.
+    const { error: insertError } = await admin.from("video_edit_jobs").insert({
+      prediction_id: predictionId,
+      user_id: authUser.id,
+      reservation,
+    });
+    if (insertError) {
+      console.error("video_edit_jobs insert error", insertError);
+      // Without this row, status/route.ts has no way to verify ownership,
+      // find the reservation to refund, or persist the result — the job
+      // would run for real (billing our Replicate account) with no way for
+      // this user to ever see or be refunded for it. Cancel it best-effort
+      // and refund now rather than hand back a predictionId that leads
+      // nowhere.
+      await cancelVideoEditPrediction(predictionId);
+      await releaseReservationIfNeeded();
+      return NextResponse.json(
+        { error: "Erreur pendant le démarrage de l'édition. Réessaie." },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ video: videoUrl });
+    return NextResponse.json({ predictionId });
   } catch (err) {
     await releaseReservationIfNeeded();
     if (req.signal.aborted) {

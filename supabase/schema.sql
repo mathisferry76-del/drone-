@@ -73,6 +73,33 @@ create table if not exists public.generations (
 alter table public.generations add column if not exists kind text not null default 'image';
 alter table public.generations add column if not exists storage_bucket text not null default 'thumbnails';
 
+-- "Éditer une vidéo" (app/api/video-edit/route.ts + status/route.ts) lance
+-- un job Replicate asynchrone (predictions.create) et le suit via polling
+-- depuis deux routes séparées et sans état partagé — sans cette table, la
+-- seule façon de savoir quelle réservation de crédits rembourser sur un
+-- échec serait de faire confiance à un token renvoyé par le client, ce
+-- qu'un compte malveillant pourrait rejouer plusieurs fois sur le même
+-- predictionId pour se créditer des crédits gratuits à répétition (le
+-- webhook Stripe est protégé par une signature ; ce chemin ne l'était par
+-- rien du tout). Cette table fait à la fois office de preuve de propriété
+-- (seul le compte qui a lancé le job peut le consulter) et de verrou contre
+-- le double remboursement (transition 'processing' -> 'finalizing' faite
+-- par une seule requête à la fois via la clause `where status = 'processing'`
+-- du UPDATE, jamais par une simple lecture suivie d'une écriture séparée).
+create table if not exists public.video_edit_jobs (
+  prediction_id text primary key,
+  user_id uuid references public.profiles(id) on delete cascade not null,
+  reservation text not null,
+  status text not null default 'processing',
+  storage_path text,
+  error_message text,
+  created_at timestamptz not null default now()
+);
+alter table public.video_edit_jobs enable row level security;
+-- Aucune policy pour anon/authenticated, volontairement : ce n'est jamais
+-- lu ou écrit depuis le navigateur, seulement par le serveur via le client
+-- admin (service_role, qui contourne RLS) dans les deux routes ci-dessus.
+
 alter table public.profiles enable row level security;
 alter table public.generations enable row level security;
 
