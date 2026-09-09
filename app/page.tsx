@@ -31,6 +31,33 @@ const SHOWCASE_EXAMPLES: ShowcaseExample[] = [
     title: "Peugeot 207 → Ferrari 812 Superfast",
     caption: "Même parking, mêmes voitures autour, seule la voiture change.",
   },
+  {
+    id: "bmw-bugatti",
+    kind: "image",
+    before: "/examples/impress/bmw-bugatti-avant.webp",
+    after: "/examples/impress/bmw-bugatti-apres.webp",
+    badge: "ULTRA-RÉALISTE",
+    title: "BMW M4 → Bugatti Chiron",
+    caption: "Même parking, mêmes montagnes en fond, seule la voiture change.",
+  },
+  {
+    id: "peugeot-ferrari-3",
+    kind: "image",
+    before: "/examples/impress/peugeot-ferrari-3-avant.webp",
+    after: "/examples/impress/peugeot-ferrari-3-apres.webp",
+    badge: "ULTRA-RÉALISTE",
+    title: "Peugeot 207 → Ferrari 812 Superfast",
+    caption: "Même coucher de soleil, même parking, seule la voiture change.",
+  },
+  {
+    id: "peugeot-ferrari-4",
+    kind: "image",
+    before: "/examples/impress/peugeot-ferrari-4-avant.webp",
+    after: "/examples/impress/peugeot-ferrari-4-apres.webp",
+    badge: "ULTRA-RÉALISTE",
+    title: "Peugeot 207 → Ferrari 812 Superfast",
+    caption: "Même allée, même décor, seule la voiture change.",
+  },
 ];
 
 const RESULT_ACCENTS = [
