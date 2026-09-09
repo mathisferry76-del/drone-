@@ -32,11 +32,17 @@ const MAX_DESCRIPTION = 1200;
 // output follows the input clip's own length, and billing follows it too —
 // at Replicate's "video_in" 720p rate ($0.9676/s), a 30s upload (the
 // longest Seedance itself accepts as a reference) would cost ~29$ for a
-// single generation. Capping the accepted input at 4s keeps the worst case
-// around ~3.90$, matching the cost basis VIDEO_EDIT_CREDIT_COST was priced
-// against. A small tolerance above 4 accounts for container/encoder
-// rounding on an export that's genuinely meant to be 4s.
-const MAX_EDIT_VIDEO_SECONDS = 4.5;
+// single generation. MIN_EDIT_VIDEO_SECONDS is not our own choice — a live
+// test confirmed Seedance's editing mode hard-rejects any reference video
+// under 4s outright ("the video selected must satisfy the duration
+// requirement of 4 to 30 seconds", straight from its own error message),
+// so 4s is a real provider floor, not a design decision. MAX_EDIT_VIDEO_
+// SECONDS keeps the worst case around ~5.80$ (matching VIDEO_EDIT_CREDIT_
+// COST's cost basis, see lib/presets.ts) while leaving enough room above
+// the 4s floor for a real export to land inside the window without users
+// needing to trim to the exact second.
+const MIN_EDIT_VIDEO_SECONDS = 4;
+const MAX_EDIT_VIDEO_SECONDS = 6;
 
 // Mirrors Seedance 2.5's own documented convention for this mode (its
 // model README, not guessed): reference the uploaded clip as [Video1] and
@@ -141,10 +147,18 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (durationSeconds < MIN_EDIT_VIDEO_SECONDS) {
+      return NextResponse.json(
+        {
+          error: `Vidéo trop courte (${durationSeconds.toFixed(1)}s) — Seedance exige au moins ${MIN_EDIT_VIDEO_SECONDS} secondes pour ce mode d'édition. Utilise une vidéo un peu plus longue.`,
+        },
+        { status: 400 }
+      );
+    }
     if (durationSeconds > MAX_EDIT_VIDEO_SECONDS) {
       return NextResponse.json(
         {
-          error: `Vidéo trop longue (${durationSeconds.toFixed(1)}s) — 4 secondes maximum pour cette fonctionnalité. Recadre-la avant de l'envoyer.`,
+          error: `Vidéo trop longue (${durationSeconds.toFixed(1)}s) — entre ${MIN_EDIT_VIDEO_SECONDS} et ${MAX_EDIT_VIDEO_SECONDS} secondes pour cette fonctionnalité. Recadre-la avant de l'envoyer.`,
         },
         { status: 400 }
       );

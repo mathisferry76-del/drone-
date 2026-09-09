@@ -255,12 +255,13 @@ export const VIDEO_CREDIT_COST = 2500;
 // Replicate le plus cher pour ce modèle ("video_in", car une vidéo de
 // référence est utilisée) : 0,9676$/s en 720p contre 0,2312$/s pour
 // l'image-vers-vidéo classique. La durée de sortie suit celle de la vidéo
-// envoyée (duration: -1 imposé par ce mode, voir lib/replicate-video.ts) ;
-// pour garder le coût prévisible, l'upload est plafonné à 4 secondes côté
-// serveur (lib/probe-video.ts), donc le pire cas reste ~3,90$/génération.
-// 6000 crédits (~50-60€ au tarif du pack dédié ci-dessous) laisse une
-// marge confortable (~13-15x, ~93-95%) sur ce pire cas, cohérente avec la
-// marge visée sur VIDEO_CREDIT_COST.
+// envoyée (duration: -1 imposé par ce mode, voir lib/replicate-video.ts).
+// Seedance impose lui-même un minimum de 4s pour ce mode (confirmé en
+// production par son propre message d'erreur — pas un choix produit) ;
+// l'upload est plafonné à 6s côté serveur (app/api/video-edit/route.ts),
+// donc le pire cas reste ~5,80$/génération. 6000 crédits (~50-60€ au
+// tarif du pack dédié ci-dessous) laisse une marge confortable (~9-10x,
+// ~89-90%) sur ce pire cas.
 export const VIDEO_EDIT_CREDIT_COST = 6000;
 
 export interface CreditPack {
