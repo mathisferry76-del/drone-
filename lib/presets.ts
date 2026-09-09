@@ -239,10 +239,14 @@ export const GENERATION_CREDIT_COST = 200;
 
 // Coût crédits pour "Impressionne tes potes" en vidéo (Veo 3.1, clip 4s en
 // 1080p avec son) — voir lib/fal-video.ts. Le coût réel API est d'environ
-// 1,50€ à 1,60€, soit ~6x celui d'une image ; 1500 crédits garde une marge
-// confortable (~9x, plus large que les 7x de l'image) le temps de valider la
-// fonctionnalité en conditions réelles avant ouverture à tous les comptes.
-export const VIDEO_CREDIT_COST = 1500;
+// 1,50€ à 1,60€. Relevé de 1500 à 2500 crédits (explicitement pour
+// augmenter la marge, pas parce que le coût réel a changé) : au tarif du
+// pack le moins cher (200cr/2€), 2500 crédits valent ~25€ facturés pour un
+// coût réel de ~1,55€, soit une marge d'environ 16x (~94%) au lieu des ~9x
+// précédents — largement au-dessus de la marge sur une image (~7x), ce qui
+// se justifie : une vidéo reste le produit le plus différenciant/premium de
+// l'offre.
+export const VIDEO_CREDIT_COST = 2500;
 
 export interface CreditPack {
   id: string;
