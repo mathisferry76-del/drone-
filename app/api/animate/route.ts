@@ -18,7 +18,15 @@ export const runtime = "nodejs";
 // still depends on the plan (see the identical caveat on /api/impress).
 export const maxDuration = 300;
 
-const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+// Raised from 12 Mo — explicit request to stop restricting upload size on
+// our side. This is now a sanity ceiling against memory exhaustion in the
+// serverless function, not a deliberate product limit: no real phone photo
+// gets anywhere near it. Note this can't make the limit disappear entirely
+// — Vercel's own platform-level request body ceiling for serverless
+// functions (historically ~4.5 Mo on Node.js runtimes) sits below this and
+// isn't something app code can raise; a file above that fails before this
+// check even runs. That part is outside our control either way.
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 // Kept in sync with DESCRIPTION_MAX in app/impress/page.tsx (shared
 // textarea component for image and video mode) and MAX_DESCRIPTION in
 // app/api/impress/route.ts.
@@ -113,7 +121,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
     }
     if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ error: "Image trop lourde (12 Mo max)." }, { status: 400 });
+      return NextResponse.json({ error: "Image trop lourde (50 Mo max)." }, { status: 400 });
     }
     if (!description) {
       return NextResponse.json(
@@ -172,69 +180,83 @@ export async function POST(req: NextRequest) {
     let normalizedInput: Buffer;
     try {
       const rotated = sharp(Buffer.from(await file.arrayBuffer())).rotate();
-      const meta = await rotated.metadata();
-      // metadata() reports the file's raw pixel dimensions, not the
-      // visually-correct ones — a phone photo commonly stores portrait
-      // pixels landscape-swapped plus an EXIF orientation tag (5-8 means a
-      // 90°/270° rotation), so width/height need swapping before comparing
-      // or every EXIF-rotated portrait photo would be misread as landscape.
-      let { width, height } = meta;
-      if (meta.orientation && meta.orientation >= 5 && width && height) {
-        [width, height] = [height, width];
-      }
-
       const rotatedBuffer = await rotated.png().toBuffer();
 
-      if (width && height) {
-        // Veo 3.1's image-to-video mode only ever actually renders 16:9
-        // internally — per Google's own docs, portrait 9:16 is explicitly
-        // excluded from that mode (only supported for text-to-video), and
-        // is independently confirmed by users hitting the same "accepts
-        // 9:16, silently renders 16:9 anyway" behavior on the official
-        // forum. So a portrait source photo has to become 16:9 before it
-        // reaches Veo one way or another.
-        //
-        // This used to CROP to 16:9 (trim the tall axis down, first
-        // centered, then anchored to the bottom). Both lost most of the
-        // subject: a portrait phone photo of a whole car is typically
-        // close to full-height (roof to ground), so trimming height down
-        // to the ~32% that actually fits a 16:9 slice — from ANY anchor —
-        // throws away most of the car, not just spare background.
-        // Confirmed in production: a full-car portrait photo came back
-        // from Veo showing only the rear bumper, because the crop kept
-        // just the bottom third of the frame and the roof/windows lived
-        // in the discarded two-thirds above. Padding instead of cropping
-        // is the only way to hand Veo a 16:9 frame without ever
-        // discarding part of the actual subject, wherever it sits in the
-        // original photo: the short axis is padded up to a 16:9 canvas
-        // instead of the long axis being trimmed down, with the added
-        // margin filled by a blurred, darkened copy of the same photo
-        // instead of dead black bars.
-        const targetRatio = 16 / 9;
-        const currentRatio = width / height;
-        let canvasWidth = width;
-        let canvasHeight = height;
-        if (currentRatio > targetRatio) {
-          canvasHeight = Math.round(width / targetRatio);
-        } else if (currentRatio < targetRatio) {
-          canvasWidth = Math.round(height * targetRatio);
+      // Explicit request: the video we generate should keep the photo's
+      // original size/aspect ratio, not be forced into a shape we picked —
+      // any cropping afterward is the user's call, not ours. That's only
+      // possible for the provider that actually supports it: Seedance 2.5
+      // (Replicate) accepts `aspect_ratio: "adaptive"` (lib/replicate-
+      // video.ts), which keeps the model's output matching the input's own
+      // framing, so the photo is sent through completely untouched here —
+      // only EXIF-rotated so it's right-side up, never resized or padded.
+      if (provider !== "fal") {
+        normalizedInput = rotatedBuffer;
+      } else {
+        // Veo 3.1 (fal.ai fallback) has no equivalent: its image-to-video
+        // mode only ever actually renders 16:9 internally — per Google's
+        // own docs, portrait 9:16 is explicitly excluded from that mode
+        // (only supported for text-to-video), independently confirmed by
+        // users hitting the same "accepts 9:16, silently renders 16:9
+        // anyway" behavior on the official forum. So a portrait source
+        // photo still has to become 16:9 before it reaches Veo — this
+        // path is unavoidable for that provider only.
+        const meta = await rotated.metadata();
+        // metadata() reports the file's raw pixel dimensions, not the
+        // visually-correct ones — a phone photo commonly stores portrait
+        // pixels landscape-swapped plus an EXIF orientation tag (5-8 means
+        // a 90°/270° rotation), so width/height need swapping before
+        // comparing or every EXIF-rotated portrait photo would be misread
+        // as landscape.
+        let { width, height } = meta;
+        if (meta.orientation && meta.orientation >= 5 && width && height) {
+          [width, height] = [height, width];
         }
 
-        if (canvasWidth === width && canvasHeight === height) {
-          normalizedInput = rotatedBuffer;
+        if (width && height) {
+          // This used to CROP to 16:9 (trim the tall axis down, first
+          // centered, then anchored to the bottom). Both lost most of the
+          // subject: a portrait phone photo of a whole car is typically
+          // close to full-height (roof to ground), so trimming height
+          // down to the ~32% that actually fits a 16:9 slice — from ANY
+          // anchor — throws away most of the car, not just spare
+          // background. Confirmed in production: a full-car portrait
+          // photo came back from Veo showing only the rear bumper,
+          // because the crop kept just the bottom third of the frame and
+          // the roof/windows lived in the discarded two-thirds above.
+          // Padding instead of cropping is the only way to hand Veo a
+          // 16:9 frame without ever discarding part of the actual
+          // subject, wherever it sits in the original photo: the short
+          // axis is padded up to a 16:9 canvas instead of the long axis
+          // being trimmed down, with the added margin filled by a
+          // blurred, darkened copy of the same photo instead of dead
+          // black bars.
+          const targetRatio = 16 / 9;
+          const currentRatio = width / height;
+          let canvasWidth = width;
+          let canvasHeight = height;
+          if (currentRatio > targetRatio) {
+            canvasHeight = Math.round(width / targetRatio);
+          } else if (currentRatio < targetRatio) {
+            canvasWidth = Math.round(height * targetRatio);
+          }
+
+          if (canvasWidth === width && canvasHeight === height) {
+            normalizedInput = rotatedBuffer;
+          } else {
+            const background = await sharp(rotatedBuffer)
+              .resize(canvasWidth, canvasHeight, { fit: "cover" })
+              .blur(40)
+              .modulate({ brightness: 0.75, saturation: 0.55 })
+              .toBuffer();
+            normalizedInput = await sharp(background)
+              .composite([{ input: rotatedBuffer, gravity: "center" }])
+              .png()
+              .toBuffer();
+          }
         } else {
-          const background = await sharp(rotatedBuffer)
-            .resize(canvasWidth, canvasHeight, { fit: "cover" })
-            .blur(40)
-            .modulate({ brightness: 0.75, saturation: 0.55 })
-            .toBuffer();
-          normalizedInput = await sharp(background)
-            .composite([{ input: rotatedBuffer, gravity: "center" }])
-            .png()
-            .toBuffer();
+          normalizedInput = rotatedBuffer;
         }
-      } else {
-        normalizedInput = rotatedBuffer;
       }
     } catch {
       await releaseReservationIfNeeded();

@@ -249,6 +249,20 @@ export const GENERATION_CREDIT_COST = 200;
 // ce chiffre une deuxième fois.
 export const VIDEO_CREDIT_COST = 2500;
 
+// "Éditer une vidéo" (app/api/video-edit/route.ts) : vrai video-to-video —
+// on envoie une vidéo existante à Seedance 2.5 comme référence et on décrit
+// le changement, au lieu d'animer une simple photo. Facturé sur le tier
+// Replicate le plus cher pour ce modèle ("video_in", car une vidéo de
+// référence est utilisée) : 0,9676$/s en 720p contre 0,2312$/s pour
+// l'image-vers-vidéo classique. La durée de sortie suit celle de la vidéo
+// envoyée (duration: -1 imposé par ce mode, voir lib/replicate-video.ts) ;
+// pour garder le coût prévisible, l'upload est plafonné à 4 secondes côté
+// serveur (lib/probe-video.ts), donc le pire cas reste ~3,90$/génération.
+// 6000 crédits (~50-60€ au tarif du pack dédié ci-dessous) laisse une
+// marge confortable (~13-15x, ~93-95%) sur ce pire cas, cohérente avec la
+// marge visée sur VIDEO_CREDIT_COST.
+export const VIDEO_EDIT_CREDIT_COST = 6000;
+
 export interface CreditPack {
   id: string;
   credits: number;
@@ -280,6 +294,17 @@ export const CREDIT_PACKS: CreditPack[] = [
     price: "24,99€",
     tagline: "15 générations",
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_3000 ?? null,
+  },
+  // Dédié à "Éditer une vidéo" (VIDEO_EDIT_CREDIT_COST = 6000) : les packs
+  // ci-dessus plafonnent à 3000, insuffisant pour cette fonctionnalité en un
+  // seul achat. Tarif dégressif par rapport au pack 3000 (0,0075€/crédit
+  // contre 0,00833€), dans la continuité de la courbe des packs existants.
+  {
+    id: "pack-8000",
+    credits: 8000,
+    price: "59,99€",
+    tagline: "1 édition vidéo + reste pour des générations",
+    priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_CREDITS_8000 ?? null,
   },
 ];
 

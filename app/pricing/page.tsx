@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { SUBSCRIPTION_TIERS, CREDIT_PACKS, GENERATION_CREDIT_COST, VIDEO_CREDIT_COST } from "@/lib/presets";
+import {
+  SUBSCRIPTION_TIERS,
+  CREDIT_PACKS,
+  GENERATION_CREDIT_COST,
+  VIDEO_CREDIT_COST,
+  VIDEO_EDIT_CREDIT_COST,
+} from "@/lib/presets";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
 export default function PricingPage() {
@@ -176,10 +182,13 @@ export default function PricingPage() {
             illimités pour tout compte connecté. Une génération miniature ou{" "}
             &laquo;&nbsp;Impressionne tes potes&nbsp;&raquo; (image) coûte{" "}
             {GENERATION_CREDIT_COST} crédits ; une vidéo (4 secondes, 720p,
-            avec son) coûte {VIDEO_CREDIT_COST} crédits — débités de ton
-            solde au moment de la génération. L&apos;abonnement recharge ce
-            solde chaque mois ; les packs le rechargent ponctuellement. Dans
-            les deux cas, les crédits ne s&apos;expirent jamais.
+            avec son) coûte {VIDEO_CREDIT_COST} crédits ; éditer une vidéo
+            existante (garder son mouvement d&apos;origine en changeant un
+            détail précis, 4 secondes max) coûte {VIDEO_EDIT_CREDIT_COST}{" "}
+            crédits — débités de ton solde au moment de la génération.
+            L&apos;abonnement recharge ce solde chaque mois ; les packs le
+            rechargent ponctuellement. Dans les deux cas, les crédits ne
+            s&apos;expirent jamais.
           </p>
         </div>
         <div className="rounded-xl border border-emerald-800/40 bg-emerald-400/5 p-6">
