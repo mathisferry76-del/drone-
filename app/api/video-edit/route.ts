@@ -32,12 +32,12 @@ const MAX_DESCRIPTION = 1200;
 // under 4s outright ("the video selected must satisfy the duration
 // requirement of 4 to 30 seconds", straight from its own error message),
 // so 4s is a real provider floor, not a design decision. MAX_EDIT_VIDEO_
-// SECONDS keeps the worst case around ~5.80$ (matching VIDEO_EDIT_CREDIT_
-// COST's cost basis, see lib/presets.ts) while leaving enough room above
-// the 4s floor for a real export to land inside the window without users
-// needing to trim to the exact second.
+// SECONDS keeps the worst case around ~6.77$ (still a healthy margin
+// against VIDEO_EDIT_CREDIT_COST's cost basis, see lib/presets.ts) while
+// leaving enough room above the 4s floor for a real export to land inside
+// the window without users needing to trim to the exact second.
 const MIN_EDIT_VIDEO_SECONDS = 4;
-const MAX_EDIT_VIDEO_SECONDS = 6;
+const MAX_EDIT_VIDEO_SECONDS = 7;
 
 // Mirrors Seedance 2.5's own documented convention for this mode (its
 // model README, not guessed): reference the uploaded clip as [Video1] and

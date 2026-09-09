@@ -258,10 +258,10 @@ export const VIDEO_CREDIT_COST = 2500;
 // envoyée (duration: -1 imposé par ce mode, voir lib/replicate-video.ts).
 // Seedance impose lui-même un minimum de 4s pour ce mode (confirmé en
 // production par son propre message d'erreur — pas un choix produit) ;
-// l'upload est plafonné à 6s côté serveur (app/api/video-edit/route.ts),
-// donc le pire cas reste ~5,80$/génération. 6000 crédits (~50-60€ au
-// tarif du pack dédié ci-dessous) laisse une marge confortable (~9-10x,
-// ~89-90%) sur ce pire cas.
+// l'upload est plafonné à 7s côté serveur (app/api/video-edit/route.ts),
+// donc le pire cas reste ~6,77$/génération. 6000 crédits (~50-60€ au
+// tarif du pack dédié ci-dessous) laisse une marge confortable (~7,5-8,5x,
+// ~87-88%) sur ce pire cas.
 export const VIDEO_EDIT_CREDIT_COST = 6000;
 
 export interface CreditPack {

@@ -970,7 +970,7 @@ function ImpressPageInner() {
         <p className="mt-3 text-sm text-zinc-500">
           Nouveau — modifie une vidéo que tu as déjà (change un objet, un
           décor, une couleur) en gardant le mouvement de caméra d&apos;origine.
-          Entre 4 et 6 secondes, {VIDEO_EDIT_CREDIT_COST} crédits par édition.{" "}
+          Entre 4 et 7 secondes, {VIDEO_EDIT_CREDIT_COST} crédits par édition.{" "}
           {creditsBalance} crédits disponibles (
           {Math.floor(creditsBalance / VIDEO_EDIT_CREDIT_COST)} édition(s)).
         </p>
@@ -981,7 +981,7 @@ function ImpressPageInner() {
           {mode === "video-edit" ? (
             <div>
               <label className="mb-2 block text-sm font-semibold text-zinc-300">
-                1. Ta vidéo (entre 4 et 6 secondes)
+                1. Ta vidéo (entre 4 et 7 secondes)
               </label>
               <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950">
                 {editVideoPreviewUrl ? (
