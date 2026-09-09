@@ -7,7 +7,9 @@ import {
   CREDIT_PACKS,
   GENERATION_CREDIT_COST,
   VIDEO_CREDIT_COST,
-  VIDEO_EDIT_CREDIT_COST,
+  VIDEO_EDIT_CREDIT_COST_PER_SECOND,
+  MIN_EDIT_VIDEO_SECONDS,
+  MAX_EDIT_VIDEO_SECONDS,
 } from "@/lib/presets";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
@@ -184,8 +186,10 @@ export default function PricingPage() {
             {GENERATION_CREDIT_COST} crédits ; une vidéo (4 secondes, 720p,
             avec son) coûte {VIDEO_CREDIT_COST} crédits ; éditer une vidéo
             existante (garder son mouvement d&apos;origine en changeant un
-            détail précis, 4 secondes max) coûte {VIDEO_EDIT_CREDIT_COST}{" "}
-            crédits — débités de ton solde au moment de la génération.
+            détail précis, entre {MIN_EDIT_VIDEO_SECONDS} et{" "}
+            {MAX_EDIT_VIDEO_SECONDS} secondes) coûte{" "}
+            {VIDEO_EDIT_CREDIT_COST_PER_SECOND} crédits par seconde de vidéo
+            envoyée — débités de ton solde au moment de la génération.
             L&apos;abonnement recharge ce solde chaque mois ; les packs le
             rechargent ponctuellement. Dans les deux cas, les crédits ne
             s&apos;expirent jamais.

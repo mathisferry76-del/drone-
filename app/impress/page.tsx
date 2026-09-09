@@ -7,7 +7,10 @@ import {
   CREDIT_PACKS,
   GENERATION_CREDIT_COST,
   VIDEO_CREDIT_COST,
-  VIDEO_EDIT_CREDIT_COST,
+  VIDEO_EDIT_CREDIT_COST_PER_SECOND,
+  MIN_EDIT_VIDEO_SECONDS,
+  MAX_EDIT_VIDEO_SECONDS,
+  getVideoEditCreditCost,
 } from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { downloadFile } from "@/lib/download";
@@ -171,6 +174,12 @@ function ImpressPageInner() {
   // prévisualisation, description, statut de chargement/erreur et résultat.
   const [editVideoFile, setEditVideoFile] = useState<File | null>(null);
   const [editVideoPreviewUrl, setEditVideoPreviewUrl] = useState<string | null>(null);
+  // Read client-side (the browser already has to load the file's metadata
+  // to show a preview) so the exact price — proportional to the real
+  // duration, not a flat fee, see lib/presets.ts's getVideoEditCreditCost —
+  // can be shown before the user even clicks generate, instead of only
+  // finding out the cost after the server measures it too.
+  const [editVideoDurationSeconds, setEditVideoDurationSeconds] = useState<number | null>(null);
   const [editVideoDescription, setEditVideoDescription] = useState("");
   const [editVideoLoading, setEditVideoLoading] = useState(false);
   const [editVideoError, setEditVideoError] = useState<string | null>(null);
@@ -241,8 +250,22 @@ function ImpressPageInner() {
     setEditVideoError(null);
     setEditVideoResultUrl(null);
     setEditVideoFile(f);
+    setEditVideoDurationSeconds(null);
     if (editVideoPreviewUrl) URL.revokeObjectURL(editVideoPreviewUrl);
-    setEditVideoPreviewUrl(URL.createObjectURL(f));
+    const url = URL.createObjectURL(f);
+    setEditVideoPreviewUrl(url);
+
+    // A detached <video> (never attached to the DOM) is enough to read
+    // `duration` off its metadata — cheaper than waiting for the visible
+    // preview element to load, and works even before it renders.
+    const probe = document.createElement("video");
+    probe.preload = "metadata";
+    probe.onloadedmetadata = () => {
+      if (Number.isFinite(probe.duration)) {
+        setEditVideoDurationSeconds(probe.duration);
+      }
+    };
+    probe.src = url;
   }
 
   async function handleReferenceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -970,9 +993,11 @@ function ImpressPageInner() {
         <p className="mt-3 text-sm text-zinc-500">
           Nouveau — modifie une vidéo que tu as déjà (change un objet, un
           décor, une couleur) en gardant le mouvement de caméra d&apos;origine.
-          Entre 4 et 7 secondes, {VIDEO_EDIT_CREDIT_COST} crédits par édition.{" "}
-          {creditsBalance} crédits disponibles (
-          {Math.floor(creditsBalance / VIDEO_EDIT_CREDIT_COST)} édition(s)).
+          Entre {MIN_EDIT_VIDEO_SECONDS} et {MAX_EDIT_VIDEO_SECONDS} secondes,{" "}
+          {VIDEO_EDIT_CREDIT_COST_PER_SECOND} crédits par seconde de vidéo (
+          {getVideoEditCreditCost(MIN_EDIT_VIDEO_SECONDS)} à{" "}
+          {getVideoEditCreditCost(MAX_EDIT_VIDEO_SECONDS)} crédits selon la
+          durée). {creditsBalance} crédits disponibles.
         </p>
       )}
 
@@ -981,8 +1006,24 @@ function ImpressPageInner() {
           {mode === "video-edit" ? (
             <div>
               <label className="mb-2 block text-sm font-semibold text-zinc-300">
-                1. Ta vidéo (entre 4 et 7 secondes)
+                1. Ta vidéo (entre {MIN_EDIT_VIDEO_SECONDS} et {MAX_EDIT_VIDEO_SECONDS} secondes)
               </label>
+              {editVideoDurationSeconds !== null && (
+                <p
+                  className={`mb-2 text-xs ${
+                    editVideoDurationSeconds >= MIN_EDIT_VIDEO_SECONDS &&
+                    editVideoDurationSeconds <= MAX_EDIT_VIDEO_SECONDS
+                      ? "text-zinc-500"
+                      : "text-amber-400"
+                  }`}
+                >
+                  Durée détectée : {editVideoDurationSeconds.toFixed(1)}s
+                  {editVideoDurationSeconds >= MIN_EDIT_VIDEO_SECONDS &&
+                  editVideoDurationSeconds <= MAX_EDIT_VIDEO_SECONDS
+                    ? ` — coûtera ${getVideoEditCreditCost(editVideoDurationSeconds)} crédits`
+                    : ` — hors limite (entre ${MIN_EDIT_VIDEO_SECONDS} et ${MAX_EDIT_VIDEO_SECONDS}s), recadre ta vidéo`}
+                </p>
+              )}
               <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950">
                 {editVideoPreviewUrl ? (
                   <video
@@ -1291,7 +1332,12 @@ function ImpressPageInner() {
                   disabled={!editVideoFile}
                   className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Éditer la vidéo → {VIDEO_EDIT_CREDIT_COST} crédits
+                  Éditer la vidéo →{" "}
+                  {editVideoDurationSeconds !== null
+                    ? `${getVideoEditCreditCost(editVideoDurationSeconds)} crédits`
+                    : `${getVideoEditCreditCost(MIN_EDIT_VIDEO_SECONDS)}-${getVideoEditCreditCost(
+                        MAX_EDIT_VIDEO_SECONDS
+                      )} crédits`}
                 </button>
               )}
             </>
