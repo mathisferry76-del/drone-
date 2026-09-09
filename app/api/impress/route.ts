@@ -538,10 +538,10 @@ export async function POST(req: NextRequest) {
     // Each is only used when the one(s) before it aren't configured on this
     // deployment — not a runtime retry chain, so a mid-request failure
     // surfaces as an error rather than silently billing a second provider.
-    // Note this priority also decides full-vehicle-replacement requests
-    // when Seedream is selected (see forceOpenAiMaskPath below) — every
-    // other provider still always defers to gpt-image-1's real inpainting
-    // mask for that case regardless of this order.
+    // Full-vehicle-replacement requests always defer to gpt-image-1's real
+    // inpainting mask regardless of this order (see forceOpenAiMaskPath
+    // below) — briefly not true for Seedream specifically, reverted after a
+    // confirmed production regression, see that comment for why.
     //
     // Seedream 5 Pro (ByteDance, via Replicate) moved to the very front —
     // explicit request to try it, after comparative reviews (checked via
@@ -652,21 +652,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // A detected full-replacement forces gpt-image-1's real inpainting mask
-    // for every provider EXCEPT Seedream — explicit, deliberately
-    // experimental request to let Seedream attempt a full-vehicle-
-    // replacement using its own understanding of the prompt instead of a
-    // pixel mask, since that's this route's actual primary use case and
-    // the whole point of trying Seedream in the first place. No masking
-    // primitive is documented in Seedream's confirmed schema (same gap
-    // FLUX Kontext has), so this is a real bet that the model is good
-    // enough at full replacement on its own — the exact bias (keeping the
-    // original object's silhouette instead of truly changing it) that the
-    // mask was built to eliminate for FLUX Kontext could resurface here.
-    // If it does, reverting Seedream's priority (see the comment above the
-    // `provider` assignment) restores the proven gpt-image-1 mask path for
-    // this case too, same as before Seedream existed.
-    const forceOpenAiMaskPath = Boolean(replacementMask) && provider !== "seedream";
+    // A detected full-replacement always forces gpt-image-1's real
+    // inpainting mask, regardless of provider. This briefly had a Seedream
+    // exception (letting it attempt full-vehicle-replacement unmasked,
+    // straight from its own understanding of the prompt) — reverted after
+    // confirming in production it wasn't a silhouette-preservation bias like
+    // FLUX Kontext's, but Seedream flatly refusing the request outright with
+    // a 422 ("photo ou description refusée"), reproduced twice, with and
+    // without a reference photo attached. Seedream stays the top provider
+    // for general edits (add/change one thing) below; full replacement goes
+    // back through the proven gpt-image-1 mask path unconditionally, same as
+    // before Seedream existed.
+    const forceOpenAiMaskPath = Boolean(replacementMask);
 
     // Attaching a reference photo as a second image in the SAME
     // images.edit call has reliably crashed this route hard enough to
