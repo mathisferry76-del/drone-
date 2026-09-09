@@ -20,11 +20,6 @@ export const runtime = "nodejs";
 // just block until the job finishes instead.
 export const maxDuration = 60;
 
-// Sanity ceiling against memory exhaustion in the serverless function, not
-// a deliberate product limit on its own — MAX_EDIT_VIDEO_SECONDS below is
-// the real, cost-driven limit for this route (see lib/presets.ts's
-// VIDEO_EDIT_CREDIT_COST comment for the full cost math).
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 // Kept in sync with MAX_DESCRIPTION in app/api/impress/route.ts and
 // app/api/animate/route.ts.
 const MAX_DESCRIPTION = 1200;
@@ -108,17 +103,40 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  try {
-    const formData = await req.formData();
-    const file = formData.get("video");
-    const description = String(formData.get("description") ?? "").trim().slice(0, MAX_DESCRIPTION);
+  // Cleans up the temp upload (app/api/video-edit/upload-url/route.ts) on
+  // every exit path once it's been read into memory — nothing downstream
+  // needs it anymore, and leaving it would slowly accumulate orphaned
+  // files in the 'videos' bucket.
+  let tempStoragePath: string | null = null;
+  async function cleanupTempUpload() {
+    if (!tempStoragePath) return;
+    try {
+      await admin!.storage.from("videos").remove([tempStoragePath]);
+    } catch (err) {
+      console.error("temp upload cleanup error", err);
+    }
+  }
 
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Aucune vidéo reçue." }, { status: 400 });
+  try {
+    // The video itself never passes through this route's own request body
+    // — see app/api/video-edit/upload-url/route.ts for why (Vercel's
+    // request body ceiling, hit in production on a real 4-6s phone clip).
+    // The browser uploads it straight to Supabase Storage and only sends
+    // us the resulting path, a few bytes of JSON.
+    const body = (await req.json()) as { storagePath?: string; description?: string };
+    const storagePath = body.storagePath ?? "";
+    const description = String(body.description ?? "").trim().slice(0, MAX_DESCRIPTION);
+
+    // Defense in depth: the path is scoped to this user's own folder by
+    // construction (upload-url/route.ts), but never trust a client-
+    // supplied path without checking it actually belongs to the caller —
+    // otherwise any authenticated user could point this at another
+    // user's temp upload.
+    if (!storagePath || !storagePath.startsWith(`${authUser.id}/video-edit-tmp/`)) {
+      return NextResponse.json({ error: "Vidéo introuvable." }, { status: 400 });
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ error: "Vidéo trop lourde (50 Mo max)." }, { status: 400 });
-    }
+    tempStoragePath = storagePath;
+
     if (!description) {
       return NextResponse.json(
         { error: "Décris le changement que tu veux voir dans la vidéo." },
@@ -130,13 +148,28 @@ export async function POST(req: NextRequest) {
     // since Veo 3.1 never had a video-to-video editing mode at all (only
     // ever accepted a still image), so there's nothing to fall back to.
     if (!getReplicateKey()) {
+      await cleanupTempUpload();
       return NextResponse.json(
         { error: "Aucun fournisseur vidéo configuré (REPLICATE_API_TOKEN manquante)." },
         { status: 500 }
       );
     }
 
-    const videoBuffer = Buffer.from(await file.arrayBuffer());
+    const { data: downloaded, error: downloadError } = await admin.storage
+      .from("videos")
+      .download(storagePath);
+    if (downloadError || !downloaded) {
+      console.error("video-edit download error", downloadError);
+      return NextResponse.json(
+        { error: "Impossible de récupérer la vidéo envoyée. Réessaie." },
+        { status: 400 }
+      );
+    }
+    const videoBuffer = Buffer.from(await downloaded.arrayBuffer());
+    // Nothing past this point still needs the temp upload, success or
+    // failure — clean it up now rather than scattering the same call
+    // across every subsequent early return.
+    await cleanupTempUpload();
 
     let durationSeconds: number;
     try {
@@ -234,6 +267,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ predictionId });
   } catch (err) {
+    await cleanupTempUpload();
     await releaseReservationIfNeeded();
     if (req.signal.aborted) {
       return NextResponse.json({ error: "Génération annulée." }, { status: 499 });
