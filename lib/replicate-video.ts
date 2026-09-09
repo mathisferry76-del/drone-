@@ -22,10 +22,14 @@ import { getReplicateKey } from "./replicate";
 // used here since we're not using reference_videos), `resolution` (string,
 // default "720p" — no 1080p tier was visible in Replicate's own pricing
 // page for this model, so this is a real resolution drop from Veo's 1080p,
-// not just a cost optimization), `aspect_ratio` (string, default "16:9" —
-// "adaptive" is only required for first/last-frame/editing/extension
-// modes, plain image-to-video keeps explicit "16:9" like before), and
-// `generate_audio` (boolean, default true).
+// not just a cost optimization), `aspect_ratio` (string, default "16:9",
+// "adaptive" documented as letting the model choose the best ratio based
+// on inputs — required for first/last-frame/editing/extension modes, and
+// used here too, on purpose, for plain image-to-video: explicit request
+// that the generated video keep the source photo's own framing instead of
+// being forced into 16:9, and the source image is now sent to this
+// function completely unpadded/uncropped (app/api/animate/route.ts) to
+// match), and `generate_audio` (boolean, default true).
 //
 // Pricing confirmed on Replicate's own pricing page: this plain
 // image-to-video shape (no reference videos/images/audios attached) is
@@ -70,7 +74,7 @@ export async function animateImageToVideoReplicate(
           prompt,
           duration: 4,
           resolution: "720p",
-          aspect_ratio: "16:9",
+          aspect_ratio: "adaptive",
           generate_audio: true,
         },
         signal,
