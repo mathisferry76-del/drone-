@@ -496,6 +496,30 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Merges the client's own cancel (req.signal) with our internal deadline
+    // into one signal, covering the whole pipeline starting with the two
+    // speculative vision calls right below — moved up from after them
+    // (where it used to live) because neither detectReplacementRegion nor
+    // describeReferenceImage had any timeout/abort protection at all until
+    // now: a slow OpenAI response on either one had no safety net, unlike
+    // every step after this point, and could hang long enough to blow past
+    // Vercel's own platform ceiling with nothing here able to react to it —
+    // confirmed as a real production failure on exactly this combination
+    // (full replacement + reference photo).
+    const internalController = new AbortController();
+    if (req.signal.aborted) {
+      internalController.abort(req.signal.reason);
+    } else {
+      req.signal.addEventListener("abort", () => internalController.abort(req.signal.reason), {
+        once: true,
+      });
+    }
+    let timedOut = false;
+    const deadlineTimer = setTimeout(() => {
+      timedOut = true;
+      internalController.abort(new DOMException("Délai interne dépassé", "TimeoutError"));
+    }, GENERATION_DEADLINE_MS);
+
     // For a full object-replacement request (most often a car swapped for a
     // different, differently-shaped model), route generation through
     // gpt-image-1's actual inpainting mask instead of whichever provider was
@@ -510,20 +534,30 @@ export async function POST(req: NextRequest) {
     // anything less than that and this silently falls through to the
     // existing provider flow below, unchanged.
     //
-    // Computed before buildImpressPrompt below (moved up from after it) so
-    // the reference-photo flag passed into the prompt can reflect whether a
-    // reference will actually be attached to the call — see
-    // referenceWillBeAttached below.
+    // detectReplacementRegion and describeReferenceImage are independent
+    // single-image vision calls (different photos, no shared input) that
+    // used to run one after another — run them together instead to cut real
+    // wall-clock time off the slowest, most failure-prone request shape (a
+    // full replacement with a reference photo attached). This speculatively
+    // also starts describeReferenceImage on requests that turn out not to
+    // need its result (Gemini handling a non-replacement request with a
+    // reference photo) — a few cents on a cheap gpt-4o-mini call, worth it
+    // for how much slower the combined path is when it IS needed.
+    const [region, speculativeReferenceText] = await Promise.all([
+      openai
+        ? detectReplacementRegion(openAiInput, description, internalController.signal)
+        : Promise.resolve(null),
+      openai && normalizedReference
+        ? describeReferenceImage(normalizedReference, internalController.signal)
+        : Promise.resolve(null),
+    ]);
     let replacementMask: Buffer | null = null;
-    if (openai) {
-      const region = await detectReplacementRegion(openAiInput, description);
-      if (region) {
-        replacementMask = await buildReplacementMask(
-          openAiInputMeta.width ?? 1024,
-          openAiInputMeta.height ?? 1024,
-          region
-        );
-      }
+    if (region) {
+      replacementMask = await buildReplacementMask(
+        openAiInputMeta.width ?? 1024,
+        openAiInputMeta.height ?? 1024,
+        region
+      );
     }
 
     // Attaching a reference photo as a second image in the SAME
@@ -543,8 +577,9 @@ export async function POST(req: NextRequest) {
     const willUseOpenAiEditPath = Boolean(replacementMask) || provider === "openai";
     let referenceForPrompt: Parameters<typeof buildImpressPrompt>[1] = null;
     if (normalizedReference && willUseOpenAiEditPath) {
-      const referenceText = await describeReferenceImage(normalizedReference);
-      referenceForPrompt = referenceText ? { kind: "description", text: referenceText } : null;
+      referenceForPrompt = speculativeReferenceText
+        ? { kind: "description", text: speculativeReferenceText }
+        : null;
     } else if (normalizedReference && provider === "gemini") {
       referenceForPrompt = { kind: "image" };
     }
@@ -560,24 +595,6 @@ export async function POST(req: NextRequest) {
     // against the same frame the model actually saw.
     const usesOpenAiEditPath = Boolean(replacementMask) || provider === "openai";
     const generationInput = usesOpenAiEditPath ? openAiInput : normalizedInput;
-
-    // Merges the client's own cancel (req.signal) with our internal deadline
-    // into one signal so generateOnce doesn't need to know which one fired —
-    // either way, in-flight provider calls get aborted the same way the
-    // existing Cancel button already relies on.
-    const internalController = new AbortController();
-    if (req.signal.aborted) {
-      internalController.abort(req.signal.reason);
-    } else {
-      req.signal.addEventListener("abort", () => internalController.abort(req.signal.reason), {
-        once: true,
-      });
-    }
-    let timedOut = false;
-    const deadlineTimer = setTimeout(() => {
-      timedOut = true;
-      internalController.abort(new DOMException("Délai interne dépassé", "TimeoutError"));
-    }, GENERATION_DEADLINE_MS);
 
     // The true "before" frame every candidate is judged against — see
     // generationInput above (the OpenAI-canvas-cropped photo on that path,

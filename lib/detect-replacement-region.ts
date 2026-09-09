@@ -29,38 +29,42 @@ export interface ReplacementRegion {
 // the mask-based one when it looks like the right tool for the job.
 export async function detectReplacementRegion(
   image: Buffer,
-  description: string
+  description: string,
+  signal?: AbortSignal
 ): Promise<ReplacementRegion | null> {
   const openai = getOpenAI();
   if (!openai) return null;
 
   try {
-    const result = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Cette description demande-t-elle de REMPLACER ENTIÈREMENT un objet dominant de la photo (le plus souvent un véhicule) par un modèle différent, avec une forme/silhouette potentiellement différente ? Description : "${description}".
+    const result = await openai.chat.completions.create(
+      {
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Cette description demande-t-elle de REMPLACER ENTIÈREMENT un objet dominant de la photo (le plus souvent un véhicule) par un modèle différent, avec une forme/silhouette potentiellement différente ? Description : "${description}".
 
 Si oui, réponds UNIQUEMENT avec un JSON compact de cette forme exacte, sans aucun autre texte : {"left":N,"top":N,"right":N,"bottom":N} où chaque N est un pourcentage entier (0-100) de la position du cadre englobant CET OBJET dans la photo (0=bord gauche/haut, 100=bord droit/bas). Élargis légèrement la boîte (quelques % de marge) pour être sûr d'inclure tout l'objet.
 
 Si non — la demande n'est pas un remplacement d'objet complet (ex : ajout d'un accessoire, changement de couleur/matière, changement de décor) — réponds UNIQUEMENT avec "NON".`,
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/png;base64,${image.toString("base64")}`,
-                detail: "low",
               },
-            },
-          ],
-        },
-      ],
-      max_tokens: 60,
-    });
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/png;base64,${image.toString("base64")}`,
+                  detail: "low",
+                },
+              },
+            ],
+          },
+        ],
+        max_tokens: 60,
+      },
+      { signal }
+    );
 
     const text = result.choices[0]?.message?.content?.trim() ?? "";
     if (!text || /^non\b/i.test(text)) return null;
