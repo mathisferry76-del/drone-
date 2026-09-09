@@ -175,8 +175,8 @@ export default function PricingPage() {
             Les styles filtres (recadrage, couleurs, texte) sont gratuits et
             illimités pour tout compte connecté. Une génération miniature ou{" "}
             &laquo;&nbsp;Impressionne tes potes&nbsp;&raquo; (image) coûte{" "}
-            {GENERATION_CREDIT_COST} crédits ; une vidéo (Veo 3.1, 4 secondes,
-            1080p, avec son) coûte {VIDEO_CREDIT_COST} crédits — débités de ton
+            {GENERATION_CREDIT_COST} crédits ; une vidéo (4 secondes, 720p,
+            avec son) coûte {VIDEO_CREDIT_COST} crédits — débités de ton
             solde au moment de la génération. L&apos;abonnement recharge ce
             solde chaque mois ; les packs le rechargent ponctuellement. Dans
             les deux cas, les crédits ne s&apos;expirent jamais.

@@ -55,9 +55,9 @@ const IMAGE_GENERATION_STEPS = [
 const VIDEO_GENERATION_STEPS = [
   "Analyse de ta photo...",
   "Composition du mouvement de caméra...",
-  "Génération de la vidéo (Veo 3.1)...",
+  "Génération de la vidéo (Seedance 2.5)...",
   "Synchronisation du son...",
-  "Encodage final en 1080p (peut prendre plusieurs minutes)...",
+  "Encodage final en 720p (peut prendre plusieurs minutes)...",
 ];
 
 function ImpressPageInner() {
@@ -688,7 +688,7 @@ function ImpressPageInner() {
       {mode === "video" && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <p className="text-sm text-zinc-500">
-            Nouveau — {VIDEO_CREDIT_COST} crédits par vidéo (4 secondes, 1080p,
+            Nouveau — {VIDEO_CREDIT_COST} crédits par vidéo (4 secondes, 720p,
             avec son, toujours au format paysage quelle que soit
             l&apos;orientation de ta photo). {creditsBalance} crédits
             disponibles ({Math.floor(creditsBalance / VIDEO_CREDIT_COST)} vidéo(s)).

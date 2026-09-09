@@ -237,15 +237,16 @@ export function getPreset(id: string): Preset {
 // négligeable, et ils servent de porte d'entrée vers l'achat de crédits.
 export const GENERATION_CREDIT_COST = 200;
 
-// Coût crédits pour "Impressionne tes potes" en vidéo (Veo 3.1, clip 4s en
-// 1080p avec son) — voir lib/fal-video.ts. Le coût réel API est d'environ
-// 1,50€ à 1,60€. Relevé de 1500 à 2500 crédits (explicitement pour
-// augmenter la marge, pas parce que le coût réel a changé) : au tarif du
-// pack le moins cher (200cr/2€), 2500 crédits valent ~25€ facturés pour un
-// coût réel de ~1,55€, soit une marge d'environ 16x (~94%) au lieu des ~9x
-// précédents — largement au-dessus de la marge sur une image (~7x), ce qui
-// se justifie : une vidéo reste le produit le plus différenciant/premium de
-// l'offre.
+// Coût crédits pour "Impressionne tes potes" en vidéo (Seedance 2.5, clip 4s
+// en 720p avec son — voir lib/replicate-video.ts ; remplace Veo 3.1/1080p,
+// changement de modèle explicitement demandé) coûte réellement environ
+// 0,85€-0,92€ à l'API (moins cher que Veo, qui coûtait ~1,55€), confirmé
+// sur la page de prix officielle de Replicate pour ce modèle. 2500 crédits
+// avait déjà été fixé pour augmenter la marge sur Veo (au tarif du pack le
+// moins cher, 200cr/2€, 2500 crédits valent ~25€ facturés) ; avec le coût
+// réel qui a lui-même baissé en passant à Seedance, la marge réelle est
+// maintenant encore meilleure (~27x, ~96%) sans avoir eu besoin de retoucher
+// ce chiffre une deuxième fois.
 export const VIDEO_CREDIT_COST = 2500;
 
 export interface CreditPack {
