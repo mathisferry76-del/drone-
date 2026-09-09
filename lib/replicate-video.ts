@@ -163,6 +163,18 @@ export function describeReplicateVideoError(err: unknown): string {
         return `Erreur Replicate Seedance 2.5 (${err.status}) : ${err.message}`;
     }
   }
+  // A failed prediction (not an API-level error — the request succeeded,
+  // the generation itself was rejected) throws a plain Error from
+  // replicate.run()/predictions.get(), not a ReplicateVideoApiError, so it
+  // falls through to this branch instead of the switch above. ByteDance's
+  // own safety filter on Seedance 2.5 (error code E005) is the one
+  // confirmed in production so far — known to trigger on ordinary,
+  // non-violating content (a car swap request, a face in frame), not just
+  // genuinely disallowed material, so a clear "try again differently"
+  // message is more honest here than implying real policy content.
+  if (err instanceof Error && err.message.includes("flagged as sensitive")) {
+    return "Le contenu a été refusé par le filtre de sécurité automatique du modèle (souvent un faux positif, pas forcément un vrai problème). Réessaie avec une autre vidéo (sans visage en gros plan par exemple) ou reformule la description.";
+  }
   if (err instanceof Error) return err.message;
   return "Erreur inconnue pendant l'animation vidéo (Replicate).";
 }
