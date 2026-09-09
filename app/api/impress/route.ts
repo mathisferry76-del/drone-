@@ -529,49 +529,38 @@ export async function POST(req: NextRequest) {
 
     // Provider priority for this route, most-to-least realistic for "insert
     // one real-world object into an existing photo without touching the
-    // rest": FLUX.1 Kontext [Max] first — the exact same model hosted on
-    // either fal.ai (see lib/fal.ts) or Replicate (see lib/replicate.ts),
+    // rest": Gemini 2.5 Flash Image first — strong reputation specifically
+    // for this kind of realistic object-in-photo compositing (reflections
+    // and lighting consistency on the inserted/replaced object in
+    // particular). Then FLUX.1 Kontext [Max] — the exact same model hosted
+    // on either fal.ai (see lib/fal.ts) or Replicate (see lib/replicate.ts),
     // whichever has a working key configured; fal.ai wins if both are set,
     // for no reason other than it was wired up first. Then OpenAI's
     // gpt-image-1 (its input_fidelity "high" edit pipeline, still solid but
-    // boxed into 3 fixed canvases), then Gemini as a last-resort fallback.
-    // Each is only used when the one(s) before it aren't configured on this
-    // deployment — not a runtime retry chain, so a mid-request failure
-    // surfaces as an error rather than silently billing a second provider.
-    // Full-vehicle-replacement requests always defer to gpt-image-1's real
-    // inpainting mask regardless of this order (see forceOpenAiMaskPath
-    // below) — briefly not true for Seedream specifically, reverted after a
-    // confirmed production regression, see that comment for why.
+    // boxed into 3 fixed canvases) as a last-resort fallback. Each is only
+    // used when the one(s) before it aren't configured on this deployment —
+    // not a runtime retry chain, so a mid-request failure surfaces as an
+    // error rather than silently billing a second provider. Full-vehicle-
+    // replacement requests always defer to gpt-image-1's real inpainting
+    // mask regardless of this order (see forceOpenAiMaskPath below).
     //
-    // Seedream 5 Pro (ByteDance, via Replicate) moved to the very front —
-    // explicit request to try it, after comparative reviews (checked via
-    // web search) rated it closely against Google's "Nano Banana 2"
-    // (Gemini 3.1 Flash Image) on brand/logo fidelity specifically; Nano
-    // Banana 2 was already tried once tonight and rolled back after real
-    // production regressions on this app, so Seedream is the untested
-    // option being tried instead. Explicitly meant to be easy to roll back
-    // to Gemini 2.5 Flash Image (just move `getGeminiKey() ? "gemini"`
-    // back above this line) if it doesn't hold up — see lib/seedream.ts.
-    //
-    // Gemini stays next in line: Gemini 2.5 Flash Image has a strong
-    // reputation specifically for this kind of realistic object-in-photo
-    // compositing — reflections and lighting consistency on the inserted/
-    // replaced object in particular — plausibly stronger than FLUX Kontext
-    // there, and it was sitting completely unused as a last-resort fallback
-    // on any deployment where FAL_KEY is set (which, until now, silently
-    // starved it of ever actually running here). Only takes effect where
-    // GEMINI_API_KEY is actually configured; falls through to the same
-    // order as before otherwise.
+    // Seedream 5 Pro (ByteDance, via Replicate) was tried as the top
+    // provider — comparative reviews (checked via web search) rated it
+    // closely against Google's "Nano Banana 2" on brand/logo fidelity, and
+    // Nano Banana 2 itself had already been tried and rolled back once —
+    // but rolled back to a fallback-only position (only used when Gemini
+    // isn't configured) after real production complaints on its actual
+    // output quality. See lib/seedream.ts.
     const provider:
+      | "gemini"
       | "seedream"
       | "flux-fal"
       | "flux-replicate"
       | "openai"
-      | "gemini"
-      | null = getReplicateKey()
-      ? "seedream"
-      : getGeminiKey()
+      | null = getGeminiKey()
       ? "gemini"
+      : getReplicateKey()
+      ? "seedream"
       : getFalKey()
       ? "flux-fal"
       : getReplicateKey()
