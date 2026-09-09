@@ -287,10 +287,35 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Cleans up the temp uploads (app/api/impress/upload-url/route.ts) once
+  // they've been read into memory — nothing downstream needs them anymore.
+  let tempPaths: string[] = [];
+  async function cleanupTempUploads() {
+    if (tempPaths.length === 0) return;
+    try {
+      await admin!.storage.from("thumbnails").remove(tempPaths);
+    } catch (err) {
+      console.error("temp upload cleanup error", err);
+    }
+  }
+
   try {
-    const formData = await req.formData();
-    const file = formData.get("image");
-    const description = String(formData.get("description") ?? "").trim().slice(0, MAX_DESCRIPTION);
+    // Neither photo passes through this route's own request body anymore —
+    // see app/api/impress/upload-url/route.ts for why (a real production
+    // 413 FUNCTION_PAYLOAD_TOO_LARGE, confirmed via Vercel's own function
+    // logs, on a source photo + reference photo combined even after
+    // client-side compression). The browser uploads each one straight to
+    // Supabase Storage and only sends us the resulting paths, a few bytes
+    // of JSON.
+    const body = (await req.json()) as {
+      mainPath?: string;
+      referencePath?: string;
+      description?: string;
+      jobId?: string;
+    };
+    const mainPath = body.mainPath ?? "";
+    const referencePath = body.referencePath ?? "";
+    const description = String(body.description ?? "").trim().slice(0, MAX_DESCRIPTION);
     // Client-generated (see app/impress/page.tsx) so the client can start
     // polling GET /api/impress/status?jobId=... for this exact result
     // immediately, independently of whether THIS request's own response
@@ -300,20 +325,45 @@ export async function POST(req: NextRequest) {
     // just reporting a timeout. UUID-shaped check because it becomes part
     // of the storage path below; a malformed value falls back to a
     // server-generated one rather than 400ing the whole request over it.
-    const rawJobId = String(formData.get("jobId") ?? "");
+    const rawJobId = String(body.jobId ?? "");
     const jobId = /^[0-9a-f-]{16,64}$/i.test(rawJobId) ? rawJobId : randomUUID();
 
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Aucune image reçue." }, { status: 400 });
+    // Defense in depth: paths are scoped to this user's own folder by
+    // construction (upload-url/route.ts), but never trust a client-
+    // supplied path without checking it actually belongs to the caller —
+    // otherwise any authenticated user could point this at another user's
+    // temp upload.
+    if (!mainPath || !mainPath.startsWith(`${authUser.id}/impress-tmp/`)) {
+      return NextResponse.json({ error: "Photo introuvable." }, { status: 400 });
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      return NextResponse.json({ error: "Image trop lourde (12 Mo max)." }, { status: 400 });
+    if (referencePath && !referencePath.startsWith(`${authUser.id}/impress-tmp/`)) {
+      return NextResponse.json({ error: "Photo de référence introuvable." }, { status: 400 });
     }
+    tempPaths = referencePath ? [mainPath, referencePath] : [mainPath];
+
     if (!description) {
+      await cleanupTempUploads();
       return NextResponse.json(
         { error: "Décris le changement que tu veux voir sur ta photo." },
         { status: 400 }
       );
+    }
+
+    const { data: downloadedMain, error: downloadMainError } = await admin.storage
+      .from("thumbnails")
+      .download(mainPath);
+    if (downloadMainError || !downloadedMain) {
+      console.error("impress main photo download error", downloadMainError);
+      await cleanupTempUploads();
+      return NextResponse.json(
+        { error: "Impossible de récupérer la photo envoyée. Réessaie." },
+        { status: 400 }
+      );
+    }
+    const rawMainBuffer = Buffer.from(await downloadedMain.arrayBuffer());
+    if (rawMainBuffer.length > MAX_UPLOAD_BYTES) {
+      await cleanupTempUploads();
+      return NextResponse.json({ error: "Image trop lourde (12 Mo max)." }, { status: 400 });
     }
 
     // Shares the same credits balance as the thumbnail tool rather than a
@@ -346,12 +396,12 @@ export async function POST(req: NextRequest) {
     }
     const effectiveWatermark = reservation === "ok_trial";
 
-    const inputBuffer = Buffer.from(await file.arrayBuffer());
     let normalizedInput: Buffer;
     try {
-      normalizedInput = await sharp(inputBuffer).rotate().png().toBuffer();
+      normalizedInput = await sharp(rawMainBuffer).rotate().png().toBuffer();
     } catch {
       await releaseReservationIfNeeded();
+      await cleanupTempUploads();
       return NextResponse.json(
         { error: "Cette photo n'a pas pu être lue par le serveur. Essaie de la réexporter en JPEG ou PNG." },
         { status: 400 }
@@ -369,11 +419,24 @@ export async function POST(req: NextRequest) {
     // through to whichever provider supports multiple reference images
     // (Gemini and gpt-image-1 both do, natively — see generateOnce below);
     // silently ignored for FLUX Kontext/Replicate, which only take one.
-    const referenceFile = formData.get("reference");
     let normalizedReference: Buffer | null = null;
-    if (referenceFile instanceof File && referenceFile.size > 0) {
-      if (referenceFile.size > MAX_UPLOAD_BYTES) {
+    if (referencePath) {
+      const { data: downloadedRef, error: downloadRefError } = await admin.storage
+        .from("thumbnails")
+        .download(referencePath);
+      if (downloadRefError || !downloadedRef) {
+        console.error("impress reference photo download error", downloadRefError);
         await releaseReservationIfNeeded();
+        await cleanupTempUploads();
+        return NextResponse.json(
+          { error: "Impossible de récupérer la photo de référence. Réessaie." },
+          { status: 400 }
+        );
+      }
+      const rawReferenceBuffer = Buffer.from(await downloadedRef.arrayBuffer());
+      if (rawReferenceBuffer.length > MAX_UPLOAD_BYTES) {
+        await releaseReservationIfNeeded();
+        await cleanupTempUploads();
         return NextResponse.json(
           { error: "Photo de référence trop lourde (12 Mo max)." },
           { status: 400 }
@@ -381,13 +444,14 @@ export async function POST(req: NextRequest) {
       }
       try {
         normalizedReference = await withTimeout(
-          sharp(Buffer.from(await referenceFile.arrayBuffer())).rotate().png().toBuffer(),
+          sharp(rawReferenceBuffer).rotate().png().toBuffer(),
           20_000,
           "Traitement de la photo de référence"
         );
       } catch (err) {
         console.error("reference image processing error", err);
         await releaseReservationIfNeeded();
+        await cleanupTempUploads();
         return NextResponse.json(
           {
             error:
@@ -397,6 +461,11 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
+    // Nothing past this point still needs the temp uploads, success or
+    // failure — clean them up now rather than scattering the same call
+    // across every later early return.
+    await cleanupTempUploads();
 
     // gpt-image-1's edit endpoint only offers 3 fixed canvases (square,
     // landscape 3:2, portrait 2:3) — always sending "1024x1024" squeezed
@@ -956,6 +1025,7 @@ export async function POST(req: NextRequest) {
       imperfect: resultImperfect || undefined,
     });
   } catch (err) {
+    await cleanupTempUploads();
     await releaseReservationIfNeeded();
     console.error("impress error", err);
     return NextResponse.json(

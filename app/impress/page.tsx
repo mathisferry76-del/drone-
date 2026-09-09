@@ -385,18 +385,57 @@ function ImpressPageInner() {
 
     setLoading(true);
     try {
-      const formData = new FormData();
-      formData.append("image", file);
-      formData.append("description", description.trim());
-      formData.append("jobId", jobId);
-      if (referenceFile) {
-        formData.append("reference", referenceFile);
+      // Neither photo goes through this route's own request body anymore —
+      // a real production 413 (FUNCTION_PAYLOAD_TOO_LARGE, confirmed via
+      // Vercel's own function logs) hit on a source photo + reference photo
+      // combined, even after client-side compression. Each photo now
+      // uploads straight to Supabase Storage from the browser first; only
+      // the resulting paths (a few bytes) go to /api/impress. See
+      // app/api/impress/upload-url/route.ts for the full story.
+      async function uploadToImpressTemp(f: File): Promise<string> {
+        const uploadUrlRes = await fetch("/api/impress/upload-url", {
+          method: "POST",
+          headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
+          signal: controller.signal,
+        });
+        const uploadUrlData: { path?: string; token?: string; error?: string } =
+          await uploadUrlRes.json();
+        if (!uploadUrlRes.ok || !uploadUrlData.path || !uploadUrlData.token) {
+          throw new Error(uploadUrlData.error ?? "Erreur pendant la préparation de l'upload.");
+        }
+        const supabase = getSupabaseBrowser();
+        const { error: uploadError } = await supabase!.storage
+          .from("thumbnails")
+          .uploadToSignedUrl(uploadUrlData.path, uploadUrlData.token, f);
+        if (uploadError) {
+          throw new Error("L'envoi de la photo a échoué. Réessaie.");
+        }
+        return uploadUrlData.path;
+      }
+
+      // Own try/catch: a failure here means generation never started, so
+      // there's nothing for pollForImpressResult (below) to ever recover —
+      // show the real reason directly instead of falling through to the
+      // generic "impossible de contacter le serveur" the outer catch uses
+      // for a failure mid-generation.
+      let mainPath: string;
+      let referencePath: string | undefined;
+      try {
+        mainPath = await uploadToImpressTemp(file);
+        referencePath = referenceFile ? await uploadToImpressTemp(referenceFile) : undefined;
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") throw err;
+        setError(err instanceof Error ? err.message : "Erreur pendant l'envoi de la photo.");
+        return;
       }
 
       const res = await fetch("/api/impress", {
         method: "POST",
-        headers: session ? { Authorization: `Bearer ${session.access_token}` } : undefined,
-        body: formData,
+        headers: {
+          ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mainPath, referencePath, description: description.trim(), jobId }),
         signal: controller.signal,
       });
 
