@@ -538,10 +538,10 @@ export async function POST(req: NextRequest) {
     // Each is only used when the one(s) before it aren't configured on this
     // deployment — not a runtime retry chain, so a mid-request failure
     // surfaces as an error rather than silently billing a second provider.
-    // Note this priority only decides the GENERAL edit path — full-vehicle-
-    // replacement requests always go through gpt-image-1's real inpainting
-    // mask regardless (see replacementMask below), unaffected by any of
-    // this.
+    // Note this priority also decides full-vehicle-replacement requests
+    // when Seedream is selected (see forceOpenAiMaskPath below) — every
+    // other provider still always defers to gpt-image-1's real inpainting
+    // mask for that case regardless of this order.
     //
     // Seedream 5 Pro (ByteDance, via Replicate) moved to the very front —
     // explicit request to try it, after comparative reviews (checked via
@@ -652,6 +652,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // A detected full-replacement forces gpt-image-1's real inpainting mask
+    // for every provider EXCEPT Seedream — explicit, deliberately
+    // experimental request to let Seedream attempt a full-vehicle-
+    // replacement using its own understanding of the prompt instead of a
+    // pixel mask, since that's this route's actual primary use case and
+    // the whole point of trying Seedream in the first place. No masking
+    // primitive is documented in Seedream's confirmed schema (same gap
+    // FLUX Kontext has), so this is a real bet that the model is good
+    // enough at full replacement on its own — the exact bias (keeping the
+    // original object's silhouette instead of truly changing it) that the
+    // mask was built to eliminate for FLUX Kontext could resurface here.
+    // If it does, reverting Seedream's priority (see the comment above the
+    // `provider` assignment) restores the proven gpt-image-1 mask path for
+    // this case too, same as before Seedream existed.
+    const forceOpenAiMaskPath = Boolean(replacementMask) && provider !== "seedream";
+
     // Attaching a reference photo as a second image in the SAME
     // images.edit call has reliably crashed this route hard enough to
     // bypass its own error handling — confirmed three separate times, on
@@ -663,10 +679,11 @@ export async function POST(req: NextRequest) {
     // reference photo never becomes a second `image` entry for OpenAI at
     // all (mask or not): lib/describe-reference.ts describes it in text via
     // a normal single-image vision call instead, and that text is folded
-    // into the prompt below. Gemini's multi-image path is untouched (a
-    // different provider, a different request shape, no evidence of the
-    // same failure) and still gets the reference as a real second image.
-    const willUseOpenAiEditPath = Boolean(replacementMask) || provider === "openai";
+    // into the prompt below. Gemini's and Seedream's multi-image paths are
+    // untouched (a different provider, a different request shape, no
+    // evidence of the same failure) and still get the reference as a real
+    // second image.
+    const willUseOpenAiEditPath = forceOpenAiMaskPath || provider === "openai";
     let referenceForPrompt: Parameters<typeof buildImpressPrompt>[1] = null;
     if (normalizedReference && willUseOpenAiEditPath) {
       referenceForPrompt = speculativeReferenceText
@@ -684,12 +701,12 @@ export async function POST(req: NextRequest) {
     // Whichever "original" this request's candidates will actually be
     // generated from — the OpenAI-canvas-cropped photo whenever generation
     // goes through gpt-image-1 (masked replacement or as the plain
-    // provider), the untouched photo otherwise (FLUX Kontext/Gemini both
-    // accept the photo's native aspect ratio, no fixed-canvas constraint).
-    // Used consistently below for the actual generation call, the
-    // pixel-diff gate and the fidelity judge, so every comparison is made
-    // against the same frame the model actually saw.
-    const usesOpenAiEditPath = Boolean(replacementMask) || provider === "openai";
+    // provider), the untouched photo otherwise (FLUX Kontext/Gemini/
+    // Seedream all accept the photo's native aspect ratio, no fixed-canvas
+    // constraint). Used consistently below for the actual generation call,
+    // the pixel-diff gate and the fidelity judge, so every comparison is
+    // made against the same frame the model actually saw.
+    const usesOpenAiEditPath = willUseOpenAiEditPath;
     const generationInput = usesOpenAiEditPath ? openAiInput : normalizedInput;
 
     // The true "before" frame every candidate is judged against — see
@@ -737,10 +754,11 @@ export async function POST(req: NextRequest) {
     async function generateOnceRaw(): Promise<Buffer> {
       const signal = internalController.signal;
       // The mask takes priority over normal provider selection whenever
-      // it's available (see replacementMask above) — even when FLUX Kontext
-      // is the configured provider, gpt-image-1's real inpainting mask is
-      // the better tool for a full object-replacement request specifically.
-      if (replacementMask || provider === "openai") {
+      // it's available AND the provider isn't Seedream (see
+      // forceOpenAiMaskPath above) — even when FLUX Kontext is the
+      // configured provider, gpt-image-1's real inpainting mask is the
+      // better tool for a full object-replacement request specifically.
+      if (forceOpenAiMaskPath || provider === "openai") {
         if (!openai) throw new Error("OpenAI n'est pas configuré (OPENAI_API_KEY manquante).");
         const uploadable = await toFile(generationInput, "photo.png", { type: "image/png" });
         // Always a single image here, never `[uploadable, referenceUploadable]`
