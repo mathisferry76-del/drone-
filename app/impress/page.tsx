@@ -3,7 +3,12 @@
 import { useState, useRef, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CREDIT_PACKS, GENERATION_CREDIT_COST, VIDEO_CREDIT_COST } from "@/lib/presets";
+import {
+  CREDIT_PACKS,
+  GENERATION_CREDIT_COST,
+  VIDEO_CREDIT_COST,
+  VIDEO_EDIT_CREDIT_COST,
+} from "@/lib/presets";
 import { getSupabaseBrowser, Profile } from "@/lib/supabase";
 import { downloadFile } from "@/lib/download";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
@@ -39,6 +44,16 @@ const VIDEO_EXAMPLES = [
   "Le vent fait légèrement bouger mes cheveux et mes vêtements",
   "La caméra pivote très légèrement autour de la voiture, reflets qui bougent sur la carrosserie",
 ];
+// Édition vidéo (Seedance 2.5, voir app/api/video-edit/route.ts) : on
+// envoie une vidéo existante et on décrit un changement précis à y
+// appliquer, plutôt qu'animer une simple photo — les exemples reflètent
+// cette convention (référencer [Video1], dire quoi changer ET quoi garder,
+// suivant la documentation officielle du modèle).
+const VIDEO_EDIT_EXAMPLES = [
+  "Remplace ma voiture dans [Video1] par une Ferrari 812 rouge, garde exactement le même mouvement de caméra",
+  "Change le fond derrière moi dans [Video1] par un décor de plage au coucher du soleil, garde mon mouvement identique",
+  "Change la couleur de ma voiture dans [Video1] en noir mat, garde tout le reste identique",
+];
 
 // Narration affichée pendant la génération (GeneratingCard) — donne
 // l'impression qu'un vrai travail d'analyse se déroule, plutôt qu'un seul
@@ -56,6 +71,13 @@ const VIDEO_GENERATION_STEPS = [
   "Analyse de ta photo...",
   "Composition du mouvement de caméra...",
   "Génération de la vidéo (Seedance 2.5)...",
+  "Synchronisation du son...",
+  "Encodage final en 720p (peut prendre plusieurs minutes)...",
+];
+const VIDEO_EDIT_GENERATION_STEPS = [
+  "Analyse de ta vidéo...",
+  "Détection du mouvement de caméra et du décor à préserver...",
+  "Application du changement demandé (Seedance 2.5)...",
   "Synchronisation du son...",
   "Encodage final en 720p (peut prendre plusieurs minutes)...",
 ];
@@ -122,8 +144,12 @@ function ImpressPageInner() {
   // indépendamment l'un de l'autre.
   // Lets a direct link (e.g. the old standalone /animate page, now a
   // redirect) open straight into video mode via ?mode=video.
-  const [mode, setMode] = useState<"image" | "video">(() =>
-    searchParams.get("mode") === "video" ? "video" : "image"
+  const [mode, setMode] = useState<"image" | "video" | "video-edit">(() =>
+    searchParams.get("mode") === "video"
+      ? "video"
+      : searchParams.get("mode") === "video-edit"
+      ? "video-edit"
+      : "image"
   );
   const [videoDescription, setVideoDescription] = useState("");
   // Veo itself only ever renders 16:9 — "portrait" asks the server to crop
@@ -138,6 +164,19 @@ function ImpressPageInner() {
   const [downloadingVideo, setDownloadingVideo] = useState(false);
   const videoAbortControllerRef = useRef<AbortController | null>(null);
   const [grantingCredits, setGrantingCredits] = useState(false);
+
+  // Édition vidéo (Seedance 2.5, voir app/api/video-edit/route.ts) : envoie
+  // une vidéo EXISTANTE, pas une photo — entrée totalement séparée du reste
+  // du formulaire (state `file`/`previewUrl` ci-dessus), avec sa propre
+  // prévisualisation, description, statut de chargement/erreur et résultat.
+  const [editVideoFile, setEditVideoFile] = useState<File | null>(null);
+  const [editVideoPreviewUrl, setEditVideoPreviewUrl] = useState<string | null>(null);
+  const [editVideoDescription, setEditVideoDescription] = useState("");
+  const [editVideoLoading, setEditVideoLoading] = useState(false);
+  const [editVideoError, setEditVideoError] = useState<string | null>(null);
+  const [editVideoResultUrl, setEditVideoResultUrl] = useState<string | null>(null);
+  const [downloadingEditVideo, setDownloadingEditVideo] = useState(false);
+  const editVideoAbortControllerRef = useRef<AbortController | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -184,6 +223,21 @@ function ImpressPageInner() {
     const reader = new FileReader();
     reader.onload = () => setPreviewUrl(reader.result as string);
     reader.readAsDataURL(compressed);
+  }
+
+  // No client-side compression here (unlike handleFileChange for photos) —
+  // compressImageFile only handles images, and there's no equivalent
+  // client-side video re-encode in this codebase. The server (app/api/
+  // video-edit/route.ts) enforces the real limits (50 Mo sanity ceiling,
+  // 4s max duration) instead.
+  function handleEditVideoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setEditVideoError(null);
+    setEditVideoResultUrl(null);
+    setEditVideoFile(f);
+    if (editVideoPreviewUrl) URL.revokeObjectURL(editVideoPreviewUrl);
+    setEditVideoPreviewUrl(URL.createObjectURL(f));
   }
 
   async function handleReferenceFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -486,6 +540,88 @@ function ImpressPageInner() {
     videoAbortControllerRef.current?.abort();
   }
 
+  async function handleGenerateVideoEdit() {
+    setEditVideoError(null);
+    if (!editVideoFile) {
+      setEditVideoError("Ajoute d'abord une vidéo.");
+      return;
+    }
+    if (!editVideoDescription.trim()) {
+      setEditVideoError("Décris le changement que tu veux voir dans la vidéo.");
+      return;
+    }
+    if (!session) {
+      setEditVideoError("Connecte-toi d'abord.");
+      return;
+    }
+
+    setEditVideoResultUrl(null);
+    const controller = new AbortController();
+    editVideoAbortControllerRef.current = controller;
+    setEditVideoLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("video", editVideoFile);
+      formData.append("description", editVideoDescription.trim());
+
+      const res = await fetch("/api/video-edit", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        body: formData,
+        signal: controller.signal,
+      });
+
+      let data: { video?: string; error?: string };
+      try {
+        data = await res.json();
+      } catch {
+        setEditVideoError(
+          "Le serveur a mis trop de temps à répondre ou a coupé la connexion. Réessaie."
+        );
+        return;
+      }
+
+      if (!res.ok || !data.video) {
+        setEditVideoError(data.error ?? "Erreur pendant l'édition vidéo.");
+        return;
+      }
+      setEditVideoResultUrl(data.video);
+
+      if (session) {
+        const supabase = getSupabaseBrowser();
+        const { data: fresh } = await supabase!
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .single();
+        if (fresh) setProfile(fresh as Profile);
+      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        if (session) {
+          setTimeout(async () => {
+            const supabase = getSupabaseBrowser();
+            const { data: fresh } = await supabase!
+              .from("profiles")
+              .select("*")
+              .eq("id", session.user.id)
+              .single();
+            if (fresh) setProfile(fresh as Profile);
+          }, 800);
+        }
+      } else {
+        setEditVideoError("Impossible de contacter le serveur.");
+      }
+    } finally {
+      setEditVideoLoading(false);
+      editVideoAbortControllerRef.current = null;
+    }
+  }
+
+  function handleCancelVideoEditGenerate() {
+    editVideoAbortControllerRef.current?.abort();
+  }
+
   // A plain <a href download> silently fails here — videoUrl is a signed
   // Supabase Storage URL on a different origin than the site, and browsers
   // ignore `download` for cross-origin links, just navigating to the file
@@ -499,6 +635,18 @@ function ImpressPageInner() {
       setVideoError("Le téléchargement a échoué. Réessaie.");
     } finally {
       setDownloadingVideo(false);
+    }
+  }
+
+  async function handleDownloadEditVideo() {
+    if (!editVideoResultUrl) return;
+    setDownloadingEditVideo(true);
+    try {
+      await downloadFile(editVideoResultUrl, "video-editee.mp4");
+    } catch {
+      setEditVideoError("Le téléchargement a échoué. Réessaie.");
+    } finally {
+      setDownloadingEditVideo(false);
     }
   }
 
@@ -672,6 +820,15 @@ function ImpressPageInner() {
         >
           🎬 Vidéo
         </button>
+        <button
+          type="button"
+          onClick={() => setMode("video-edit")}
+          className={`px-4 py-1.5 transition ${
+            mode === "video-edit" ? "bg-emerald-400 text-black" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          ✂️ Éditer vidéo
+        </button>
       </div>
 
       {mode === "image" && hasFreeTrialAvailable && (
@@ -705,42 +862,91 @@ function ImpressPageInner() {
           )}
         </div>
       )}
+      {mode === "video-edit" && (
+        <p className="mt-3 text-sm text-zinc-500">
+          Nouveau — modifie une vidéo que tu as déjà (change un objet, un
+          décor, une couleur) en gardant le mouvement de caméra d&apos;origine.
+          4 secondes maximum, {VIDEO_EDIT_CREDIT_COST} crédits par édition.{" "}
+          {creditsBalance} crédits disponibles (
+          {Math.floor(creditsBalance / VIDEO_EDIT_CREDIT_COST)} édition(s)).
+        </p>
+      )}
 
       <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-2">
         <div className="space-y-6">
-          <div>
-            <label className="mb-2 block text-sm font-semibold text-zinc-300">1. Ta photo</label>
-            <div
-              className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950 ${
-                previewUrl ? "" : "aspect-video"
-              }`}
-              style={previewUrl && previewAspect ? { aspectRatio: previewAspect, maxHeight: "70vh" } : undefined}
-            >
-              {previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={previewUrl}
-                  alt="Aperçu"
-                  className="h-full w-full object-contain"
-                  onLoad={(e) =>
-                    setPreviewAspect(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
-                  }
-                />
-              ) : (
-                <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center text-zinc-400 transition hover:border-zinc-500">
-                  <span className="text-3xl">📷</span>
-                  <span className="mt-2 text-sm">Clique pour choisir une photo</span>
+          {mode === "video-edit" ? (
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-300">
+                1. Ta vidéo (4 secondes maximum)
+              </label>
+              <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950">
+                {editVideoPreviewUrl ? (
+                  <video
+                    src={editVideoPreviewUrl}
+                    controls
+                    loop
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center text-zinc-400 transition hover:border-zinc-500">
+                    <span className="text-3xl">🎬</span>
+                    <span className="mt-2 text-sm">Clique pour choisir une vidéo</span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={handleEditVideoFileChange}
+                    />
+                  </label>
+                )}
+              </div>
+              {editVideoPreviewUrl && (
+                <label className="mt-2 inline-block cursor-pointer text-xs font-semibold text-zinc-400 hover:text-white">
+                  Changer de vidéo
+                  <input
+                    type="file"
+                    accept="video/*"
+                    className="hidden"
+                    onChange={handleEditVideoFileChange}
+                  />
+                </label>
+              )}
+            </div>
+          ) : (
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-zinc-300">1. Ta photo</label>
+              <div
+                className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-zinc-700 bg-zinc-950 ${
+                  previewUrl ? "" : "aspect-video"
+                }`}
+                style={previewUrl && previewAspect ? { aspectRatio: previewAspect, maxHeight: "70vh" } : undefined}
+              >
+                {previewUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={previewUrl}
+                    alt="Aperçu"
+                    className="h-full w-full object-contain"
+                    onLoad={(e) =>
+                      setPreviewAspect(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
+                    }
+                  />
+                ) : (
+                  <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center text-zinc-400 transition hover:border-zinc-500">
+                    <span className="text-3xl">📷</span>
+                    <span className="mt-2 text-sm">Clique pour choisir une photo</span>
+                    <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+                  </label>
+                )}
+              </div>
+              {previewUrl && (
+                <label className="mt-2 inline-block cursor-pointer text-xs font-semibold text-zinc-400 hover:text-white">
+                  Changer de photo
                   <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
                 </label>
               )}
             </div>
-            {previewUrl && (
-              <label className="mt-2 inline-block cursor-pointer text-xs font-semibold text-zinc-400 hover:text-white">
-                Changer de photo
-                <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-              </label>
-            )}
-          </div>
+          )}
 
           {mode === "image" ? (
             <div>
@@ -772,7 +978,7 @@ function ImpressPageInner() {
                 ))}
               </div>
             </div>
-          ) : (
+          ) : mode === "video" ? (
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <label className="block text-sm font-semibold text-zinc-300">
@@ -839,6 +1045,42 @@ function ImpressPageInner() {
                   </p>
                 )}
               </div>
+            </div>
+          ) : (
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="block text-sm font-semibold text-zinc-300">
+                  2. Décris le changement à apporter à la vidéo
+                </label>
+                <span className="text-xs text-zinc-500">
+                  {editVideoDescription.length}/{DESCRIPTION_MAX}
+                </span>
+              </div>
+              <textarea
+                value={editVideoDescription}
+                onChange={(e) => setEditVideoDescription(e.target.value.slice(0, DESCRIPTION_MAX))}
+                rows={3}
+                placeholder="Ex : remplace ma voiture dans [Video1] par une Ferrari rouge, garde exactement le même mouvement"
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-white placeholder:text-zinc-600 focus:border-emerald-400 focus:outline-none"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {VIDEO_EDIT_EXAMPLES.map((ex) => (
+                  <button
+                    key={ex}
+                    type="button"
+                    onClick={() => setEditVideoDescription(ex)}
+                    className="rounded-full border border-zinc-700 px-3 py-1 text-xs text-zinc-400 transition hover:border-zinc-500 hover:text-white"
+                  >
+                    {ex.length > 40 ? ex.slice(0, 40) + "…" : ex}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">
+                Décris à la fois ce qui doit changer et ce qui doit rester
+                identique — le modèle garde le mouvement de caméra et le
+                décor d&apos;origine, seul le point que tu précises est
+                modifié.
+              </p>
             </div>
           )}
 
@@ -907,7 +1149,7 @@ function ImpressPageInner() {
                 </button>
               )}
             </>
-          ) : (
+          ) : mode === "video" ? (
             <>
               {videoError && <p className="text-sm text-red-400">{videoError}</p>}
 
@@ -925,6 +1167,27 @@ function ImpressPageInner() {
                   className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Générer la vidéo → {VIDEO_CREDIT_COST} crédits
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {editVideoError && <p className="text-sm text-red-400">{editVideoError}</p>}
+
+              {editVideoLoading ? (
+                <button
+                  onClick={handleCancelVideoEditGenerate}
+                  className="w-full rounded-full border border-red-500/60 px-6 py-3 font-bold text-red-400 transition hover:bg-red-500/10"
+                >
+                  Annuler
+                </button>
+              ) : (
+                <button
+                  onClick={handleGenerateVideoEdit}
+                  disabled={!editVideoFile}
+                  className="w-full rounded-full bg-emerald-400 px-6 py-3 font-bold text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Éditer la vidéo → {VIDEO_EDIT_CREDIT_COST} crédits
                 </button>
               )}
             </>
@@ -1023,7 +1286,7 @@ function ImpressPageInner() {
                 </Link>
               ))}
             </>
-          ) : (
+          ) : mode === "video" ? (
             <>
               <div
                 className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 ${
@@ -1050,6 +1313,46 @@ function ImpressPageInner() {
                   className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400 disabled:opacity-60"
                 >
                   {downloadingVideo ? "Téléchargement..." : "Télécharger la vidéo"}
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <div
+                className={`relative flex w-full items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/50 ${
+                  editVideoResultUrl ? "" : "aspect-video"
+                }`}
+              >
+                {editVideoLoading ? (
+                  <GeneratingCard steps={VIDEO_EDIT_GENERATION_STEPS} />
+                ) : editVideoResultUrl ? (
+                  <video
+                    src={editVideoResultUrl}
+                    controls
+                    autoPlay
+                    loop
+                    className="h-full w-full object-contain"
+                  />
+                ) : editVideoPreviewUrl ? (
+                  <video
+                    src={editVideoPreviewUrl}
+                    muted
+                    loop
+                    className="h-full w-full object-contain opacity-40"
+                  />
+                ) : (
+                  <p className="px-6 text-center text-sm text-zinc-600">
+                    La vidéo éditée apparaîtra ici après génération.
+                  </p>
+                )}
+              </div>
+              {editVideoResultUrl && (
+                <button
+                  onClick={handleDownloadEditVideo}
+                  disabled={downloadingEditVideo}
+                  className="rounded-full border border-zinc-600 px-6 py-3 text-center font-semibold text-white transition hover:border-zinc-400 disabled:opacity-60"
+                >
+                  {downloadingEditVideo ? "Téléchargement..." : "Télécharger la vidéo"}
                 </button>
               )}
             </>

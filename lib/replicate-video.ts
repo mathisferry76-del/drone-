@@ -94,6 +94,61 @@ export async function animateImageToVideoReplicate(
   }
 }
 
+// True video-to-video "editing": takes an existing video clip as a
+// reference instead of a still image, and applies a described change while
+// preserving the source clip's own motion/camera work — confirmed directly
+// from Seedance 2.5's own model README ("Video editing: Provide a
+// reference video and describe changes — replace an object, change a
+// background, or alter the style. The model preserves the original motion
+// and camera work while making your edits."), including the exact prompt
+// convention it documents: reference the video as [Video1] and state both
+// what to change and what to keep. `image` is deliberately omitted — the
+// schema says it "cannot be combined with reference images, videos, or
+// audios". `duration: -1` and `aspect_ratio: "adaptive"` are both required
+// for this mode per the confirmed schema notes (not just defaults), which
+// also means the output duration follows the input clip rather than a
+// fixed value we control — app/api/video-edit/route.ts caps the accepted
+// input length up front specifically because of that, since this mode
+// bills per second of the reference video at Replicate's priciest tier
+// ($0.9676/s at 720p, "video_in" pricing — 4x the plain image-to-video
+// rate).
+export async function editVideoReplicate(
+  video: Buffer,
+  prompt: string,
+  signal?: AbortSignal
+): Promise<string> {
+  const key = getReplicateKey();
+  if (!key) {
+    throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
+  }
+  const replicate = getClient(key);
+
+  try {
+    const raw = await replicate.run(
+      SEEDANCE_MODEL,
+      {
+        input: {
+          reference_videos: [video],
+          prompt,
+          duration: -1,
+          resolution: "720p",
+          aspect_ratio: "adaptive",
+          generate_audio: true,
+        },
+        signal,
+      }
+    );
+    const output = (Array.isArray(raw) ? raw[0] : raw) as FileOutput;
+    return output.url().toString();
+  } catch (err) {
+    if (err instanceof Error && "response" in err) {
+      const apiErr = err as ApiError;
+      throw new ReplicateVideoApiError(apiErr.response?.status ?? 500, apiErr.message);
+    }
+    throw err;
+  }
+}
+
 export function describeReplicateVideoError(err: unknown): string {
   if (err instanceof ReplicateVideoApiError) {
     switch (err.status) {
