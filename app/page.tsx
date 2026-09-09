@@ -10,6 +10,19 @@ import CountUp from "@/components/motion/CountUp";
 import GradientOrb from "@/components/motion/GradientOrb";
 import FaqAccordion from "@/components/FaqAccordion";
 import ImpressHeroCta from "@/components/ImpressHeroCta";
+import ExamplesShowcase, { type ShowcaseExample } from "@/components/ExamplesShowcase";
+
+const SHOWCASE_EXAMPLES: ShowcaseExample[] = [
+  {
+    id: "peugeot-ferrari",
+    kind: "video",
+    before: "/examples/impress/peugeot-ferrari-avant.mp4",
+    after: "/examples/impress/peugeot-ferrari-apres.mp4",
+    badge: "ULTRA-RÉALISTE",
+    title: "Peugeot 207 → Ferrari 812 Superfast",
+    caption: "Même allée, même lumière, seule la voiture change.",
+  },
+];
 
 const RESULT_ACCENTS = [
   { border: "border-emerald-400/30 hover:border-emerald-400/60", tag: "bg-emerald-400 text-black" },
@@ -158,6 +171,20 @@ export default function Home() {
           ))}
         />
       </div>
+
+      <FadeInSection className="relative mx-auto w-full max-w-5xl overflow-hidden px-6 py-16">
+        <GradientOrb color="rgba(52,211,153,0.14)" className="left-1/2 top-0 -translate-x-1/2 -z-10" />
+        <h2 className="text-center text-2xl font-bold sm:text-3xl">
+          La différence MIN IA
+        </h2>
+        <p className="mx-auto mt-3 max-w-xl text-center text-zinc-400">
+          Un exemple réel, généré par la fonctionnalité &quot;Impressionne tes
+          potes&quot;.
+        </p>
+        <div className="mt-10">
+          <ExamplesShowcase examples={SHOWCASE_EXAMPLES} />
+        </div>
+      </FadeInSection>
 
       <FadeInSection className="relative mx-auto w-full max-w-5xl overflow-hidden px-6 py-16">
         <GradientOrb color="rgba(250,204,21,0.14)" className="left-1/2 top-0 -translate-x-1/2 -z-10" />
