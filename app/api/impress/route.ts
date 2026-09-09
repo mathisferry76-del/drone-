@@ -5,6 +5,7 @@ import { randomUUID } from "crypto";
 import { GENERATION_CREDIT_COST } from "@/lib/presets";
 import { getOpenAI } from "@/lib/openai";
 import { getGeminiKey, editImageWithGemini, describeGeminiError } from "@/lib/gemini";
+import { editImageWithSeedream, describeSeedreamError } from "@/lib/seedream";
 import { getFalKey, editImageWithFlux, describeFalError } from "@/lib/fal";
 import { getReplicateKey, editImageWithReplicate, describeReplicateError } from "@/lib/replicate";
 import { pickBestImage } from "@/lib/pick-best";
@@ -537,8 +538,22 @@ export async function POST(req: NextRequest) {
     // Each is only used when the one(s) before it aren't configured on this
     // deployment — not a runtime retry chain, so a mid-request failure
     // surfaces as an error rather than silently billing a second provider.
+    // Note this priority only decides the GENERAL edit path — full-vehicle-
+    // replacement requests always go through gpt-image-1's real inpainting
+    // mask regardless (see replacementMask below), unaffected by any of
+    // this.
     //
-    // Gemini moved to the front: Gemini 2.5 Flash Image has a strong
+    // Seedream 5 Pro (ByteDance, via Replicate) moved to the very front —
+    // explicit request to try it, after comparative reviews (checked via
+    // web search) rated it closely against Google's "Nano Banana 2"
+    // (Gemini 3.1 Flash Image) on brand/logo fidelity specifically; Nano
+    // Banana 2 was already tried once tonight and rolled back after real
+    // production regressions on this app, so Seedream is the untested
+    // option being tried instead. Explicitly meant to be easy to roll back
+    // to Gemini 2.5 Flash Image (just move `getGeminiKey() ? "gemini"`
+    // back above this line) if it doesn't hold up — see lib/seedream.ts.
+    //
+    // Gemini stays next in line: Gemini 2.5 Flash Image has a strong
     // reputation specifically for this kind of realistic object-in-photo
     // compositing — reflections and lighting consistency on the inserted/
     // replaced object in particular — plausibly stronger than FLUX Kontext
@@ -547,7 +562,15 @@ export async function POST(req: NextRequest) {
     // starved it of ever actually running here). Only takes effect where
     // GEMINI_API_KEY is actually configured; falls through to the same
     // order as before otherwise.
-    const provider: "flux-fal" | "flux-replicate" | "openai" | "gemini" | null = getGeminiKey()
+    const provider:
+      | "seedream"
+      | "flux-fal"
+      | "flux-replicate"
+      | "openai"
+      | "gemini"
+      | null = getReplicateKey()
+      ? "seedream"
+      : getGeminiKey()
       ? "gemini"
       : getFalKey()
       ? "flux-fal"
@@ -649,7 +672,11 @@ export async function POST(req: NextRequest) {
       referenceForPrompt = speculativeReferenceText
         ? { kind: "description", text: speculativeReferenceText }
         : null;
-    } else if (normalizedReference && provider === "gemini") {
+    } else if (normalizedReference && (provider === "gemini" || provider === "seedream")) {
+      // Seedream's `image_input` natively accepts multiple reference images
+      // in one call (its own confirmed schema documents up to 10) — no
+      // evidence of the images.edit-specific crash above, same reasoning
+      // already established for Gemini's multi-image path.
       referenceForPrompt = { kind: "image" };
     }
     const prompt = buildImpressPrompt(description, referenceForPrompt);
@@ -766,6 +793,15 @@ export async function POST(req: NextRequest) {
       }
       if (provider === "flux-replicate") {
         return editImageWithReplicate(normalizedInput, prompt, signal);
+      }
+      if (provider === "seedream") {
+        // image_input accepts multiple images natively (see lib/seedream.ts
+        // and the referenceForPrompt branch above) — same reasoning as
+        // Gemini just below.
+        const seedreamImages = normalizedReference
+          ? [normalizedInput, normalizedReference]
+          : [normalizedInput];
+        return editImageWithSeedream(seedreamImages, prompt, signal);
       }
       // Gemini's generateContent natively takes multiple images in one
       // request too — same reasoning as gpt-image-1 above, just passed as a
@@ -932,6 +968,8 @@ export async function POST(req: NextRequest) {
           ? describeReplicateError(err)
           : provider === "gemini"
           ? describeGeminiError(err)
+          : provider === "seedream"
+          ? describeSeedreamError(err)
           : describeAiError(err);
       return NextResponse.json({ error: message }, { status: 502 });
     }
