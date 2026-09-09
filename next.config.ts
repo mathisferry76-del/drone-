@@ -46,7 +46,13 @@ const nextConfig: NextConfig = {
   // "external" only means "don't bundle them as JS", not "find their files".
   outputFileTracingIncludes: {
     "/api/animate": ["./node_modules/@ffmpeg-installer/**/*"],
-    "/api/video-edit": ["./node_modules/@ffprobe-installer/**/*"],
+    // Both needed here now: @ffprobe-installer for the duration cap,
+    // @ffmpeg-installer for normalizeVideoForSeedance's re-encode
+    // (lib/video-normalize.ts).
+    "/api/video-edit": [
+      "./node_modules/@ffprobe-installer/**/*",
+      "./node_modules/@ffmpeg-installer/**/*",
+    ],
   },
 };
 

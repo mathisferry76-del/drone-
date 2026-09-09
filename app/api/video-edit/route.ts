@@ -6,6 +6,7 @@ import {
   describeReplicateVideoError,
 } from "@/lib/replicate-video";
 import { getVideoDurationSeconds } from "@/lib/probe-video";
+import { normalizeVideoForSeedance } from "@/lib/video-normalize";
 import { VIDEO_EDIT_CREDIT_COST } from "@/lib/presets";
 import { getSupabaseAdmin, getUserFromAuthHeader, Profile } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
@@ -149,6 +150,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let normalizedVideo: Buffer;
+    try {
+      normalizedVideo = await normalizeVideoForSeedance(videoBuffer);
+    } catch (err) {
+      console.error("normalizeVideoForSeedance error", err);
+      return NextResponse.json(
+        { error: "Cette vidéo n'a pas pu être préparée par le serveur. Essaie de la réexporter en MP4." },
+        { status: 400 }
+      );
+    }
+
     // Real credit reservation — same as app/api/animate/route.ts, no
     // free-trial/owner bypass, since this always costs real money to
     // generate.
@@ -176,7 +188,7 @@ export async function POST(req: NextRequest) {
     }
 
     const prompt = buildVideoEditPrompt(description);
-    const predictionId = await startVideoEdit(videoBuffer, prompt);
+    const predictionId = await startVideoEdit(normalizedVideo, prompt);
 
     // Ownership + reservation are recorded server-side (video_edit_jobs),
     // not carried by the client as a token — status/route.ts is a separate,
