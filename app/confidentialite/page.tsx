@@ -50,11 +50,14 @@ export default function ConfidentialitePage() {
         <h2 className="text-lg font-bold text-white">Destinataires des données</h2>
         <p>Certaines données sont partagées avec les prestataires suivants, uniquement pour faire fonctionner le service :</p>
         <ul className="list-disc space-y-1 pl-5">
-          <li><strong>Supabase</strong> — hébergement de la base de données, de l&apos;authentification et du stockage des miniatures</li>
+          <li><strong>Supabase</strong> — hébergement de la base de données, de l&apos;authentification et du stockage des photos/vidéos</li>
           <li><strong>Stripe</strong> — traitement des paiements et de la facturation</li>
           <li><strong>OpenAI</strong> — traitement des photos envoyées lorsque tu utilises l&apos;amélioration par intelligence artificielle</li>
-          <li><strong>Vercel</strong> — hébergement du site</li>
+          <li><strong>Google (Gemini API)</strong> — traitement des photos envoyées, lorsque ce fournisseur est utilisé pour l&apos;amélioration par intelligence artificielle</li>
+          <li><strong>Replicate et fal.ai</strong> — traitement des photos et vidéos envoyées, lorsque ces fournisseurs sont utilisés pour l&apos;amélioration par IA ou l&apos;animation vidéo</li>
+          <li><strong>Vercel</strong> — hébergement du site et mesure d&apos;audience anonyme (Vercel Analytics, sans cookie)</li>
           <li><strong>Resend</strong> — envoi des emails de connexion et de notification</li>
+          <li><strong>Google Ads</strong> — mesure de l&apos;efficacité de nos campagnes publicitaires, si activée sur ce déploiement (voir section Cookies ci-dessous)</li>
         </ul>
         <p>Aucune donnée n&apos;est vendue à des tiers.</p>
       </section>
@@ -72,9 +75,15 @@ export default function ConfidentialitePage() {
       <section className="mt-8 space-y-3">
         <h2 className="text-lg font-bold text-white">Cookies</h2>
         <p>
-          Le site utilise uniquement des cookies/stockage technique
-          nécessaires à ta connexion (session de compte). Aucun cookie
-          publicitaire ou traceur tiers n&apos;est utilisé à ce jour.
+          Le site utilise des cookies/stockage technique nécessaires à ta
+          connexion (session de compte), exemptés de consentement. Il utilise
+          aussi Vercel Analytics pour compter les visites de façon agrégée,
+          sans cookie ni identifiant individuel.
+        </p>
+        <p>
+          Si des campagnes publicitaires sont actives, le site utilise Google
+          Ads pour mesurer leur efficacité, ce qui dépose des cookies de
+          mesure de conversion sur ton navigateur.
         </p>
       </section>
 

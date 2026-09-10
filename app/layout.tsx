@@ -1,13 +1,11 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CursorGlow from "@/components/motion/CursorGlow";
+import CookieConsent from "@/components/CookieConsent";
 import "./globals.css";
-
-const GOOGLE_ADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -61,20 +59,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-black text-white">
-        {GOOGLE_ADS_ID && (
-          <>
-            <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`}
-              strategy="afterInteractive"
-            />
-            <Script id="google-ads-tag" strategy="afterInteractive">
-              {`window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${GOOGLE_ADS_ID}');`}
-            </Script>
-          </>
-        )}
         <div aria-hidden className="grain-overlay" />
         <CursorGlow />
         <Navbar />
@@ -86,6 +70,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             déploiement sur Vercel ; c'était le chiffre manquant pour
             calculer le taux de conversion visiteurs → inscriptions. */}
         <Analytics />
+        <CookieConsent />
       </body>
     </html>
   );
