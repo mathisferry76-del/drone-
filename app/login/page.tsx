@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase";
+import { isInAppBrowser } from "@/lib/in-app-browser";
 
 export default function LoginPage() {
   return (
@@ -23,6 +24,7 @@ function LoginForm() {
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [forgotStatus, setForgotStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [inAppBrowser, setInAppBrowser] = useState(false);
   const searchParams = useSearchParams();
   const refCode = searchParams.get("ref");
   // Lets an entry point other than the navbar (e.g. the landing page's
@@ -33,6 +35,16 @@ function LoginForm() {
   const router = useRouter();
 
   const supabase = getSupabaseBrowser();
+
+  // Google refuses OAuth sign-in from embedded in-app browsers (TikTok,
+  // Instagram, Facebook...) outright — a real, confirmed cause of TikTok
+  // traffic converting at 0%, since "Continuer avec Google" is the first
+  // button on this page. See lib/in-app-browser.ts for the full story.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    setInAppBrowser(isInAppBrowser(navigator.userAgent));
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -192,6 +204,14 @@ function LoginForm() {
         </svg>
         Continuer avec Google
       </button>
+
+      {inAppBrowser && (
+        <p className="mt-3 rounded-lg border border-amber-800/50 bg-amber-950/30 p-3 text-xs text-amber-300">
+          Google ne fonctionne pas depuis le navigateur intégré de
+          TikTok/Instagram — utilise le lien magique ou le mot de passe
+          ci-dessous à la place, ça marche très bien ici.
+        </p>
+      )}
 
       <div className="mt-6 flex items-center gap-3 text-xs text-zinc-600">
         <div className="h-px flex-1 bg-zinc-800" />
