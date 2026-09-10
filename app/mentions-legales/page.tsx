@@ -15,7 +15,7 @@ export default function MentionsLegalesPage() {
         <p>
           Le site MIN IA (accessible à l&apos;adresse min-ia.fr) est édité par :<br />
           Mathis Ferry<br />
-          Rue du Général Koenig, 76360 Barentin, France<br />
+          76360 Barentin, France<br />
           Email : <a href="mailto:contact@min-ia.fr" className="text-emerald-400 hover:underline">contact@min-ia.fr</a>
         </p>
         <p className="text-zinc-500">

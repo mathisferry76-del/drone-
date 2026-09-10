@@ -54,7 +54,22 @@ export async function editImageWithGemini(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contents: [{ parts }] }),
+      // generationConfig.imageConfig.imageSize confirmed via multiple
+      // independent sources (Google's own "now ready for production with
+      // new aspect ratios" announcement for this exact model, plus several
+      // real curl/JSON examples) — "512"/"1K"/"2K"/"4K", default "1K"
+      // (1024x1024) when omitted, which is what every generation got
+      // before this. Purely additive and safe to add blind (no live way to
+      // test this session): if Gemini ever ignores or doesn't recognize
+      // this field, behavior is identical to today (silently falls back to
+      // the same 1K default) rather than erroring — Google's JSON API
+      // doesn't reject unrecognized fields the way Replicate's Cog schemas
+      // do, unlike every other provider integration in this codebase where
+      // an unconfirmed field is a real risk.
+      body: JSON.stringify({
+        contents: [{ parts }],
+        generationConfig: { imageConfig: { imageSize: "2K" } },
+      }),
       signal,
     }
   );

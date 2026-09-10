@@ -5,6 +5,7 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CursorGlow from "@/components/motion/CursorGlow";
 import CookieConsent from "@/components/CookieConsent";
+import { LiveActivityToast } from "@/components/LiveActivity";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -83,6 +84,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             calculer le taux de conversion visiteurs → inscriptions. */}
         <Analytics />
         <CookieConsent />
+        <LiveActivityToast />
       </body>
     </html>
   );

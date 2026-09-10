@@ -11,6 +11,18 @@ function tierFromPriceId(priceId: string | null | undefined) {
   return SUBSCRIPTION_TIERS.find((t) => t.priceId === priceId) ?? null;
 }
 
+// Logs a real, anonymous marker for the homepage's live activity feed
+// (app/api/activity/route.ts) — no user_id or email, just "this kind of
+// event happened at this time". Only ever called right after a real Stripe
+// event is confirmed below, never fabricated. Best-effort: a failure here
+// must never fail the webhook response itself (Stripe would retry the
+// whole event, including the part that already succeeded).
+async function logActivity(admin: ReturnType<typeof getSupabaseAdmin>, kind: "pack" | "subscription") {
+  if (!admin) return;
+  const { error } = await admin.from("activity_events").insert({ kind });
+  if (error) console.error("activity_events insert error", error);
+}
+
 // Stripe payment events keep the profiles table in sync with reality
 // server-side — this is what makes the credits balance and subscription
 // status checks in the app trustworthy instead of a client-reported value
@@ -92,6 +104,7 @@ export async function POST(req: NextRequest) {
               stripe_subscription_id: subscriptionId ?? null,
             })
             .eq("id", userId);
+          await logActivity(admin, "subscription");
           break;
         }
 
@@ -118,6 +131,8 @@ export async function POST(req: NextRequest) {
         });
         if (creditError) {
           console.error("stripe webhook: add_credits failed", creditError);
+        } else {
+          await logActivity(admin, "pack");
         }
         break;
       }

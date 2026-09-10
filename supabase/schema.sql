@@ -370,3 +370,22 @@ alter table public.stripe_processed_events enable row level security;
 -- Aucune policy pour anon/authenticated, volontairement : jamais lu ou écrit
 -- depuis le navigateur, seulement par le webhook via le client admin
 -- (service_role, qui contourne RLS).
+
+-- Fil d'activité en direct sur la home (compteur + notifications) — explicite
+-- demande de rester 100% honnête : chaque ligne correspond à un événement
+-- RÉEL (achat de pack ou souscription confirmés par le webhook Stripe),
+-- jamais fabriqué. Pas de user_id ni email stockés ici : ces événements sont
+-- affichés publiquement à tout visiteur du site (app/api/activity/route.ts),
+-- donc rien qui identifie qui que ce soit n'y transite, uniquement le type
+-- d'événement et l'heure. Les générations n'ont pas besoin de leur propre
+-- ligne ici : la table generations existante sert déjà de source pour ça.
+create table if not exists public.activity_events (
+  id bigserial primary key,
+  kind text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.activity_events enable row level security;
+-- Aucune policy pour anon/authenticated, volontairement : écrit uniquement
+-- par le webhook Stripe (service_role), lu uniquement par notre propre route
+-- /api/activity (service_role aussi) qui renvoie une version agrégée et
+-- anonyme — jamais interrogée directement depuis le navigateur.
