@@ -11,6 +11,7 @@ import GradientOrb from "@/components/motion/GradientOrb";
 import FaqAccordion from "@/components/FaqAccordion";
 import ImpressHeroCta from "@/components/ImpressHeroCta";
 import ExamplesShowcase, { type ShowcaseExample } from "@/components/ExamplesShowcase";
+import LifestyleMosaicBackground from "@/components/LifestyleMosaicBackground";
 
 const SHOWCASE_EXAMPLES: ShowcaseExample[] = [
   {
@@ -129,6 +130,7 @@ export default function Home() {
   return (
     <div className="flex flex-col">
       <section className="relative overflow-hidden">
+        <LifestyleMosaicBackground />
         <div aria-hidden className="sci-grid pointer-events-none absolute inset-x-0 top-0 h-[36rem]" />
         <div
           aria-hidden
