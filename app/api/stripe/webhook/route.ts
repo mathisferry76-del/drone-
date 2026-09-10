@@ -41,6 +41,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Signature invalide." }, { status: 400 });
   }
 
+  // Stripe explicitly documents at-least-once delivery — the same event can
+  // arrive more than once (network retry, a manual resend from the Stripe
+  // dashboard). Without this, a duplicate checkout.session.completed or
+  // invoice.paid would call add_credits() twice for one real payment. The
+  // table's primary key does the actual dedup work atomically: if two
+  // deliveries of the same event race each other, only one insert succeeds
+  // — the other hits a unique-violation and is treated as "already
+  // processed" instead of a real error.
+  const { error: dedupError } = await admin
+    .from("stripe_processed_events")
+    .insert({ event_id: event.id });
+  if (dedupError) {
+    if (dedupError.code === "23505") {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    console.error("stripe webhook dedup insert error", dedupError);
+    return NextResponse.json({ error: "Erreur pendant la vérification de déduplication." }, { status: 500 });
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {

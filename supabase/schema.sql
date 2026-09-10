@@ -323,3 +323,23 @@ revoke execute on function public.add_credits(uuid, int) from public, anon, auth
 grant execute on function public.reserve_credits(uuid, int, boolean) to service_role;
 grant execute on function public.release_credits_reservation(uuid, text, int) to service_role;
 grant execute on function public.add_credits(uuid, int) to service_role;
+
+-- Sécurité audit (2026-09-10) : Stripe garantit la livraison "at-least-once"
+-- de ses webhooks et documente explicitement que le même événement peut être
+-- envoyé plusieurs fois (retry réseau, nouvel envoi manuel depuis le
+-- dashboard Stripe) — sans déduplication, deux livraisons du même
+-- checkout.session.completed ou invoice.paid appellent add_credits() deux
+-- fois, créditant le compte en double pour un seul paiement réel. Cette
+-- table enregistre chaque event.id Stripe déjà traité ; la clé primaire
+-- fait tout le travail de déduplication de façon atomique (deux requêtes
+-- concurrentes sur le même event.id : une seule réussit l'insert, l'autre
+-- reçoit une violation de contrainte unique et s'arrête avant de créditer
+-- quoi que ce soit) — voir app/api/stripe/webhook/route.ts.
+create table if not exists public.stripe_processed_events (
+  event_id text primary key,
+  created_at timestamptz not null default now()
+);
+alter table public.stripe_processed_events enable row level security;
+-- Aucune policy pour anon/authenticated, volontairement : jamais lu ou écrit
+-- depuis le navigateur, seulement par le webhook via le client admin
+-- (service_role, qui contourne RLS).
