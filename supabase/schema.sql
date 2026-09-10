@@ -23,6 +23,15 @@ alter table public.profiles add column if not exists bonus_generations int not n
 alter table public.profiles add column if not exists credits_balance int not null default 0;
 alter table public.profiles add column if not exists stripe_subscription_id text;
 
+-- Sécurité audit (2026-09-10) : le bonus de parrainage était crédité au
+-- moment de l'inscription (handle_new_user, plus bas), avant toute vraie
+-- utilisation — un compte jetable (email à usage unique) créé via un lien
+-- de parrainage suffisait à toucher 400 crédits pour le filleul et 600
+-- pour le parrain, sans jamais utiliser le service. Cette colonne marque
+-- si le bonus a déjà été accordé pour CE compte filleul, pour ne le
+-- déclencher qu'une seule fois, au bon moment (voir reserve_credits).
+alter table public.profiles add column if not exists referral_bonus_granted boolean not null default false;
+
 -- Modèle hybride : abonnement mensuel (recharge credits_balance à chaque
 -- renouvellement, ne le plafonne ni ne le remet jamais à zéro) + achat
 -- ponctuel de packs. plan n'est plus une des 4 valeurs fixes de l'ancien
@@ -137,11 +146,15 @@ create policy "Users can delete own generations" on public.generations
 -- Crée automatiquement une ligne de profil à chaque inscription, avec un
 -- code de parrainage unique dérivé de son id (pas de risque de collision).
 -- Si l'inscription vient d'un lien de parrainage (?ref=CODE passé en
--- metadata à signInWithOtp), les deux comptes reçoivent directement des
--- crédits bonus (2 générations pour le filleul, 3 pour le parrain — au tarif
--- de 200 crédits/génération). bonus_generations reste en base pour un
--- déploiement existant mais n'est plus incrémenté : les bonus vont
--- désormais droit dans credits_balance, seul solde lu par l'application.
+-- metadata à signInWithOtp), le lien referred_by est enregistré, mais AUCUN
+-- crédit n'est distribué ici. Sécurité audit (2026-09-10) : distribuer les
+-- 400/600 crédits bonus directement à l'inscription permettait de farmer
+-- des crédits gratuits avec des emails jetables, sans jamais utiliser le
+-- service — le bonus est désormais accordé dans reserve_credits(), au
+-- moment où le filleul consomme réellement sa première génération (essai
+-- gratuit), la seule preuve d'usage réel qu'on ait. bonus_generations
+-- reste en base pour un déploiement existant mais n'est plus incrémenté :
+-- les bonus vont dans credits_balance, seul solde lu par l'application.
 create or replace function public.handle_new_user()
 returns trigger as $$
 declare
@@ -154,13 +167,7 @@ begin
   end if;
 
   insert into public.profiles (id, email, referral_code, referred_by, credits_balance)
-  values (new.id, new.email, new_code, referrer_id, case when referrer_id is not null then 400 else 0 end);
-
-  if referrer_id is not null then
-    update public.profiles
-    set credits_balance = credits_balance + 600
-    where id = referrer_id;
-  end if;
+  values (new.id, new.email, new_code, referrer_id, 0);
 
   return new;
 end;
@@ -226,13 +233,15 @@ as $$
 declare
   v_free_used int;
   v_credits int;
+  v_referred_by uuid;
+  v_referral_bonus_granted boolean;
 begin
   if p_force_paid then
     return 'ok_owner';
   end if;
 
-  select free_generations_used, credits_balance
-  into v_free_used, v_credits
+  select free_generations_used, credits_balance, referred_by, referral_bonus_granted
+  into v_free_used, v_credits, v_referred_by, v_referral_bonus_granted
   from public.profiles
   where id = p_user_id
   for update;
@@ -244,6 +253,24 @@ begin
   if v_free_used < 1 then
     update public.profiles set free_generations_used = free_generations_used + 1
       where id = p_user_id;
+
+    -- Bonus de parrainage validé ici, pas à l'inscription (voir
+    -- handle_new_user) : seulement au moment où ce compte filleul consomme
+    -- réellement sa première génération, la seule preuve d'usage réel
+    -- qu'on ait — closes le farming par emails jetables créés juste pour
+    -- toucher le bonus sans jamais utiliser le service.
+    -- referral_bonus_granted empêche un second déclenchement si ce compte
+    -- redemande plus tard une réservation avec free_used déjà à 0 (ne
+    -- devrait pas arriver, mais coûte rien de le garder atomique ici).
+    if v_referred_by is not null and not v_referral_bonus_granted then
+      update public.profiles
+      set credits_balance = credits_balance + 400, referral_bonus_granted = true
+      where id = p_user_id;
+      update public.profiles
+      set credits_balance = credits_balance + 600
+      where id = v_referred_by;
+    end if;
+
     return 'ok_trial';
   end if;
 

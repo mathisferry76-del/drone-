@@ -68,11 +68,13 @@ export default function ParrainagePage() {
     <div className="mx-auto w-full max-w-2xl px-6 py-16">
       <h1 className="text-3xl font-extrabold">Parraine tes amis créateurs</h1>
       <p className="mt-2 text-zinc-400">
-        Chaque ami qui s&apos;inscrit avec ton lien reçoit{" "}
+        Dès qu&apos;un ami inscrit avec ton lien utilise sa première
+        génération gratuite, il reçoit{" "}
         <span className="font-semibold text-white">400 crédits offerts</span> (2
         générations), et toi tu reçois{" "}
         <span className="font-semibold text-white">600 crédits offerts</span> (3
-        générations) — cumulables sans limite.
+        générations) — cumulables sans limite. Rien n&apos;est crédité tant
+        que ton ami ne s&apos;est pas réellement servi de MIN IA.
       </p>
 
       {error && (
