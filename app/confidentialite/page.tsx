@@ -13,7 +13,7 @@ export default function ConfidentialitePage() {
       <section className="mt-8 space-y-3">
         <h2 className="text-lg font-bold text-white">Responsable du traitement</h2>
         <p>
-          Mathis Ferry, Rue du Général Koenig, 76360 Barentin, France —{" "}
+          Mathis Ferry, 76360 Barentin, France —{" "}
           <a href="mailto:contact@min-ia.fr" className="text-emerald-400 hover:underline">
             contact@min-ia.fr
           </a>

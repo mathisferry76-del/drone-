@@ -12,6 +12,7 @@ import FaqAccordion from "@/components/FaqAccordion";
 import ImpressHeroCta from "@/components/ImpressHeroCta";
 import ExamplesShowcase, { type ShowcaseExample } from "@/components/ExamplesShowcase";
 import LifestyleMosaicBackground from "@/components/LifestyleMosaicBackground";
+import { GenerationsCounter } from "@/components/LiveActivity";
 
 const SHOWCASE_EXAMPLES: ShowcaseExample[] = [
   {
@@ -189,6 +190,8 @@ export default function Home() {
             </span>
           </div>
 
+          <GenerationsCounter className="mt-4 text-xs text-zinc-500" />
+
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
             <span>Résultat en <CountUp value={10} className="font-bold text-white" />s</span>
             <span className="hidden h-4 w-px bg-zinc-800 sm:block" />
@@ -198,17 +201,6 @@ export default function Home() {
           </div>
         </div>
       </section>
-
-      <div className="border-y border-zinc-900 bg-zinc-950/60 py-4">
-        <Marquee
-          className="text-sm font-semibold uppercase tracking-wide text-zinc-600"
-          items={FLEX_TAGS.map((t) => (
-            <span key={t} className="flex items-center gap-2">
-              {t} <span className="text-emerald-400/50">✦</span>
-            </span>
-          ))}
-        />
-      </div>
 
       <FadeInSection className="relative mx-auto w-full max-w-5xl overflow-hidden px-6 py-16">
         <GradientOrb color="rgba(52,211,153,0.14)" className="left-1/2 top-0 -translate-x-1/2 -z-10" />
@@ -223,6 +215,17 @@ export default function Home() {
           <ExamplesShowcase examples={SHOWCASE_EXAMPLES} />
         </div>
       </FadeInSection>
+
+      <div className="border-y border-zinc-900 bg-zinc-950/60 py-4">
+        <Marquee
+          className="text-sm font-semibold uppercase tracking-wide text-zinc-600"
+          items={FLEX_TAGS.map((t) => (
+            <span key={t} className="flex items-center gap-2">
+              {t} <span className="text-emerald-400/50">✦</span>
+            </span>
+          ))}
+        />
+      </div>
 
       <FadeInSection className="relative mx-auto w-full max-w-5xl overflow-hidden px-6 py-16">
         <GradientOrb color="rgba(250,204,21,0.14)" className="left-1/2 top-0 -translate-x-1/2 -z-10" />
