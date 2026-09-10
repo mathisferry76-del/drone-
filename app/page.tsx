@@ -155,7 +155,7 @@ export default function Home() {
           <span className="mb-4 rounded-full border border-zinc-700 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
             ✨ Impressionne tes potes
           </span>
-          <HeroTitle className="max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-6xl">
+          <HeroTitle className="max-w-3xl font-[family-name:var(--font-hero)] text-4xl uppercase leading-[0.95] tracking-tight sm:text-6xl">
             Pretend until you look{" "}
             <span className="bg-gradient-to-r from-emerald-400 to-teal-600 bg-clip-text text-transparent">
               real

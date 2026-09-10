@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Analytics } from "@vercel/analytics/next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Archivo_Black } from "next/font/google";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import CursorGlow from "@/components/motion/CursorGlow";
@@ -14,6 +14,18 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+// Explicit request to match a reference landing page's bold, heavy,
+// uppercase "impact" headline style — Archivo Black is the closest common
+// Google Font to that exact look (single very heavy weight, geometric
+// grotesk), applied only to the homepage hero title via this CSS variable
+// rather than switching the whole site's type, which uses Geist everywhere
+// else.
+const archivoBlack = Archivo_Black({
+  variable: "--font-hero",
+  weight: "400",
   subsets: ["latin"],
 });
 
@@ -56,7 +68,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="fr"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${archivoBlack.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-black text-white">
         <div aria-hidden className="grain-overlay" />
