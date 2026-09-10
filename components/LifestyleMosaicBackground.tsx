@@ -28,9 +28,9 @@ export default function LifestyleMosaicBackground() {
   return (
     <div className="absolute inset-0 -z-20 overflow-hidden">
       <div className="grid h-full grid-cols-3 gap-3 p-3 opacity-70">
-        <VerticalMarquee images={columns[0]} duration={38} />
-        <VerticalMarquee images={columns[1]} duration={30} reverse />
-        <VerticalMarquee images={columns[2]} duration={44} />
+        <VerticalMarquee images={columns[0]} duration={50} />
+        <VerticalMarquee images={columns[1]} duration={40} reverse />
+        <VerticalMarquee images={columns[2]} duration={58} />
       </div>
       <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/70 to-black" />
     </div>
