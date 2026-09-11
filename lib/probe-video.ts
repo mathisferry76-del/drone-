@@ -38,3 +38,34 @@ export async function getVideoDurationSeconds(video: Buffer): Promise<number> {
     await rm(dir, { recursive: true, force: true });
   }
 }
+
+// A silent source clip (no audio track at all) asked to "generate audio
+// consistent with the original ambience" (generate_audio: true in
+// startVideoEdit) has nothing to stay consistent with — a plausible real
+// trigger for Seedance's (E006) "invalid input" rejection seen in
+// production on a video-edit request, distinct from anything about the
+// prompt wording (two different prompts failed identically on the same
+// silent-seeming clip, while a different clip with a much bigger visual
+// change succeeded). Used to fall back to generate_audio: false only when
+// there's truly no source audio to anchor to.
+export async function hasAudioStream(video: Buffer): Promise<boolean> {
+  const dir = await mkdtemp(join(tmpdir(), "video-probe-audio-"));
+  const inputPath = join(dir, "input.mp4");
+  try {
+    await writeFile(inputPath, video);
+    const { stdout } = await execFileAsync(ffprobePath.path, [
+      "-v",
+      "error",
+      "-select_streams",
+      "a",
+      "-show_entries",
+      "stream=codec_type",
+      "-of",
+      "csv=p=0",
+      inputPath,
+    ]);
+    return stdout.trim().length > 0;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}

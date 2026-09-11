@@ -175,7 +175,7 @@ export async function startFirstLastFrameVideo(
 // lose that race; starting the job and polling its status separately
 // (app/api/video-edit/route.ts + status/route.ts) is the only fix that
 // doesn't depend on the job finishing within one request's lifetime.
-export async function startVideoEdit(video: Buffer, prompt: string): Promise<string> {
+export async function startVideoEdit(video: Buffer, prompt: string, generateAudio: boolean): Promise<string> {
   const key = getReplicateKey();
   if (!key) {
     throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
@@ -191,7 +191,7 @@ export async function startVideoEdit(video: Buffer, prompt: string): Promise<str
         duration: -1,
         resolution: "720p",
         aspect_ratio: "adaptive",
-        generate_audio: true,
+        generate_audio: generateAudio,
       },
     });
     return prediction.id;
