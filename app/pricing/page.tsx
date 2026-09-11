@@ -11,6 +11,7 @@ import {
   MIN_EDIT_VIDEO_SECONDS,
   MAX_EDIT_VIDEO_SECONDS,
   getPackDiscountPercent,
+  getPackOriginalPrice,
 } from "@/lib/presets";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
@@ -168,7 +169,10 @@ export default function PricingPage() {
               )}
             </div>
             <p className="mt-1 text-sm text-zinc-400">{pack.tagline}</p>
-            <div className="mt-3 flex items-baseline gap-1">
+            <div className="mt-3 flex items-baseline gap-2">
+              {discount > 0 && (
+                <span className="text-base text-zinc-500 line-through">{getPackOriginalPrice(pack)}</span>
+              )}
               <span className="text-2xl font-extrabold">{pack.price}</span>
             </div>
             <div className="flex-1" />
