@@ -337,20 +337,32 @@ function baseCreditRate(): number {
   return parsePriceEuros(basePack.price) / basePack.credits;
 }
 
+// Partagé entre les packs de crédits et les abonnements : les deux se
+// comparent au même tarif de référence, celui du pack de 200 crédits
+// (0,01€/crédit) — voir le commentaire sur SUBSCRIPTION_TIERS plus bas pour
+// pourquoi c'est aussi la bonne référence pour les abonnements.
+function discountPercentVsBaseRate(item: { price: string; credits: number }): number {
+  const rate = parsePriceEuros(item.price) / item.credits;
+  return Math.round((1 - rate / baseCreditRate()) * 100);
+}
+
+function originalPriceAtBaseRate(item: { price: string; credits: number }): string {
+  return formatPriceEuros(baseCreditRate() * item.credits);
+}
+
 // Les packs sont déjà dégressifs au crédit (voir commentaire ci-dessus) mais
 // ça n'était visible nulle part sur /pricing — calcule la réduction réelle
 // par rapport au prix au crédit du plus petit pack, pour l'afficher en badge
 // et donner une vraie raison de prendre un pack plus gros.
 export function getPackDiscountPercent(pack: CreditPack): number {
-  const rate = parsePriceEuros(pack.price) / pack.credits;
-  return Math.round((1 - rate / baseCreditRate()) * 100);
+  return discountPercentVsBaseRate(pack);
 }
 
 // Prix que ce pack aurait coûté au tarif du plus petit pack (200 crédits),
 // affiché barré à côté du vrai prix — rend la réduction concrète en euros,
 // pas juste en pourcentage.
 export function getPackOriginalPrice(pack: CreditPack): string {
-  return formatPriceEuros(baseCreditRate() * pack.credits);
+  return originalPriceAtBaseRate(pack);
 }
 
 // Abonnements mensuels : rechargent un nombre fixe de crédits à chaque
@@ -412,3 +424,18 @@ export const SUBSCRIPTION_TIERS: SubscriptionTier[] = [
     priceId: process.env.NEXT_PUBLIC_STRIPE_PRICE_SUB_PRO ?? null,
   },
 ];
+
+// Même demande que pour les packs : rendre visible la réduction déjà réelle
+// (voir le commentaire "Tarif dégressif" ci-dessus) plutôt que de la laisser
+// implicite. Se compare au même tarif de référence que les packs de crédits
+// (0,01€/crédit, celui du pack 200) — Starter et Pro sont bien en dessous,
+// Creator un peu moins (~23% au lieu de ~25/30%), ce qui reflète le vrai
+// calcul de marge de chaque palier, pas un chiffre inventé pour que ça
+// monte en escalier.
+export function getSubscriptionDiscountPercent(tier: SubscriptionTier): number {
+  return discountPercentVsBaseRate(tier);
+}
+
+export function getSubscriptionOriginalPrice(tier: SubscriptionTier): string {
+  return originalPriceAtBaseRate(tier);
+}
