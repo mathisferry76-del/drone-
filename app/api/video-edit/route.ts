@@ -5,7 +5,7 @@ import {
   cancelVideoEditPrediction,
   describeReplicateVideoError,
 } from "@/lib/replicate-video";
-import { getVideoDurationSeconds } from "@/lib/probe-video";
+import { getVideoDurationSeconds, hasAudioStream } from "@/lib/probe-video";
 import { normalizeVideoForSeedance } from "@/lib/video-normalize";
 import {
   MIN_EDIT_VIDEO_SECONDS,
@@ -233,8 +233,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Requesting generated audio "consistent with the original ambience"
+    // (generate_audio: true) on a source clip with no audio track at all
+    // has nothing to stay consistent with — only ask for it when there's
+    // real source audio to anchor to.
+    const generateAudio = await hasAudioStream(normalizedVideo);
+
     const prompt = buildVideoEditPrompt(description);
-    const predictionId = await startVideoEdit(normalizedVideo, prompt);
+    const predictionId = await startVideoEdit(normalizedVideo, prompt, generateAudio);
 
     // Ownership + reservation are recorded server-side (video_edit_jobs),
     // not carried by the client as a token — status/route.ts is a separate,

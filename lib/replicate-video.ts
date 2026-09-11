@@ -175,7 +175,7 @@ export async function startFirstLastFrameVideo(
 // lose that race; starting the job and polling its status separately
 // (app/api/video-edit/route.ts + status/route.ts) is the only fix that
 // doesn't depend on the job finishing within one request's lifetime.
-export async function startVideoEdit(video: Buffer, prompt: string): Promise<string> {
+export async function startVideoEdit(video: Buffer, prompt: string, generateAudio: boolean): Promise<string> {
   const key = getReplicateKey();
   if (!key) {
     throw new Error("Replicate n'est pas configuré (REPLICATE_API_TOKEN manquante).");
@@ -191,7 +191,7 @@ export async function startVideoEdit(video: Buffer, prompt: string): Promise<str
         duration: -1,
         resolution: "720p",
         aspect_ratio: "adaptive",
-        generate_audio: true,
+        generate_audio: generateAudio,
       },
     });
     return prediction.id;
@@ -254,6 +254,16 @@ export function describeReplicateVideoError(err: unknown): string {
   // message is more honest here than implying real policy content.
   if (err instanceof Error && err.message.includes("flagged as sensitive")) {
     return "Le contenu a été refusé par le filtre de sécurité automatique du modèle (souvent un faux positif, pas forcément un vrai problème). Réessaie avec une autre vidéo (sans visage en gros plan par exemple) ou reformule la description.";
+  }
+  // (E006) "The input was invalid" — a second, distinct rejection code seen
+  // in production alongside E005, on a request whose description described
+  // a full scene rewrite (new environment, new sound effects, an animated
+  // reaction) rather than the single precise change this editing mode's own
+  // prompt template asks for. Not confirmed against ByteDance's own docs
+  // (undocumented publicly as of writing), so this message stays honest
+  // about the likely cause without overclaiming certainty.
+  if (err instanceof Error && err.message.includes("(E006)")) {
+    return "Le modèle a rejeté cette description comme invalide. Ce mode d'édition vidéo ne gère qu'UN SEUL changement précis à la fois (pas une nouvelle scène entière) — raccourcis ta description à ce seul changement et réessaie.";
   }
   if (err instanceof Error) return err.message;
   return "Erreur inconnue pendant l'animation vidéo (Replicate).";
