@@ -12,6 +12,8 @@ import {
   MAX_EDIT_VIDEO_SECONDS,
   getPackDiscountPercent,
   getPackOriginalPrice,
+  getSubscriptionDiscountPercent,
+  getSubscriptionOriginalPrice,
 } from "@/lib/presets";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
@@ -105,7 +107,9 @@ export default function PricingPage() {
       )}
 
       <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-3">
-        {SUBSCRIPTION_TIERS.map((tier) => (
+        {SUBSCRIPTION_TIERS.map((tier) => {
+          const discount = getSubscriptionDiscountPercent(tier);
+          return (
           <div
             key={tier.id}
             className={`flex flex-col rounded-2xl border p-8 ${
@@ -119,12 +123,22 @@ export default function PricingPage() {
                 Le plus choisi
               </span>
             )}
-            <h2 className="text-xl font-bold">{tier.name}</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold">{tier.name}</h2>
+              {discount > 0 && (
+                <span className="rounded-full bg-emerald-400/10 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
+                  -{discount}%
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-sm font-medium text-zinc-300">
               {tier.credits} crédits chaque mois
             </p>
             <p className="mt-1 text-sm text-zinc-400">{tier.tagline}</p>
-            <div className="mt-4 flex items-baseline gap-1">
+            <div className="mt-4 flex items-baseline gap-2">
+              {discount > 0 && (
+                <span className="text-lg text-zinc-500 line-through">{getSubscriptionOriginalPrice(tier)}</span>
+              )}
               <span className="text-4xl font-extrabold">{tier.price}</span>
               <span className="text-zinc-400">{tier.period}</span>
             </div>
@@ -141,7 +155,8 @@ export default function PricingPage() {
               {loadingId === tier.id ? "Redirection..." : `Choisir ${tier.name}`}
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mx-auto mt-20 max-w-3xl text-center">
