@@ -397,3 +397,30 @@ alter table public.activity_events add column if not exists pseudo text;
 -- par le webhook Stripe (service_role), lu uniquement par notre propre route
 -- /api/activity (service_role aussi) qui renvoie une version agrégée et
 -- anonyme — jamais interrogée directement depuis le navigateur.
+
+-- Objectif de croissance (2026-09-11) : tous les 1000 générations (1000,
+-- 2000, 3000...), un code promo -10% valable 24h est créé automatiquement
+-- (voir lib/growth-milestones.ts, appelé depuis /api/activity à chaque
+-- poll). "threshold" est la clé d'idempotence : /api/activity peut être
+-- appelée par des dizaines de visiteurs en même temps au moment exact où le
+-- compteur franchit un palier — un seul insert réussit (contrainte
+-- primary key), tous les autres échouent avec une violation unique et
+-- abandonnent sans jamais appeler Stripe. promo_code/stripe_*_id/expires_at
+-- restent null le temps que la requête gagnante crée réellement le code
+-- côté Stripe ; si cet appel Stripe échoue, la ligne est supprimée pour
+-- qu'une tentative ultérieure puisse réessayer plutôt que de rester bloquée
+-- sur un palier jamais vraiment activé.
+create table if not exists public.promo_milestones (
+  threshold int primary key,
+  promo_code text,
+  stripe_coupon_id text,
+  stripe_promotion_code_id text,
+  expires_at timestamptz,
+  created_at timestamptz not null default now()
+);
+alter table public.promo_milestones enable row level security;
+-- Aucune policy pour anon/authenticated, volontairement : écrit et lu
+-- uniquement par /api/activity via le client admin (service_role) — le code
+-- promo lui-même est renvoyé dans la réponse JSON publique de cette route
+-- (c'est le but), mais jamais via une requête directe des rôles anon/
+-- authenticated sur cette table.

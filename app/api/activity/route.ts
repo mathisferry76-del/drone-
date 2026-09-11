@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { getStripe } from "@/lib/stripe";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
 import { maskEmailForDisplay } from "@/lib/mask-email";
+import { MILESTONE_STEP, currentMilestoneThreshold, ensureMilestonePromo, getActiveMilestonePromo } from "@/lib/growth-milestones";
 
 export const runtime = "nodejs";
 
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
 
   const admin = getSupabaseAdmin();
   if (!admin) {
-    return NextResponse.json({ total: 0, today: 0, recent: [] });
+    return NextResponse.json({ total: 0, today: 0, recent: [], milestone: { step: MILESTONE_STEP, next: MILESTONE_STEP, activePromo: null } });
   }
 
   const todaySince = startOfTodayInTimezoneISO("Europe/Paris");
@@ -59,6 +61,11 @@ export async function GET(req: NextRequest) {
     admin.from("generations").select("created_at, profiles(email)").order("created_at", { ascending: false }).limit(5),
     admin.from("activity_events").select("kind, created_at, pseudo").order("created_at", { ascending: false }).limit(5),
   ]);
+
+  // Checked on every poll (many concurrent visitors) but only the request
+  // that wins the DB claim ever calls Stripe — see growth-milestones.ts.
+  await ensureMilestonePromo(admin, getStripe(), total ?? 0);
+  const activePromo = await getActiveMilestonePromo(admin);
 
   const merged: ActivityRow[] = [
     ...(recentGenerations ?? []).map((r) => {
@@ -87,5 +94,12 @@ export async function GET(req: NextRequest) {
       pseudo: e.pseudo,
       secondsAgo: Math.max(0, Math.round((Date.now() - new Date(e.createdAt).getTime()) / 1000)),
     })),
+    milestone: {
+      step: MILESTONE_STEP,
+      next: currentMilestoneThreshold(total ?? 0) + MILESTONE_STEP,
+      activePromo: activePromo
+        ? { code: activePromo.code, expiresAt: activePromo.expiresAt, threshold: activePromo.threshold }
+        : null,
+    },
   });
 }
