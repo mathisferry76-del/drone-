@@ -66,13 +66,15 @@ export default function ConfidentialitePage() {
         <h2 className="text-lg font-bold text-white">Fil d&apos;activité en direct</h2>
         <p>
           La page d&apos;accueil affiche un fil de notifications en temps réel
-          (« ma***76 vient de s&apos;abonner ») déclenché uniquement par de
-          vrais achats ou abonnements confirmés par Stripe — jamais une
-          donnée inventée. L&apos;identifiant affiché est une version
-          partiellement masquée de ton adresse email, jamais l&apos;email
-          complet ni ton nom : elle ne permet pas de t&apos;identifier de
-          façon certaine. Si tu ne souhaites pas apparaître, même sous cette
-          forme masquée, écris-nous à contact@min-ia.fr.
+          (« ma***76 vient de s&apos;abonner », « ma***76 vient de générer une
+          photo ») déclenché uniquement par de vrais événements — achat,
+          abonnement ou génération réels — jamais une donnée inventée.
+          L&apos;identifiant affiché est une version partiellement masquée de
+          ton adresse email, jamais l&apos;email complet ni ton nom : elle ne
+          permet pas de t&apos;identifier de façon certaine. Cela s&apos;applique
+          à tout compte connecté qui génère une photo ou vidéo, pas seulement
+          aux achats. Si tu ne souhaites pas apparaître, même sous cette forme
+          masquée, écris-nous à contact@min-ia.fr.
         </p>
       </section>
 

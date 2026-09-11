@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { isRateLimited, getClientIp } from "@/lib/rate-limit";
+import { maskEmailForDisplay } from "@/lib/mask-email";
 
 export const runtime = "nodejs";
 
 // Public, unauthenticated (the homepage's live activity feed needs to work
 // for logged-out visitors) — but only ever returns aggregate/anonymous data:
-// a total count and a handful of recent event *kinds* with a relative
-// timestamp, never a user_id, email, or any other identifying detail. See
-// supabase/schema.sql's activity_events comment for why this table exists
-// separately from generations (which does have to store user_id, but that
-// column is never selected here).
+// a total count and a handful of recent event kinds with a relative
+// timestamp and an already-masked display label (see lib/mask-email.ts,
+// e.g. "ma***76") — never a raw user_id, full email, or any other directly
+// identifying detail. See supabase/schema.sql's activity_events comment for
+// why that table exists separately from generations.
 type Kind = "generation" | "pack" | "subscription";
 type ActivityRow = { kind: Kind; createdAt: string; pseudo: string | null };
+type GenerationActivityRow = { created_at: string; profiles: { email: string | null } | null };
 
 // Calendar-day boundary in French local time, not a rolling 24h window —
 // "générations aujourd'hui" should reset at Paris midnight like a visitor
@@ -54,12 +56,20 @@ export async function GET(req: NextRequest) {
   const [{ count: total }, { count: today }, { data: recentGenerations }, { data: recentEvents }] = await Promise.all([
     admin.from("generations").select("id", { count: "exact", head: true }),
     admin.from("generations").select("id", { count: "exact", head: true }).gte("created_at", todaySince),
-    admin.from("generations").select("created_at").order("created_at", { ascending: false }).limit(5),
+    admin.from("generations").select("created_at, profiles(email)").order("created_at", { ascending: false }).limit(5),
     admin.from("activity_events").select("kind, created_at, pseudo").order("created_at", { ascending: false }).limit(5),
   ]);
 
   const merged: ActivityRow[] = [
-    ...(recentGenerations ?? []).map((r) => ({ kind: "generation" as Kind, createdAt: r.created_at as string, pseudo: null })),
+    ...(recentGenerations ?? []).map((r) => {
+      const row = r as unknown as GenerationActivityRow;
+      const email = row.profiles?.email ?? null;
+      return {
+        kind: "generation" as Kind,
+        createdAt: row.created_at,
+        pseudo: email ? maskEmailForDisplay(email) : null,
+      };
+    }),
     ...(recentEvents ?? []).map((r) => ({
       kind: r.kind as Kind,
       createdAt: r.created_at as string,
