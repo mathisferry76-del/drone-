@@ -12,7 +12,7 @@ import FaqAccordion from "@/components/FaqAccordion";
 import ImpressHeroCta from "@/components/ImpressHeroCta";
 import ExamplesShowcase, { type ShowcaseExample } from "@/components/ExamplesShowcase";
 import LifestyleMosaicBackground from "@/components/LifestyleMosaicBackground";
-import { GenerationsCounter } from "@/components/LiveActivity";
+import { GenerationsCounter, MilestonePromoBanner } from "@/components/LiveActivity";
 
 const SHOWCASE_EXAMPLES: ShowcaseExample[] = [
   {
@@ -191,6 +191,8 @@ export default function Home() {
           </div>
 
           <GenerationsCounter className="mt-4 text-xs text-zinc-500" />
+
+          <MilestonePromoBanner className="mx-auto mt-4 max-w-sm" />
 
           <div className="mt-12 flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm text-zinc-500">
             <span>Résultat en <CountUp value={10} className="font-bold text-white" />s</span>

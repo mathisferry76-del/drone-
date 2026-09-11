@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 type Kind = "generation" | "pack" | "subscription";
 type Event = { kind: Kind; secondsAgo: number; pseudo: string | null };
+type ActivePromo = { code: string; expiresAt: string; threshold: number };
+type Milestone = { step: number; next: number; activePromo: ActivePromo | null };
 
 const SUFFIXES: Record<Kind, string> = {
   generation: "vient de générer une photo ✨",
@@ -30,6 +32,7 @@ function useRecentActivity() {
   const [events, setEvents] = useState<Event[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [today, setToday] = useState<number | null>(null);
+  const [milestone, setMilestone] = useState<Milestone | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,10 +40,11 @@ function useRecentActivity() {
       try {
         const res = await fetch("/api/activity");
         if (!res.ok) return;
-        const data: { total?: number; today?: number; recent?: Event[] } = await res.json();
+        const data: { total?: number; today?: number; recent?: Event[]; milestone?: Milestone } = await res.json();
         if (cancelled) return;
         if (typeof data.total === "number") setTotal(data.total);
         if (typeof data.today === "number") setToday(data.today);
+        if (data.milestone) setMilestone(data.milestone);
         setEvents((data.recent ?? []).filter((e) => e.secondsAgo < 3600));
       } catch {
         // Silent — a failed poll just means no toast this cycle, not worth
@@ -55,7 +59,7 @@ function useRecentActivity() {
     };
   }, []);
 
-  return { events, total, today };
+  return { events, total, today, milestone };
 }
 
 export function LiveActivityToast() {
@@ -87,6 +91,82 @@ export function LiveActivityToast() {
   return (
     <div className="fixed bottom-4 left-4 z-40 max-w-xs rounded-xl border border-zinc-800 bg-zinc-900/95 px-4 py-3 text-sm text-zinc-200 shadow-lg backdrop-blur transition-opacity">
       {labelFor(event)}
+    </div>
+  );
+}
+
+function formatCountdown(msRemaining: number): string {
+  const totalMinutes = Math.max(0, Math.floor(msRemaining / 60_000));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours <= 0) return `${minutes}min`;
+  return `${hours}h${minutes.toString().padStart(2, "0")}`;
+}
+
+// "Mode objectif" (demande explicite) : tous les MILESTONE_STEP générations
+// réelles (voir lib/growth-milestones.ts), un vrai code Stripe -10% valable
+// 24h est créé côté serveur — ce composant se contente de l'afficher tant
+// qu'il est actif, sinon montre la progression vers le prochain palier.
+// Jamais de countdown ou de "code" fictif : sans activePromo renvoyé par
+// l'API, rien ne s'affiche à part la barre de progression.
+export function MilestonePromoBanner({ className }: { className?: string }) {
+  const { total, milestone } = useRecentActivity();
+  const [now, setNow] = useState(() => Date.now());
+  const [copied, setCopied] = useState(false);
+
+  const activePromo = milestone?.activePromo ?? null;
+
+  useEffect(() => {
+    if (!activePromo) return;
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, [activePromo]);
+
+  if (total === null || milestone === null) return null;
+
+  if (activePromo) {
+    const msRemaining = new Date(activePromo.expiresAt).getTime() - now;
+    if (msRemaining <= 0) return null;
+
+    async function copyCode() {
+      if (!activePromo) return;
+      try {
+        await navigator.clipboard.writeText(activePromo.code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch {
+        // Clipboard access can be denied — the code is still visible to copy by hand.
+      }
+    }
+
+    return (
+      <div className={`rounded-xl border border-emerald-400/40 bg-emerald-400/10 px-4 py-3 text-sm ${className ?? ""}`}>
+        <p className="text-emerald-300">
+          🎉 Objectif <span className="font-bold">{activePromo.threshold}</span> générations atteint !
+          Code <span className="font-bold">-10%</span> sur tout, encore{" "}
+          <span className="font-bold">{formatCountdown(msRemaining)}</span>.
+        </p>
+        <button
+          onClick={copyCode}
+          className="mt-2 rounded-full border border-emerald-400/60 px-3 py-1 font-mono font-bold text-emerald-300 transition hover:bg-emerald-400/10"
+        >
+          {copied ? "Copié !" : activePromo.code}
+        </button>
+      </div>
+    );
+  }
+
+  const progress = Math.min(1, Math.max(0, (total - (milestone.next - milestone.step)) / milestone.step));
+
+  return (
+    <div className={`text-xs text-zinc-500 ${className ?? ""}`}>
+      <p>
+        Encore <span className="font-bold text-zinc-300">{milestone.next - total}</span> générations avant un code{" "}
+        <span className="font-bold text-zinc-300">-10%</span> valable 24h pour tout le monde
+      </p>
+      <div className="mt-1.5 h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-zinc-800">
+        <div className="h-full rounded-full bg-emerald-400" style={{ width: `${progress * 100}%` }} />
+      </div>
     </div>
   );
 }
