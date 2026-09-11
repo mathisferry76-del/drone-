@@ -327,15 +327,30 @@ function parsePriceEuros(price: string): number {
   return parseFloat(price.replace("€", "").replace(",", "."));
 }
 
+function formatPriceEuros(amount: number): string {
+  const rounded = Math.round(amount * 100) / 100;
+  return `${rounded.toLocaleString("fr-FR", { maximumFractionDigits: 2 })}€`;
+}
+
+function baseCreditRate(): number {
+  const basePack = CREDIT_PACKS[0];
+  return parsePriceEuros(basePack.price) / basePack.credits;
+}
+
 // Les packs sont déjà dégressifs au crédit (voir commentaire ci-dessus) mais
 // ça n'était visible nulle part sur /pricing — calcule la réduction réelle
 // par rapport au prix au crédit du plus petit pack, pour l'afficher en badge
 // et donner une vraie raison de prendre un pack plus gros.
 export function getPackDiscountPercent(pack: CreditPack): number {
-  const basePack = CREDIT_PACKS[0];
-  const baseRate = parsePriceEuros(basePack.price) / basePack.credits;
   const rate = parsePriceEuros(pack.price) / pack.credits;
-  return Math.round((1 - rate / baseRate) * 100);
+  return Math.round((1 - rate / baseCreditRate()) * 100);
+}
+
+// Prix que ce pack aurait coûté au tarif du plus petit pack (200 crédits),
+// affiché barré à côté du vrai prix — rend la réduction concrète en euros,
+// pas juste en pourcentage.
+export function getPackOriginalPrice(pack: CreditPack): string {
+  return formatPriceEuros(baseCreditRate() * pack.credits);
 }
 
 // Abonnements mensuels : rechargent un nombre fixe de crédits à chaque
