@@ -323,6 +323,21 @@ export const CREDIT_PACKS: CreditPack[] = [
   },
 ];
 
+function parsePriceEuros(price: string): number {
+  return parseFloat(price.replace("€", "").replace(",", "."));
+}
+
+// Les packs sont déjà dégressifs au crédit (voir commentaire ci-dessus) mais
+// ça n'était visible nulle part sur /pricing — calcule la réduction réelle
+// par rapport au prix au crédit du plus petit pack, pour l'afficher en badge
+// et donner une vraie raison de prendre un pack plus gros.
+export function getPackDiscountPercent(pack: CreditPack): number {
+  const basePack = CREDIT_PACKS[0];
+  const baseRate = parsePriceEuros(basePack.price) / basePack.credits;
+  const rate = parsePriceEuros(pack.price) / pack.credits;
+  return Math.round((1 - rate / baseRate) * 100);
+}
+
 // Abonnements mensuels : rechargent un nombre fixe de crédits à chaque
 // renouvellement, en plus du solde déjà là (les crédits ne sont jamais
 // perdus, ni remis à zéro). Tarif dégressif par rapport à l'achat au pack

@@ -10,6 +10,7 @@ import {
   VIDEO_EDIT_CREDIT_COST_PER_SECOND,
   MIN_EDIT_VIDEO_SECONDS,
   MAX_EDIT_VIDEO_SECONDS,
+  getPackDiscountPercent,
 } from "@/lib/presets";
 import { useSupabaseUser } from "@/lib/useSupabaseUser";
 
@@ -151,12 +152,21 @@ export default function PricingPage() {
       </div>
 
       <div className="mx-auto mt-8 grid max-w-3xl grid-cols-1 gap-6 sm:grid-cols-3">
-        {CREDIT_PACKS.map((pack) => (
+        {CREDIT_PACKS.map((pack) => {
+          const discount = getPackDiscountPercent(pack);
+          return (
           <div
             key={pack.id}
             className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900/40 p-6"
           >
-            <h3 className="text-lg font-bold">{pack.credits} crédits</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold">{pack.credits} crédits</h3>
+              {discount > 0 && (
+                <span className="rounded-full bg-emerald-400/10 px-2.5 py-0.5 text-xs font-bold text-emerald-400">
+                  -{discount}%
+                </span>
+              )}
+            </div>
             <p className="mt-1 text-sm text-zinc-400">{pack.tagline}</p>
             <div className="mt-3 flex items-baseline gap-1">
               <span className="text-2xl font-extrabold">{pack.price}</span>
@@ -170,7 +180,8 @@ export default function PricingPage() {
               {loadingId === pack.id ? "Redirection..." : "Acheter ce pack"}
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mx-auto mt-16 max-w-3xl space-y-6">
