@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { SUBSCRIPTION_TIERS } from "@/lib/presets";
+import { maskEmailForDisplay } from "@/lib/mask-email";
 
 export const runtime = "nodejs";
 
@@ -11,15 +12,21 @@ function tierFromPriceId(priceId: string | null | undefined) {
   return SUBSCRIPTION_TIERS.find((t) => t.priceId === priceId) ?? null;
 }
 
-// Logs a real, anonymous marker for the homepage's live activity feed
-// (app/api/activity/route.ts) — no user_id or email, just "this kind of
-// event happened at this time". Only ever called right after a real Stripe
-// event is confirmed below, never fabricated. Best-effort: a failure here
-// must never fail the webhook response itself (Stripe would retry the
-// whole event, including the part that already succeeded).
-async function logActivity(admin: ReturnType<typeof getSupabaseAdmin>, kind: "pack" | "subscription") {
+// Logs a real marker for the homepage's live activity feed
+// (app/api/activity/route.ts) — no user_id or full email stored, just "this
+// kind of event happened at this time" plus an already-masked display label
+// (see lib/mask-email.ts, e.g. "ma***76"). Only ever called right after a
+// real Stripe event is confirmed below, never fabricated. Best-effort: a
+// failure here must never fail the webhook response itself (Stripe would
+// retry the whole event, including the part that already succeeded).
+async function logActivity(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  kind: "pack" | "subscription",
+  email: string | null
+) {
   if (!admin) return;
-  const { error } = await admin.from("activity_events").insert({ kind });
+  const pseudo = email ? maskEmailForDisplay(email) : null;
+  const { error } = await admin.from("activity_events").insert({ kind, pseudo });
   if (error) console.error("activity_events insert error", error);
 }
 
@@ -85,6 +92,8 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        const customerEmail = session.customer_details?.email ?? session.customer_email ?? null;
+
         if (session.mode === "subscription") {
           // Crediting happens on invoice.paid instead (fired for this first
           // invoice too, and for every renewal) — this event just links the
@@ -104,7 +113,7 @@ export async function POST(req: NextRequest) {
               stripe_subscription_id: subscriptionId ?? null,
             })
             .eq("id", userId);
-          await logActivity(admin, "subscription");
+          await logActivity(admin, "subscription", customerEmail);
           break;
         }
 
@@ -132,7 +141,7 @@ export async function POST(req: NextRequest) {
         if (creditError) {
           console.error("stripe webhook: add_credits failed", creditError);
         } else {
-          await logActivity(admin, "pack");
+          await logActivity(admin, "pack", customerEmail);
         }
         break;
       }
