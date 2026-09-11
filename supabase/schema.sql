@@ -385,6 +385,14 @@ create table if not exists public.activity_events (
   created_at timestamptz not null default now()
 );
 alter table public.activity_events enable row level security;
+
+-- Demande explicite (2026-09-10) d'afficher un identifiant dans les
+-- notifications, plutôt que "Quelqu'un" générique. Stocke uniquement la
+-- version déjà masquée de l'email (voir lib/mask-email.ts, ex: "ma***76"),
+-- jamais l'email complet ni le domaine — même si cette table était lue
+-- directement, aucune donnée assez précise pour ré-identifier quelqu'un n'y
+-- transite.
+alter table public.activity_events add column if not exists pseudo text;
 -- Aucune policy pour anon/authenticated, volontairement : écrit uniquement
 -- par le webhook Stripe (service_role), lu uniquement par notre propre route
 -- /api/activity (service_role aussi) qui renvoie une version agrégée et
